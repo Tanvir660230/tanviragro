@@ -1,0 +1,12 @@
+-- Migration: Enable RLS on journal_lines.
+-- It was created in 005_accounting.sql with no RLS, relying on the assumption
+-- that the app only ever reads it joined through journal_entries. RLS is a
+-- database-level guarantee independent of app code — without it, any
+-- authenticated user could query journal_lines directly via the Supabase REST
+-- API and see every business's rows, not just their own.
+--
+-- A policy named "owner_all_journal_lines" with the correct entry_id-scoped
+-- access rule already existed on the live database (created outside of a
+-- committed migration) but was never enforced because RLS itself was off.
+-- This migration just flips that switch; the policy is left as-is.
+alter table journal_lines enable row level security;

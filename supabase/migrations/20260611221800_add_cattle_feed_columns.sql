@@ -1,0 +1,3 @@
+ALTER TABLE cattle ADD COLUMN IF NOT EXISTS target_weight_kg NUMERIC;
+ALTER TABLE cattle ADD COLUMN IF NOT EXISTS expected_daily_gain_kg NUMERIC DEFAULT 0.8;
+ALTER TABLE cattle ADD COLUMN IF NOT EXISTS manual_feed_override JSONB;

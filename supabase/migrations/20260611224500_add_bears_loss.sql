@@ -1,0 +1,1 @@
+ALTER TABLE partners ADD COLUMN bears_loss BOOLEAN NOT NULL DEFAULT true;

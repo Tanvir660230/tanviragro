@@ -1,0 +1,387 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-poppins);
+  --font-mono: var(--font-fira-code);
+  --font-heading: var(--font-poppins);
+  --font-bengali: var(--font-bengali);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ── Tanvir Agro — Clean SaaS Theme ─────────────────────────────────── */
+:root {
+  --background: oklch(0.964 0 0); /* Pure neutral light gray — no color cast, works with all accents */
+  --foreground: oklch(0.13 0.015 240); /* Slate 950 */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.015 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0.015 240);
+  /* Primary: Clean Emerald */
+  --primary: oklch(0.57 0.17 150);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.955 0.01 240); /* Slate 100 */
+  --secondary-foreground: oklch(0.20 0.02 240); /* Slate 800 */
+  --muted: oklch(0.955 0.01 240);
+  --muted-foreground: oklch(0.44 0.022 240); /* Slate 500 */
+  --accent: oklch(0.955 0.01 240);
+  --accent-foreground: oklch(0.20 0.02 240);
+  --destructive: oklch(0.58 0.21 25);
+  --border: oklch(0.876 0.013 240); /* More visible border */
+  --input: oklch(0.906 0.01 240);
+  --ring: oklch(0.57 0.17 150 / 40%);
+  --chart-1: oklch(0.60 0.15 150);
+  --chart-2: oklch(0.70 0.15 85);
+  --chart-3: oklch(0.60 0.12 200);
+  --chart-4: oklch(0.72 0.14 30);
+  --chart-5: oklch(0.50 0.10 265);
+  --radius: 0.5rem; /* Standard rounded corners */
+  /* Sidebar */
+  --sidebar: oklch(0.98 0.01 240); /* Slate 50 */
+  --sidebar-foreground: oklch(0.20 0.02 240);
+  --sidebar-primary: oklch(0.60 0.15 150);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.92 0.01 240);
+  --sidebar-accent-foreground: oklch(0.20 0.02 240);
+  --sidebar-border: oklch(0.92 0.01 240);
+  --sidebar-ring: oklch(0.60 0.15 150 / 40%);
+}
+
+.dark {
+  --background: oklch(0.12 0.01 240); /* Slate 950 */
+  --foreground: oklch(0.98 0 0); /* Slate 50 */
+  --card: oklch(0.14 0.01 240); /* Slate 900 */
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.14 0.01 240);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.65 0.18 150); 
+  --primary-foreground: oklch(0.12 0.01 240);
+  --secondary: oklch(0.20 0.02 240); /* Slate 800 */
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.20 0.02 240);
+  --muted-foreground: oklch(0.65 0.02 240); /* Slate 400 */
+  --accent: oklch(0.20 0.02 240);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.60 0.20 25);
+  --border: oklch(0.20 0.02 240); /* Slate 800 */
+  --input: oklch(0.20 0.02 240);
+  --ring: oklch(0.65 0.18 150 / 40%);
+  --chart-1: oklch(0.65 0.18 150);
+  --chart-2: oklch(0.80 0.15 85);
+  --chart-3: oklch(0.65 0.12 200);
+  --chart-4: oklch(0.80 0.14 30);
+  --chart-5: oklch(0.65 0.10 265);
+  --sidebar: oklch(0.09 0.01 240);
+  --sidebar-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.65 0.18 150);
+  --sidebar-primary-foreground: oklch(0.12 0.01 240);
+  --sidebar-accent: oklch(0.20 0.02 240);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(0.20 0.02 240);
+  --sidebar-ring: oklch(0.65 0.18 150 / 40%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply text-foreground min-h-screen font-sans antialiased selection:bg-primary/20;
+    background-color: var(--background);
+  }
+  html {
+    @apply font-sans;
+    font-size: 16px;
+    scroll-behavior: smooth;
+    /* Respect iOS notch / home indicator */
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Bengali locale: use Hind Siliguri for all text */
+  :lang(bn), :lang(bn) * {
+    font-family: var(--font-bengali), sans-serif;
+  }
+  @media (min-width: 1024px) {
+    html {
+      font-size: 18px;
+    }
+  }
+
+  /* Stronger focus-visible ring for keyboard navigation */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Suppress focus ring for mouse/touch — only show for keyboard */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Card hover micro-animation — apply to clickable cards for lift effect */
+  .card-interactive {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-px hover:border-border/80 active:translate-y-0 active:shadow-sm active:scale-[0.99] cursor-pointer;
+    will-change: transform;
+  }
+
+  /* Clean UI Classes & Glassmorphism */
+  .glass-panel {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-xl shadow-card transition-all duration-300;
+  }
+
+  .glass-panel-hover {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-xl shadow-card transition-all duration-300 hover:border-primary/40 hover:bg-card/95 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .glowing-icon-wrapper {
+    @apply flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] transition-transform duration-300 group-hover:scale-110;
+  }
+
+  /* Custom Animations */
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-6px); }
+    100% { transform: translateY(0px); }
+  }
+
+  @keyframes pulse-glow {
+    0% { box-shadow: 0 0 0 0 var(--ring); }
+    70% { box-shadow: 0 0 0 10px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s infinite;
+  }
+
+  /* Gradients for text and backgrounds */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/50;
+  }
+
+  .bg-mesh-light {
+    background-color: oklch(0.964 0 0);
+    background-image:
+      radial-gradient(at 40% 20%, hsla(150, 55%, 91%, 0.65) 0px, transparent 55%),
+      radial-gradient(at 85% 5%,  hsla(150, 40%, 92%, 0.50) 0px, transparent 50%),
+      radial-gradient(at 5%  55%, hsla(145, 45%, 92%, 0.45) 0px, transparent 55%),
+      radial-gradient(at 70% 80%, hsla(155, 35%, 93%, 0.35) 0px, transparent 45%);
+  }
+
+  .bg-mesh-dark {
+    background-color: oklch(0.11 0.012 240);
+    background-image:
+      radial-gradient(at 40% 20%, hsla(150, 65%, 13%, 0.6) 0px, transparent 55%),
+      radial-gradient(at 85% 5%,  hsla(200, 60%, 12%, 0.5) 0px, transparent 50%),
+      radial-gradient(at 5%  55%, hsla(150, 45%, 12%, 0.4) 0px, transparent 55%),
+      radial-gradient(at 70% 80%, hsla(160, 40%, 11%, 0.3) 0px, transparent 45%);
+  }
+
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+
+  /* Shimmer loading effect */
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--muted) 0%,
+      color-mix(in srgb, var(--muted) 60%, var(--background)) 50%,
+      var(--muted) 100%
+    );
+    background-size: 800px 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+
+  /* Slide down for dropdowns / banners */
+  @keyframes slide-down {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-slide-down {
+    animation: slide-down 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Stat card focused ring */
+  .stat-ring {
+    @apply ring-1 ring-foreground/8;
+  }
+
+  /* 3-tier shadow system */
+
+  /* surface — subtle depth for cards */
+  .shadow-card {
+    box-shadow:
+      0 1px 3px 0 rgb(0 0 0 / 0.07),
+      0 1px 2px -1px rgb(0 0 0 / 0.05),
+      0 0 0 1px rgb(0 0 0 / 0.03);
+  }
+  /* raised — hover state, dropdowns */
+  .shadow-card-md {
+    box-shadow:
+      0 4px 12px -2px rgb(0 0 0 / 0.09),
+      0 2px 4px -1px rgb(0 0 0 / 0.06),
+      0 0 0 1px rgb(0 0 0 / 0.04);
+  }
+  /* floating — dialogs, modals, sheets */
+  .shadow-floating {
+    box-shadow:
+      0 8px 32px -4px rgb(0 0 0 / 0.14),
+      0 4px 12px -2px rgb(0 0 0 / 0.08),
+      0 0 0 1px rgb(0 0 0 / 0.06);
+  }
+
+  .dark .shadow-card {
+    box-shadow:
+      0 1px 3px 0 rgb(0 0 0 / 0.25),
+      0 1px 2px -1px rgb(0 0 0 / 0.18),
+      0 0 0 1px rgb(255 255 255 / 0.04);
+  }
+  .dark .shadow-card-md {
+    box-shadow:
+      0 4px 12px -2px rgb(0 0 0 / 0.35),
+      0 2px 4px -1px rgb(0 0 0 / 0.22),
+      0 0 0 1px rgb(255 255 255 / 0.05);
+  }
+  .dark .shadow-floating {
+    box-shadow:
+      0 8px 32px -4px rgb(0 0 0 / 0.55),
+      0 4px 12px -2px rgb(0 0 0 / 0.35),
+      0 0 0 1px rgb(255 255 255 / 0.07);
+  }
+}
+
+@media print {
+  .print-only { display: block !important; }
+
+  /* Hide app chrome when printing */
+  header,
+  aside,
+  nav,
+  .print-hide {
+    display: none !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  body {
+    font-size: 12pt;
+    color: #000 !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  h1, h2, h3 { break-after: avoid; }
+  table { break-inside: avoid; }
+  tr { break-inside: avoid; }
+
+  /* ── Scoped inline-print: P&L Summary ── */
+  body.pl-printing * { visibility: hidden; }
+  body.pl-printing .pl-print-root,
+  body.pl-printing .pl-print-root * { visibility: visible; }
+  body.pl-printing .pl-print-root {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    background: white;
+    padding: 32px;
+  }
+
+  /* ── Scoped inline-print: Cash Flow Statement ── */
+  body.stmt-printing * { visibility: hidden; }
+  body.stmt-printing .stmt-print-root,
+  body.stmt-printing .stmt-print-root * { visibility: visible; }
+  body.stmt-printing .stmt-print-root {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    background: white;
+    padding: 32px;
+  }
+  body.stmt-printing .stmt-print-hide { display: none !important; }
+}

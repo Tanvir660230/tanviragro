@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /d \"d:\\\\Final Website\\\\Tanvir Agro\" ; cmd /c \"npm run dev\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

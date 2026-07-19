@@ -1,0 +1,1 @@
+ALTER TABLE business_users ADD COLUMN IF NOT EXISTS email TEXT;
