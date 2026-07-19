@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useActionState, useState, useEffect } from "react";
 import { Banknote, CheckSquare, Square } from "lucide-react";
@@ -57,17 +57,15 @@ export function BulkCostDialog({ activeCattle, open: externalOpen, onOpenChange:
   useEffect(() => {
     if (state?.success) {
       toast.success(sm.batch_cost_success);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOpen(false);
-       
-      setSelectedIds(new Set());
-       
-      setAmount("");
-       
-      setCategory("doctor_fee");
+      setTimeout(() => {
+        setOpen(false);
+        setSelectedIds(new Set());
+        setAmount("");
+        setCategory("doctor_fee");
+      }, 0);
     }
     if (state?.error) toast.error(state.error);
-  }, [state, sm.batch_cost_success]);
+  }, [state, sm.batch_cost_success, setOpen]);
 
   function toggleAll() {
     if (selectedIds.size === activeCattle.length) {

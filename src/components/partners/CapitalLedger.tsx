@@ -54,12 +54,11 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
   useEffect(() => {
     if (state?.success) {
       toast.success("Transaction saved");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOpen(false);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedPartnerId("");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTxnType("investment");
+      setTimeout(() => {
+        setOpen(false);
+        setSelectedPartnerId("");
+        setTxnType("investment");
+      }, 0);
     }
     if (state?.error) toast.error(state.error);
   }, [state]);

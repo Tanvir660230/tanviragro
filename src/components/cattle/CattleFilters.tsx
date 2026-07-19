@@ -121,7 +121,7 @@ export function CattleFilters({ cattle, allBreeds, alerts }: Props) {
     }
 
     return list;
-  }, [cattle, search, statusFilter, breedFilter, minWeight, maxWeight, minDays, maxDays, sortKey, quickFilter]);
+  }, [cattle, search, statusFilter, breedFilter, minWeight, maxWeight, minDays, maxDays, sortKey, quickFilter, nowMs]);
 
   // Summary stats always reflect the filtered view so numbers match what's visible in the table
   const summaryStats = useMemo(() => {

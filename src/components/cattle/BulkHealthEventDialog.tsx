@@ -58,12 +58,11 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
   useEffect(() => {
     if (state?.success) {
       toast.success("Health events scheduled");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOpen(false);
-      // eslint-disable-next-line react-hooks/set-state-in-effect 
-      setSelectedIds(new Set());
-      // eslint-disable-next-line react-hooks/set-state-in-effect 
-      setEventType("vaccine");
+      setTimeout(() => {
+        setOpen(false);
+        setSelectedIds(new Set());
+        setEventType("vaccine");
+      }, 0);
     }
     if (state?.error) toast.error(state.error);
   }, [state, setOpen]);
