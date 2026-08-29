@@ -75,5 +75,5 @@ export async function computeFIFOUnitCost(
     leftToConsume -= take;
   }
 
-  return coveredQty > 0 ? totalCost / coveredQty : null;
+  return coveredQty > 0 ? totalCost / consumeQty : null;
 }

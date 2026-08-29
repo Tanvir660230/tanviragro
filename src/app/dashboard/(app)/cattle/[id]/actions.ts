@@ -222,8 +222,9 @@ export async function updateRoughageOverride(
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
 
-  const { data: cattle } = await supabase.from("cattle").select("business_id, manual_feed_override").eq("id", cattleId).maybeSingle();
+  const { data: cattle } = await supabase.from("cattle").select("business_id, status, manual_feed_override").eq("id", cattleId).maybeSingle();
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
+  if (cattle.status !== "active") return { error: "Cannot modify a sold or deceased cattle" };
 
   const existing = (cattle.manual_feed_override as Record<string, unknown> | null) ?? {};
   const updated = roughageKg === null

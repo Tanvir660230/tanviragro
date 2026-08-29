@@ -233,7 +233,7 @@ export const getCachedDbData = async (businessId: string) => {
       supabaseAdmin.from("cattle").select("id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("sales").select("id, cattle_id, sale_price_total, sold_at, cattle!inner(business_id)").eq("cattle.business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("cost_entries").select("id, category, amount, type, recorded_at, entry_class, cattle_id").eq("business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("inventory_transactions").select("id, type, qty, unit_cost, recorded_at, inventory_items!inner(business_id, category)").eq("inventory_items.business_id", businessId),
+      supabaseAdmin.from("inventory_transactions").select("id, type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category)").eq("inventory_items.business_id", businessId),
       supabaseAdmin.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id)").eq("partners.business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("fixed_assets").select("*").eq("business_id", businessId),
       supabaseAdmin.from("liabilities").select("id, outstanding, settled_at").eq("business_id", businessId).is("deleted_at", null),
@@ -252,7 +252,7 @@ export const getCachedDbData = async (businessId: string) => {
     type CattleRow = { id: string; purchase_price: number; status: string; purchase_date: string; updated_at: string | null; initial_weight_kg: number | null };
     type SaleRow = { id: string; cattle_id: string; sale_price_total: number; sold_at: string };
     type CostRow = { id: string; category: string; amount: number; type: string; recorded_at: string; entry_class: string | null; cattle_id: string | null };
-    type InvTxRow = { id: string; type: string; qty: number; unit_cost: number | null; recorded_at: string; inventory_items?: { category?: string } | null };
+    type InvTxRow = { id: string; type: string; qty: number; unit_cost: number | null; recorded_at: string; cattle_id: string | null; inventory_items?: { category?: string } | null };
     type PartnerTxRow = { id: string; amount: number; type: string; recorded_at: string };
     type TreatmentRow = { cattle_id: string; vet_fee: number | null; additional_medical_cost: number | null; treated_at: string };
     type LiabilityRow = { id: string; outstanding: number; settled_at: string | null };
@@ -560,7 +560,9 @@ export async function getAccountingData(
   // allTimeInterestExpense is accrued but not yet cash-paid — excluded from cash flow.
   // Capitalized cattle costs (vet fees etc. tied to specific cattle) are real cash outflows
   // excluded from allTimeTotalOpCosts. Subtract them from cashAndBank to keep it accurate.
-  const capitalizedCashOutflow = capitalizedActiveCosts + capitalizedSoldCosts + capitalizedDeadCosts;
+  // We ONLY subtract the cash portions (allCapitalizedCattleCosts), NOT feedCostByCattle!
+  // Feed cash outflow was already captured in allTimePurchaseValue.
+  const capitalizedCashOutflow = allCapitalizedCattleCosts.reduce((s, c) => s + Number(c.amount), 0);
   const allTimeNetCashFlow =
     (allTimeSalesRevenue - allCattleCost - allTimeTotalOpCosts - allTimePurchaseValue - capitalizedCashOutflow)
     + (-(totalFixedAssetCost + costEntryAssetTotal))
@@ -570,9 +572,13 @@ export async function getAccountingData(
   // Retained earnings = cumulative net income minus profit distributions paid to partners.
   // Uses totalAccumDep (all-time accumulated) and allTimeInterestExpense for correctness.
   const allTimeCogs = sales.reduce((s, x) => s + (cattleMap.get(x.cattle_id) ?? 0), 0) + capitalizedSoldCosts;
+  
+  const allTimeCapitalizedInv = rpcFeedData.reduce((s, r) => s + Number(r.total_cost), 0);
+  const allTimeUnallocatedInv = Math.max(0, allTimeInvConsumption - allTimeCapitalizedInv);
+
   const retainedEarnings =
     allTimeSalesRevenue - allTimeCogs - allTimeTotalOpCosts
-    - totalAccumDep - allTimeInterestExpense - allPartnerProfitDistributions - deceasedCattleLoss;
+    - totalAccumDep - allTimeInterestExpense - allPartnerProfitDistributions - deceasedCattleLoss - allTimeUnallocatedInv;
 
   // ── PERIOD aggregates (income statement + cash flow) ──────────
 
@@ -603,14 +609,22 @@ export async function getAccountingData(
     .filter((t) => t.type === "purchase")
     .reduce((s, t) => s + Number(t.qty) * Number(t.unit_cost ?? 0), 0);
 
+  // Period unallocated inventory consumption (feed true-ups, general medicine)
+  let periodUnallocatedInv = 0;
   for (const t of periodInvTx.filter((tx) => tx.type === "consumption")) {
     const cat = (t.inventory_items as { category?: string } | null)?.category ?? "feed";
     const cost = Math.round(Number(t.qty) * Number(t.unit_cost ?? 0) * 100) / 100;
-    if (cat === "medicine" || cat === "supplement") {
-      costBreakdown["6100"] = (costBreakdown["6100"] ?? 0) + cost; // vetMedical account
+    if (!t.cattle_id) {
+      periodUnallocatedInv += cost;
+      if (cat === "medicine" || cat === "supplement") {
+        costBreakdown["6100"] = (costBreakdown["6100"] ?? 0) + cost; // vetMedical account
+      } else {
+        // Unallocated feed (true-ups, loss, farm-level feed not tied to specific cows)
+        costBreakdown["6600"] = (costBreakdown["6600"] ?? 0) + cost; // generalExpenses
+      }
     }
   }
-  // All feed expenses are now capitalized per-cow. They are no longer treated as operating expenses on the Income Statement!
+  // All algorithmically allocated feed is capitalized. Unallocated feed is now in generalExpenses.
   const feedExpenses = 0;
 
   // Period depreciation: delta of accumulated depreciation between period boundaries.

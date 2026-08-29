@@ -339,10 +339,11 @@ export async function updateCattle(
 
   const { data: existing } = await supabase
     .from("cattle")
-    .select("business_id")
+    .select("business_id, status")
     .eq("id", id)
     .maybeSingle();
   if (!existing || existing.business_id !== businessId) return { error: "Unauthorized" };
+  if (existing.status !== "active") return { error: "Cannot edit details of a sold or deceased cattle. This protects historical financial records." };
 
   // Check tag_id uniqueness within this business (excluding current cattle)
   const { data: tagConflict } = await supabase
@@ -548,11 +549,12 @@ export async function toggleQurbaniMark(
 
   const { data: cattle } = await supabase
     .from("cattle")
-    .select("business_id")
+    .select("business_id, status")
     .eq("id", cattleId)
     .maybeSingle();
 
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
+  if (cattle.status !== "active") return { error: "Cannot modify a sold or deceased cattle" };
 
   const { error } = await supabase
     .from("cattle")
@@ -585,11 +587,12 @@ export async function updateInsurance(
 
   const { data: cattle } = await supabase
     .from("cattle")
-    .select("business_id")
+    .select("business_id, status")
     .eq("id", cattleId)
     .maybeSingle();
 
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
+  if (cattle.status !== "active") return { error: "Cannot modify a sold or deceased cattle" };
 
   const { error } = await supabase
     .from("cattle")

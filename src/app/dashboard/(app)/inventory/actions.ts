@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient, type ServerClient } from "@/lib/supabase/server";
@@ -702,146 +702,12 @@ export async function markInventoryItemEmpty(
 
   if (txnErr) return { error: "Failed to create true-up adjustment" };
 
-  // ── Distribute cost proportionally to active cattle ────────────────
-  let cattleCount = 0;
-  const totalCost = stock > 0 ? Math.abs(stock) * (fifoUnitCost ?? 0) : 0;
 
-  if (totalCost > 0.01) {
-    // Fetch active recipe and roughage to determine this item's role
-    const [{ data: activeRecipeData }, { data: activeRoughageData }] = await Promise.all([
-      supabase
-        .from("feed_recipes")
-        .select("id, output_qty, recipe_ingredients(item_id, qty_per_batch)")
-        .eq("business_id", bizId)
-        .eq("is_active", true)
-        .maybeSingle(),
-      supabase
-        .from("inventory_items")
-        .select("id")
-        .eq("business_id", bizId)
-        .eq("is_active_roughage", true)
-        .maybeSingle(),
-    ]);
-
-    // Fetch active cattle on finish date
-    const { data: cattle } = await supabase
-      .from("cattle")
-      .select("id, tag_id, initial_weight_kg, purchase_date, expected_daily_gain_kg, manual_feed_override")
-      .eq("business_id", bizId)
-      .eq("status", "active")
-      .is("deleted_at", null);
-
-    if (cattle && cattle.length > 0) {
-      // Filter to cattle active ON finishDate
-      const activeCattle = cattle.filter((c) => {
-        const purchaseMs = new Date(c.purchase_date ?? "1970-01-01").setHours(0, 0, 0, 0);
-        const finishMs = new Date(finishDate + "T00:00:00").getTime();
-        return finishMs >= purchaseMs;
-      });
-
-      if (activeCattle.length > 0) {
-        const cattleIds = activeCattle.map((c) => c.id);
-        const { data: weightLogs } = await supabase
-          .from("weight_logs")
-          .select("cattle_id, weight_kg, recorded_at")
-          .in("cattle_id", cattleIds)
-          .order("recorded_at", { ascending: false });
-
-        const latestWeights = new Map<string, { weight: number; date: string }>();
-        for (const log of weightLogs ?? []) {
-          if (!latestWeights.has(log.cattle_id)) {
-            latestWeights.set(log.cattle_id, { weight: log.weight_kg, date: log.recorded_at });
-          }
-        }
-
-        const { calculateDailyFeedRequirement, getEffectiveFeedDate } = await import("@/utils/feed-calculator");
-
-        // Per-cattle requirements on finishDate
-        const cattleReqs: { id: string; concentrateKg: number; roughageKg: number }[] = [];
-        for (const c of activeCattle) {
-          const latest = latestWeights.get(c.id);
-          const purchaseDate = new Date(c.purchase_date ?? new Date().toISOString());
-          const targetDate = new Date(finishDate + "T00:00:00");
-          const daysOnFarm = Math.max(0, Math.floor((targetDate.getTime() - purchaseDate.getTime()) / 86400000));
-          const calcDateStr = daysOnFarm > 3 ? getEffectiveFeedDate(finishDate) : finishDate;
-
-          const req = calculateDailyFeedRequirement(
-            {
-              initialWeightKg: c.initial_weight_kg ?? 0,
-              latestLoggedWeightKg: latest?.weight ?? null,
-              lastWeighedAt: latest?.date ?? null,
-              purchaseDate: c.purchase_date ?? new Date().toISOString(),
-              expectedDailyGainKg: c.expected_daily_gain_kg ?? 0.8,
-            },
-            calcDateStr,
-            finishDate
-          );
-
-          const override = (c.manual_feed_override as { roughageKg?: number } | null);
-          cattleReqs.push({
-            id: c.id,
-            concentrateKg: req.actualConcentrateKg,
-            roughageKg: override?.roughageKg ?? req.roughageKg,
-          });
-        }
-
-        const totalConcentrateKg = cattleReqs.reduce((s, c) => s + c.concentrateKg, 0);
-        const totalRoughageKg = cattleReqs.reduce((s, c) => s + c.roughageKg, 0);
-
-        // Determine this item's role and compute per-cattle cost share
-        let shares: { cattle_id: string; amount: number }[] = [];
-
-        const isActiveRoughage = activeRoughageData?.id === itemId;
-        const recipeIngredient = activeRecipeData?.recipe_ingredients?.find(
-          (i: { item_id: string }) => i.item_id === itemId
-        );
-
-        if (isActiveRoughage && totalRoughageKg > 0) {
-          shares = cattleReqs
-            .filter((c) => c.roughageKg > 0)
-            .map((c) => ({ cattle_id: c.id, amount: (c.roughageKg / totalRoughageKg) * totalCost }));
-        } else if (recipeIngredient && totalConcentrateKg > 0) {
-          shares = cattleReqs
-            .filter((c) => c.concentrateKg > 0)
-            .map((c) => ({ cattle_id: c.id, amount: (c.concentrateKg / totalConcentrateKg) * totalCost }));
-        } else {
-          // No active feed link — equal split
-          const perCattle = totalCost / activeCattle.length;
-          shares = activeCattle.map((c) => ({ cattle_id: c.id, amount: perCattle }));
-        }
-
-        const costRows = shares
-          .filter((s) => s.amount > 0.01)
-          .map((s) => ({
-            cattle_id: s.cattle_id,
-            business_id: bizId,
-            type: "variable" as const,
-            category: "feed",
-            amount: parseFloat(s.amount.toFixed(2)),
-            recorded_at: finishDate,
-            description: `Feed adjustment: ${item.name} — remaining stock true-up`,
-          }));
-
-        if (costRows.length > 0) {
-          const { error: costErr } = await supabase.from("cost_entries").insert(costRows);
-          if (costErr) {
-            // True-up already committed — cannot roll back without DB transactions.
-            // Surface the failure so the caller can notify the user.
-            return { error: "Feed adjustment saved but cost allocation to cattle failed. Check cost entries manually.", cattleCount: 0 };
-          }
-          cattleCount = costRows.length;
-        }
-      }
-    }
-  }
 
   revalidatePath("/dashboard/inventory");
-  if (cattleCount > 0) {
-    revalidatePath("/dashboard/cattle");
-    revalidatePath("/dashboard/finance");
-  }
+  revalidatePath("/dashboard/finance");
   revalidateTag("accounting", { expire: 0 });
-  return { cattleCount };
+  return { cattleCount: 0 };
 }
 
 // ── Autonomous Auto-Feed Engine ────────────────────────────────────
