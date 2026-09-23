@@ -40,6 +40,7 @@ COMMENT ON TABLE public.loan_payments IS
 ALTER TABLE public.loans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.loan_payments ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "loans_owner" ON public.loans;
 CREATE POLICY "loans_owner" ON public.loans
   FOR ALL USING (
     business_id IN (
@@ -47,6 +48,7 @@ CREATE POLICY "loans_owner" ON public.loans
     )
   );
 
+DROP POLICY IF EXISTS "loan_payments_owner" ON public.loan_payments;
 CREATE POLICY "loan_payments_owner" ON public.loan_payments
   FOR ALL USING (
     loan_id IN (
@@ -55,6 +57,7 @@ CREATE POLICY "loan_payments_owner" ON public.loan_payments
       WHERE b.owner_id = auth.uid()
     )
   );
+
 
 -- ── 4. Cattle: Qurbani marking + Insurance ───────────────────────
 ALTER TABLE public.cattle
