@@ -4,6 +4,9 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Wallet, TrendingUp, TrendingDown, ArrowUpRight, Beef } from "lucide-react";
 import { getStatementData } from "@/app/dashboard/(app)/finance/statement-action";
+import { getBusinessContext } from "@/lib/context/business-context";
+import { hasPermission } from "@/lib/auth/permissions";
+import { PERMISSIONS } from "@/constants/roles";
 
 function fmt(n: number) {
   return `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
@@ -15,6 +18,10 @@ export async function CashBalanceCard() {
 
   // No business → hide silently
   if (!businessId) return null;
+
+  // Cash position is financial data: hide the card for roles without FINANCE_VIEW.
+  const ctx = await getBusinessContext(supabase).catch(() => null);
+  if (!ctx || !hasPermission(ctx, PERMISSIONS.FINANCE_VIEW)) return null;
 
   const t = await getDictionary();
   const cb = t.cash_balance;

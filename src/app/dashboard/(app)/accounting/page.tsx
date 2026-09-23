@@ -21,6 +21,8 @@ import { FinancialLockManager } from "@/components/accounting/FinancialLockManag
 import { FinancialStatCard, fmtBDT } from "@/components/finance/finance-ui";
 import type { FinancialLock } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Accounting & Ledger" };
 
@@ -68,6 +70,7 @@ function NavCard({
 }
 
 export default async function AccountingPage() {
+  await requirePagePermission(PERMISSIONS.ACCOUNTING_VIEW);
   const supabase = await createClient();
 
   // Run accounting engine + business ID lookup in parallel — neither depends on the other

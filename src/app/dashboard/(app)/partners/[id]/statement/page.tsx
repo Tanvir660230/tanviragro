@@ -10,6 +10,8 @@ import {
   type PartnerAccountSummary as AccountSummary,
 } from "@/lib/partners/calculations";
 import { PartnerEngine } from "@/lib/partners/partner-engine";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Partner Statement" };
 
@@ -22,6 +24,7 @@ export default async function StatementPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePagePermission(PERMISSIONS.PARTNERS_STATEMENT);
   const { id } = await params;
   const supabase = await createClient();
   const cookieStore = await cookies();

@@ -10,6 +10,8 @@ import type {
   ManagementFeeRate,
 } from "@/types/database";
 import { PartnerEngine } from "@/lib/partners/partner-engine";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 import {
   effectiveShare,
   computeAccount,
@@ -25,6 +27,7 @@ export default async function PartnerProfilePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePagePermission(PERMISSIONS.PARTNERS_VIEW);
   const { id } = await params;
   const supabase = await createClient();
 

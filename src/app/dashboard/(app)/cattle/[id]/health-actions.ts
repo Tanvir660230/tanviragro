@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import type { HealthEventType } from "@/types/database";
 import { LivestockEventBus } from "@/lib/livestock/events";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type HealthFormState = { error?: string; success?: boolean } | undefined;
 
@@ -12,6 +14,8 @@ export async function createHealthEvent(
   _prev: HealthFormState,
   formData: FormData
 ): Promise<HealthFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -65,6 +69,8 @@ export async function completeHealthEvent(
   eventId: string,
   cattleId: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -107,6 +113,8 @@ export async function deleteHealthEvent(
   eventId: string,
   cattleId: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };

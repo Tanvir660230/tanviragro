@@ -5,6 +5,8 @@ import { getAccountingData } from "@/lib/accounting/engine";
 import { AddFixedAssetDialog } from "@/components/accounting/AddFixedAssetDialog";
 import { ArrowLeft, TrendingDown, Building2, Layers, DollarSign, Calendar, Archive } from "lucide-react";
 import { StatementReportHeader } from "@/components/finance/finance-ui";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Fixed Assets Register | Tanvir Agro Accounting" };
 
@@ -25,6 +27,7 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export default async function FixedAssetsPage() {
+  await requirePagePermission(PERMISSIONS.ASSET_VIEW);
   const supabase = await createClient();
   const { fixedAssets, trialBalance: tb, asOf } = await getAccountingData(supabase);
 

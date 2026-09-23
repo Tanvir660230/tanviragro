@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/security";
+import { safeRedirectPath } from "@/lib/app-url";
 
 type LoginState = { error?: string; magicLinkSent?: boolean } | undefined;
 
@@ -35,7 +36,7 @@ export async function login(
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(safeRedirectPath(formData.get("redirectTo") as string | null));
 }
 
 export async function sendMagicLink(

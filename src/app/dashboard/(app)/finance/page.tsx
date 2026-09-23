@@ -22,6 +22,8 @@ import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calcu
 import { MarketPriceCard } from "@/components/finance/MarketPriceCard";
 import { EnterpriseLivestockFinancialWorkspace } from "@/components/finance/EnterpriseLivestockFinancialWorkspace";
 import { LivestockProfitabilityEngine } from "@/lib/financial";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 
 export const metadata: Metadata = { title: "Finance & P&L" };
@@ -67,6 +69,7 @@ function computeFinanceDateRange(
 export default async function FinancePage(props: {
   searchParams: Promise<{ bd?: string; fp?: string; fs?: string; fe?: string }>;
 }) {
+  await requirePagePermission(PERMISSIONS.FINANCE_VIEW);
   const { bd, fp, fs, fe } = await props.searchParams;
   const budgetDays = Math.min(365, Math.max(7, parseInt(bd ?? "90") || 90));
 

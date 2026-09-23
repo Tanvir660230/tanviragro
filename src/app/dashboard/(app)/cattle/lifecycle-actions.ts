@@ -14,6 +14,8 @@ import type {
   UnifiedTimelineEvent,
   TimelineEventCategory,
 } from "@/lib/livestock/types";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export interface LifecycleActionResult {
   success: boolean;
@@ -27,6 +29,18 @@ export interface LifecycleActionResult {
 export async function executeLifecycleTransitionAction(
   request: LifecycleTransitionRequest
 ): Promise<LifecycleTransitionResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) {
+    return {
+      success: false,
+      previousStatus: "active",
+      newStatus: request.targetStatus,
+      cattleId: request.cattleId,
+      transitionTimestamp: new Date().toISOString(),
+      automatedActionsExecuted: [],
+      error: permissionDenied,
+    };
+  }
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
 
@@ -241,6 +255,8 @@ export async function getAnimalUnifiedTimelineAction(
   cattleId: string,
   category: TimelineEventCategory = "all"
 ): Promise<{ success: boolean; events: UnifiedTimelineEvent[]; error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_VIEW);
+  if (permissionDenied) return { success: false, events: [], error: permissionDenied };
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
 

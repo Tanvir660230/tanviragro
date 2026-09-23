@@ -1,6 +1,8 @@
 "use server";
 
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type AdvisorQuestion =
   | "daily_tasks"
@@ -31,6 +33,8 @@ function bdtFmt(n: number): string {
 }
 
 export async function askAdvisor(question: AdvisorQuestion): Promise<AdvisorResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.REPORTS_VIEW);
+  if (permissionDenied) return { ok: false, error: permissionDenied };
   try {
     const supabase = await getServerClient();
     const businessId = await getCachedBusinessId();

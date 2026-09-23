@@ -6,6 +6,8 @@ import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { type FeedingSlot } from "@/lib/nutrition/nutrition-engine";
 import { type FeedActionResult } from "./feed-session-actions";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export async function quickDispenseFeedAction(
   cattleIds: string[],
@@ -15,6 +17,8 @@ export async function quickDispenseFeedAction(
   recordedAt: string = new Date().toISOString().slice(0, 10),
   feederName: string = "Farm Feeder"
 ): Promise<FeedActionResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
+  if (permissionDenied) return { error: permissionDenied };
   try {
     const supabase = await createClient();
     const {
@@ -102,6 +106,8 @@ export async function recordFeedWasteAction(
   recordedAt: string = new Date().toISOString().slice(0, 10),
   notes?: string
 ): Promise<FeedActionResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
+  if (permissionDenied) return { error: permissionDenied };
   try {
     const supabase = await createClient();
     const {

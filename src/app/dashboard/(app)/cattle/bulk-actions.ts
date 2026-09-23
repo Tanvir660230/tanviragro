@@ -8,6 +8,8 @@ import { buildProtocolEvents, type HealthEventRow } from "@/lib/healthProtocol";
 import { LivestockEventBus } from "@/lib/livestock/events";
 import type { ValidatedLivestockRow } from "@/lib/livestock/bulk-import";
 import type { CattleGender, CattleStatus, HealthEventType } from "@/types/database";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export interface BulkImportResult {
   success: boolean;
@@ -23,6 +25,8 @@ export interface BulkImportResult {
 export async function bulkImportLivestockAction(
   rows: ValidatedLivestockRow[]
 ): Promise<BulkImportResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_CREATE);
+  if (permissionDenied) return { success: false, insertedCount: 0, failedCount: 0, error: permissionDenied };
   const supabase = await createClient();
   const {
     data: { user },
@@ -180,6 +184,8 @@ export async function bulkBatchMovementAction(
   targetPenId: string | null,
   farmId?: string | null
 ): Promise<{ success: boolean; updatedCount: number; error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { success: false, updatedCount: 0, error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, updatedCount: 0, error: "Authentication required" };
@@ -227,6 +233,8 @@ export async function bulkBatchHealthAction(
   notes?: string,
   costPerHead?: number
 ): Promise<{ success: boolean; insertedCount: number; error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { success: false, insertedCount: 0, error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, insertedCount: 0, error: "Authentication required" };
@@ -284,6 +292,8 @@ export async function bulkBatchStatusAction(
   status: "active" | "quarantined" | "sold" | "dead",
   notes?: string
 ): Promise<{ success: boolean; updatedCount: number; error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { success: false, updatedCount: 0, error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, updatedCount: 0, error: "Authentication required" };

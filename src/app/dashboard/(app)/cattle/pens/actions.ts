@@ -4,8 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedBusinessId } from "@/lib/supabase/cached";
 import { revalidatePath } from "next/cache";
 import { PenType } from "@/lib/livestock/pen-engine";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export async function createFarmAction(formData: FormData) {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const businessId = await getCachedBusinessId();
   if (!businessId) throw new Error("Unauthorized");
 
@@ -29,6 +33,8 @@ export async function createFarmAction(formData: FormData) {
 }
 
 export async function createPenAction(formData: FormData) {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const businessId = await getCachedBusinessId();
   if (!businessId) throw new Error("Unauthorized");
 
@@ -54,6 +60,8 @@ export async function createPenAction(formData: FormData) {
 }
 
 export async function transferCattlePenAction(cattleId: string, targetPenId: string | null, farmId?: string | null) {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const businessId = await getCachedBusinessId();
   if (!businessId) throw new Error("Unauthorized");
 

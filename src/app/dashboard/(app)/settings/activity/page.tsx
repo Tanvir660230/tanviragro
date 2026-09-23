@@ -3,12 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ActivityTimeline, type ActivityItem } from "@/components/settings/ActivityTimeline";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = {
   title: "Unified Audit Logs",
 };
 
 export default async function ActivityLogPage() {
+  await requirePagePermission(PERMISSIONS.AUDIT_LOG_VIEW);
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
 

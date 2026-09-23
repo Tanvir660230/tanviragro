@@ -6,10 +6,13 @@ import { TrashRestoreButton } from "@/components/settings/TrashRestoreButton";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Soft-Deleted Trash Bin" };
 
 export default async function TrashBinPage() {
+  await requirePagePermission(PERMISSIONS.SETTINGS_EDIT);
   const supabase = await createClient();
   const cookieStore = await cookies();
   const locale = (cookieStore.get("NEXT_LOCALE")?.value === "bn" ? "bn" : "en");

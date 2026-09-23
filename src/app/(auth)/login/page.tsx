@@ -12,7 +12,7 @@ const messages: Record<string, { text: string; type: "success" | "error" }> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ message?: string; error?: string }>;
+  searchParams: Promise<{ message?: string; error?: string; redirectTo?: string }>;
 }) {
   const params = await searchParams;
   const key = params.message ?? params.error;
@@ -52,7 +52,7 @@ export default async function LoginPage({
         <h2 className="mb-6 text-lg font-semibold text-card-foreground">
           Sign in to your account
         </h2>
-        <LoginForm />
+        <LoginForm redirectTo={params.redirectTo} />
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type EditPurchaseItem = {
   id?: string; // existing txn id, undefined if new
@@ -27,6 +29,8 @@ export async function updatePurchaseMemo(
   items: EditPurchaseItem[],
   existingTxnIds: string[]
 ) {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_PURCHASE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
@@ -212,6 +216,8 @@ export async function updatePurchaseMemo(
 }
 
 export async function deletePurchaseMemo(date: string, supplierName: string, existingTxnIds: string[]) {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_PURCHASE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };

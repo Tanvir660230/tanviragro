@@ -9,6 +9,8 @@ import { createCattleSchema, validateDate, validatePositiveNumber, validateText 
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { CattleDomainService } from "@/lib/services/cattle.service";
 import { LivestockEventBus } from "@/lib/livestock/events";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type CattleFormState =
   | { error?: string; success?: boolean }
@@ -18,6 +20,8 @@ export async function createCattle(
   _prevState: CattleFormState,
   formData: FormData
 ): Promise<CattleFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_CREATE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const {
     data: { user },
@@ -144,6 +148,8 @@ export async function bulkCreateCattle(
     notes: string | null;
   }[]
 ): Promise<{ error?: string; count?: number }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_CREATE);
+  if (permissionDenied) return { error: permissionDenied };
   if (!entries.length) return { count: 0 };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -215,6 +221,8 @@ export async function markAsDeceased(
   id: string,
   notes?: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -265,6 +273,8 @@ export async function markAsDeceased(
 export async function undoMarkAsDeceased(
   id: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -298,6 +308,8 @@ export async function undoMarkAsDeceased(
 }
 
 export async function deleteCattle(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_DELETE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -331,6 +343,8 @@ export async function updateCattle(
   _prevState: EditCattleFormState,
   formData: FormData
 ): Promise<EditCattleFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -401,6 +415,8 @@ export interface BulkWeightEntry {
 export async function bulkCreateWeightLogs(
   entries: BulkWeightEntry[]
 ): Promise<{ error?: string; count?: number }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.WEIGHT_LOG);
+  if (permissionDenied) return { error: permissionDenied };
   if (!entries.length) return { count: 0 };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -447,6 +463,8 @@ export async function createBulkHealthEvents(
   _prevState: BulkHealthFormState,
   formData: FormData
 ): Promise<BulkHealthFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -503,6 +521,8 @@ export async function createBulkCost(
   _prevState: BulkCostFormState,
   formData: FormData
 ): Promise<BulkCostFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.COST_ENTRY_CREATE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -562,6 +582,8 @@ export async function toggleQurbaniMark(
   cattleId: string,
   mark: boolean
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -600,6 +622,8 @@ export async function updateInsurance(
     insurance_expiry: string | null;
   }
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };

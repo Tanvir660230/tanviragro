@@ -6,6 +6,8 @@ import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { ArrowLeft, CheckCircle2, AlertTriangle, ShieldCheck, Scale, Building2, Landmark, Wallet } from "lucide-react";
 import { AssetDepreciationTable, type AssetEntry } from "@/components/accounting/AssetDepreciationTable";
 import { StatementReportHeader, fmtBDT } from "@/components/finance/finance-ui";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Balance Sheet Statement" };
 
@@ -69,6 +71,7 @@ function SectionHeader({
 }
 
 export default async function BalanceSheetPage() {
+  await requirePagePermission(PERMISSIONS.ACCOUNTING_VIEW);
   const supabase = await createClient();
   const [{ balanceSheet: bs, trialBalance: tb, asOf }, businessId] = await Promise.all([
     getAccountingData(supabase),

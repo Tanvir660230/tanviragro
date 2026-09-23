@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { ArrowLeft, TrendingUp, DollarSign, Activity, Percent, ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { StatementReportHeader } from "@/components/finance/finance-ui";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Income Statement | Tanvir Agro Accounting" };
 
@@ -82,6 +84,7 @@ function SectionHeader({
 }
 
 export default async function IncomeStatementPage() {
+  await requirePagePermission(PERMISSIONS.ACCOUNTING_VIEW);
   const supabase = await createClient();
   const { incomeStatement: is, trialBalance: tb, asOf } = await getAccountingData(supabase);
 

@@ -3,6 +3,8 @@
 import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
  
 async function getBusinessId(supabase: SupabaseClient<any>, userId: string): Promise<string> {
@@ -20,6 +22,8 @@ export async function upsertMarketPrice(
   pricePerKg: number,
   notes: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.COST_ENTRY_CREATE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -47,6 +51,8 @@ export async function upsertMarketPrice(
 }
 
 export async function deleteMarketPrice(date: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.COST_ENTRY_CREATE);
+  if (permissionDenied) return { error: permissionDenied };
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Valid date is required" };
 
   const supabase = await createClient();

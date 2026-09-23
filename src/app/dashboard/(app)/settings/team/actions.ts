@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { assertResourceOwnership } from "@/lib/auth/ownership";
 import { PERMISSIONS } from "@/constants/roles";
 import type { UserRole } from "@/types/database";
+import { getAppUrl } from "@/lib/app-url";
 
 async function getAdminSupabase() {
   const { createClient: createAdmin } = await import("@supabase/supabase-js");
@@ -18,6 +19,8 @@ async function getAdminSupabase() {
 }
 
 export type TeamFormState = { error?: string; success?: string } | undefined;
+
+const ASSIGNABLE_ROLES: readonly UserRole[] = ["manager", "worker"];
 
 export async function inviteTeamMember(
   _prev: TeamFormState,
@@ -32,13 +35,16 @@ export async function inviteTeamMember(
     const role = formData.get("role") as string;
 
     if (!email || !email.includes("@")) return { error: "Enter a valid email address" };
-    if (!["manager", "worker"].includes(role)) return { error: "Select a valid role" };
+    if (!ASSIGNABLE_ROLES.includes(role as UserRole)) return { error: "Select a valid role" };
+
+    const appUrl = getAppUrl();
+    if (!appUrl) return { error: "App URL is not configured (set NEXT_PUBLIC_APP_URL)." };
 
     // Invite via Supabase admin API
     const admin = await getAdminSupabase();
     const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
       data: { role, business_id: ctx.businessId },
-      redirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace("supabase.co", "vercel.app") ?? ""}/auth/callback`,
+      redirectTo: `${appUrl}/auth/callback`,
     });
 
     if (inviteErr) return { error: inviteErr.message };
@@ -68,7 +74,10 @@ export async function updateMemberRole(
     const ctx = await getBusinessContext(supabase);
     requirePermission(ctx, PERMISSIONS.TEAM_MANAGE);
 
-    const member = await assertResourceOwnership<{ id: string; user_id: string; business_id: string }>(
+    // Same roles the invite form allows; "owner" can never be granted this way.
+    if (!ASSIGNABLE_ROLES.includes(role)) return { error: "Select a valid role" };
+
+    await assertResourceOwnership<{ id: string; user_id: string; business_id: string }>(
       supabase,
       "business_users",
       memberId,
@@ -78,15 +87,10 @@ export async function updateMemberRole(
     const { error } = await supabase
       .from("business_users")
       .update({ role })
-      .eq("id", memberId);
+      .eq("id", memberId)
+      .eq("business_id", ctx.businessId);
 
     if (error) return { error: "Failed to update role" };
-
-    // Also update user_metadata via admin API
-    if (member.user_id) {
-      const admin = await getAdminSupabase();
-      await admin.auth.admin.updateUserById(member.user_id, { user_metadata: { role } });
-    }
 
     revalidatePath("/dashboard/settings/team");
     return {};

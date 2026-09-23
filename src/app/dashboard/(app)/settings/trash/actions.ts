@@ -2,6 +2,8 @@
 
 import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 type TypedClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -11,6 +13,8 @@ async function getOwnerBizId(supabase: TypedClient, userId: string): Promise<str
 }
 
 export async function restoreCostEntry(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.SETTINGS_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -30,6 +34,8 @@ export async function restoreCostEntry(id: string): Promise<{ error?: string }> 
 }
 
 export async function restoreInventoryItem(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.SETTINGS_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -49,6 +55,8 @@ export async function restoreInventoryItem(id: string): Promise<{ error?: string
 }
 
 export async function restoreWeightLog(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.SETTINGS_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -73,6 +81,8 @@ export async function permanentlyDelete(
   table: "cost_entries" | "inventory_items" | "weight_logs",
   id: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.SETTINGS_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };

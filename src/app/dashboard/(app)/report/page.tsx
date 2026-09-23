@@ -3,6 +3,8 @@ import { getServerClient } from "@/lib/supabase/cached";
 import { AnalyticsAggregationService } from "@/lib/analytics/aggregation-service";
 import { ReportHubClient } from "@/components/report/ReportHubClient";
 import { ReportEngine } from "@/lib/reports/report-engine";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = {
   title: "Analytics, BI & Report Center | Tanvir Agro",
@@ -10,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ReportPage() {
+  await requirePagePermission(PERMISSIONS.REPORTS_VIEW);
   const supabase = await getServerClient();
 
   const {

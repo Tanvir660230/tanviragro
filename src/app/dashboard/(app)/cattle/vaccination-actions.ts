@@ -14,6 +14,8 @@ import {
   type VaccinationExecutionParams,
 } from "@/lib/livestock/vaccination-engine";
 import type { HealthEventType } from "@/types/database";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export interface VaccinationActionResult {
   success?: boolean;
@@ -27,6 +29,8 @@ export interface VaccinationActionResult {
 export async function administerVaccinationAction(
   payload: VaccinationExecutionParams
 ): Promise<VaccinationActionResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const {
     data: { user },
@@ -181,6 +185,8 @@ export async function executeBatchVaccinationCampaignAction(payload: {
   scheduleBooster: boolean;
   boosterDays?: number;
 }): Promise<VaccinationActionResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const {
     data: { user },
@@ -296,6 +302,8 @@ export async function recordVaccineAdverseEventAction(payload: {
   requiresQuarantine: boolean;
   followUpDate?: string;
 }): Promise<VaccinationActionResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const {
     data: { user },

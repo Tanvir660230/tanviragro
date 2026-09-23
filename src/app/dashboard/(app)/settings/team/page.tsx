@@ -8,6 +8,8 @@ import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Team & User Access Control" };
 
@@ -18,6 +20,7 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 export default async function TeamPage() {
+  await requirePagePermission(PERMISSIONS.TEAM_VIEW);
   const supabase = await createClient();
   const cookieStore = await cookies();
   const locale = (cookieStore.get("NEXT_LOCALE")?.value === "bn" ? "bn" : "en");

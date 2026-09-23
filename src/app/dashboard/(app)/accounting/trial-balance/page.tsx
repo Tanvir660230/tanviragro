@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { ArrowLeft, ShieldCheck, AlertTriangle } from "lucide-react";
 import { StatementReportHeader } from "@/components/finance/finance-ui";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Trial Balance | Tanvir Agro Accounting" };
 
@@ -20,6 +22,7 @@ const SECTION_METADATA: Record<string, { label: string; badge: string; color: st
 };
 
 export default async function TrialBalancePage() {
+  await requirePagePermission(PERMISSIONS.ACCOUNTING_VIEW);
   const supabase = await createClient();
   const { trialBalance: tb, asOf } = await getAccountingData(supabase);
 

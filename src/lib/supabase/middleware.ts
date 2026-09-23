@@ -15,11 +15,8 @@ const PUBLIC_PATHS = [
  * - Refreshes Supabase session tokens on every request
  * - Redirects unauthenticated users to /login
  * - Prevents authenticated users from re-accessing auth pages
- * - RBAC route guard reads role from business_users table (not user_metadata)
- *   via x-user-role header set during business context resolution
- * - NOTE: Deep RBAC enforcement is done server-side in getBusinessContext()
- *   and requirePermission(). Middleware only enforces coarse role gates
- *   based on the DB role (not metadata, which is attacker-controllable).
+ * - Does NOT do role checks: those live in requirePagePermission() (pages) and
+ *   requirePermission() (actions/routes), which read the role from the DB.
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -74,33 +71,9 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Coarse RBAC route protection for authenticated users
-  // Deep RBAC is enforced server-side by requirePermission() in each action/route.
-  // Here we only gate admin-only paths using role from user_metadata as a fast hint.
-  // The source of truth remains the DB (via getBusinessContext).
-  if (user) {
-    const adminOnlyPaths = [
-      "/dashboard/finance",
-      "/dashboard/settings",
-      "/dashboard/accounting",
-      "/dashboard/report",
-    ];
-    const isAdminPath = adminOnlyPaths.some((p) => path.startsWith(p));
-
-    if (isAdminPath) {
-      // Read role from user_metadata as a fast-path hint only.
-      // Workers/field staff get redirected; any unknown role defaults to redirect.
-      // Owners have no role metadata — they pass through (business context will confirm).
-      const role = user.user_metadata?.role as string | undefined;
-      const isRestrictedRole = role && !["admin", "manager"].includes(role);
-      if (isRestrictedRole) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/dashboard/cattle";
-        return NextResponse.redirect(url);
-      }
-    }
-  }
-
+  // Role-based access is enforced per page (requirePagePermission) and per action,
+  // using the DB role from getBusinessContext(). user_metadata is user-editable and
+  // must never be used for authorization.
   return supabaseResponse;
 }
 

@@ -8,10 +8,13 @@ import type { LoanRow } from "@/components/finance/LoanDashboard";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Loan & Debt Tracker" };
 
 export default async function LoansPage() {
+  await requirePagePermission(PERMISSIONS.LOAN_VIEW);
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   const cookieStore = await cookies();

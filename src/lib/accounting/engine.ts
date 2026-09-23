@@ -5,6 +5,9 @@ import { unstable_cache } from "next/cache";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
+import { getBusinessContext } from "@/lib/context/business-context";
+import { requireAnyPermission } from "@/lib/auth/permissions";
+import { PERMISSIONS } from "@/constants/roles";
 
  
 type Client = SupabaseClient<any>;
@@ -238,40 +241,12 @@ export async function getAccountingData(
   from?: string,
   to?: string
 ): Promise<AccountingData> {
-  // getUser() verifies the JWT server-side — required for auth-gated queries.
-  const { data: { user } } = await supabase.auth.getUser();
-  const userId = user?.id;
-  let businessId: string | null = null;
-  let openingCash = 0;
-
-  if (userId) {
-    const { data: ownerBiz } = await supabase
-      .from("businesses")
-      .select("id, opening_cash_balance")
-      .eq("owner_id", userId)
-      .maybeSingle();
-
-    if (ownerBiz) {
-      businessId = ownerBiz.id;
-      openingCash = Number(ownerBiz.opening_cash_balance ?? 0);
-    } else {
-      const { data: memberBiz } = await supabase
-        .from("business_users")
-        .select("business_id, businesses(id, opening_cash_balance)")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (memberBiz?.business_id) {
-        businessId = memberBiz.business_id;
-        const b = memberBiz.businesses as any;
-        openingCash = Number(b?.opening_cash_balance ?? 0);
-      }
-    }
-  }
-
-  if (!businessId) {
-    throw new Error("Business ID not found for user");
-  }
+  // The cached fetch below uses the service-role key (bypasses RLS), so authorization
+  // must happen here: tenant + role come from the DB via getBusinessContext().
+  const ctx = await getBusinessContext(supabase);
+  requireAnyPermission(ctx, [PERMISSIONS.ACCOUNTING_VIEW, PERMISSIONS.ASSET_VIEW]);
+  const businessId = ctx.businessId;
+  const openingCash = Number(ctx.business.opening_cash_balance ?? 0);
 
   const {
     cattle, sales, costs, invTx, partnerTx, fixedAssetDb, liabData, loansData, treatments,

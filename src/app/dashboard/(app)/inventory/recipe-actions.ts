@@ -2,6 +2,8 @@
 
 import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type RecipeFormState = { error?: string; success?: boolean; id?: string } | undefined;
 export type ProduceBatchState = { error?: string; success?: boolean; produced?: number } | undefined;
@@ -20,6 +22,8 @@ export async function createRecipe(
   _prev: RecipeFormState,
   formData: FormData
 ): Promise<RecipeFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -77,6 +81,8 @@ export async function createRecipe(
 
 // ── Delete Recipe (soft-delete — preserves ingredient cascade history) ───────
 export async function deleteRecipe(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -110,6 +116,8 @@ export async function deleteRecipe(id: string): Promise<{ error?: string }> {
 // Permanently deletes the recipe formula. Inventory transaction history is unaffected
 // (transactions are keyed to item_id, not recipe_id — they survive this deletion).
 export async function permanentlyDeleteRecipe(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_DELETE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -133,6 +141,8 @@ export async function permanentlyDeleteRecipe(id: string): Promise<{ error?: str
 }
 
 export async function restoreRecipe(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -163,6 +173,8 @@ export async function produceBatch(
   _prev: ProduceBatchState,
   formData: FormData
 ): Promise<ProduceBatchState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -294,6 +306,8 @@ export async function createSupplementRule(
   _prev: SupplementRuleState,
   formData: FormData
 ): Promise<SupplementRuleState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -324,6 +338,8 @@ export async function createSupplementRule(
 }
 
 export async function deleteSupplementRule(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -350,6 +366,8 @@ export async function upsertMedicineProtocol(
   _prev: MedicineProtocolState,
   formData: FormData
 ): Promise<MedicineProtocolState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -374,6 +392,8 @@ export async function upsertMedicineProtocol(
 }
 
 export async function deleteMedicineProtocol(item_id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -399,6 +419,8 @@ export async function setActiveRecipe(
   activeUntil?: string | null,
   activeFrom?: string | null
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -435,6 +457,8 @@ export async function setActiveRecipe(
 }
 
 export async function updateRecipeActiveFrom(activeFrom: string | null): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -459,6 +483,8 @@ export async function updateRecipeActiveFrom(activeFrom: string | null): Promise
 }
 
 export async function updateRecipeActiveUntil(activeUntil: string | null): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FEED_MIX);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };

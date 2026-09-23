@@ -17,6 +17,8 @@ import type {
   PrescriptionItem,
 } from "@/lib/livestock/types";
 import type { UserRole } from "@/types/database";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type TreatmentFormState = { error?: string; success?: boolean } | undefined;
 
@@ -48,6 +50,8 @@ export async function administerMedicine(
   _prev: TreatmentFormState,
   formData: FormData
 ): Promise<TreatmentFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -172,6 +176,8 @@ export async function administerMedicine(
 export async function recordClinicalVisitAction(
   payload: ClinicalVisitRecord & { actorRole?: UserRole }
 ): Promise<{ success: boolean; visitId?: string; error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
+  if (permissionDenied) return { success: false, error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Not authenticated" };
@@ -328,6 +334,8 @@ export async function generateHealthCertificateAction(
   weightKg: number,
   certifyingVet: string
 ): Promise<{ success: boolean; certificate?: HealthCertificateSummary; error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_VIEW);
+  if (permissionDenied) return { success: false, error: permissionDenied };
   const supabase = await createClient();
   const bizId = await getCurrentBusinessId(supabase);
   if (!bizId) return { success: false, error: "Unauthorized" };

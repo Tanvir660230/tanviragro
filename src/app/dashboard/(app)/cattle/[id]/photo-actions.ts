@@ -4,12 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import type { PhotoType } from "@/types/database";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 const BUCKET = "cattle-photos";
 
 export async function uploadCattlePhoto(
   formData: FormData
 ): Promise<{ error?: string; url?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -65,6 +69,8 @@ export async function deleteCattlePhoto(
   storagePath: string,
   cattleId: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };

@@ -9,11 +9,15 @@ export type VendorFormState = { error?: string; success?: boolean } | undefined;
 type TypedClient = Awaited<ReturnType<typeof createClient>>;
 
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export async function createVendor(
   _prev: VendorFormState,
   formData: FormData
 ): Promise<VendorFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_PURCHASE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -47,6 +51,8 @@ export async function createVendor(
 }
 
 export async function deleteVendor(id: string): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_PURCHASE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };

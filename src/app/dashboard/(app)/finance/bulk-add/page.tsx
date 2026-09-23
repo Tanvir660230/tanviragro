@@ -5,12 +5,15 @@ import { BulkCostClient } from "@/components/finance/BulkCostClient";
 import { ArrowLeft, FileDiff } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata = {
   title: "Bulk Add Costs | Tanvir Agro",
 };
 
 export default async function BulkCostPage() {
+  await requirePagePermission(PERMISSIONS.COST_ENTRY_CREATE);
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) redirect("/login");

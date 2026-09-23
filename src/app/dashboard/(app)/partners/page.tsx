@@ -9,10 +9,13 @@ import { buildWeightPredictions } from "@/lib/cattle-weight";
 import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Users } from "lucide-react";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Partners" };
 
 export default async function PartnersPage() {
+  await requirePagePermission(PERMISSIONS.PARTNERS_VIEW);
   const supabase = await createClient();
   const cookieStore = await cookies();
   const locale = cookieStore.get("NEXT_LOCALE")?.value === "bn" ? "bn" : "en";

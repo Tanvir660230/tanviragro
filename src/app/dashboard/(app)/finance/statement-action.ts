@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type TxnCategory =
   | "Capital In"
@@ -32,6 +34,8 @@ export async function getStatementData(
   from?: string,
   to?: string
 ): Promise<StatementResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.FINANCE_VIEW);
+  if (permissionDenied) throw new Error(permissionDenied);
   const supabase = await createClient();
   const {
     data: { user },

@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { ArrowLeft, ArrowDownRight, ArrowUpRight, Activity, Building, Landmark } from "lucide-react";
 import { StatementReportHeader } from "@/components/finance/finance-ui";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = { title: "Cash Flow Statement | Tanvir Agro Accounting" };
 
@@ -78,6 +80,7 @@ function SectionHeader({
 }
 
 export default async function CashFlowPage() {
+  await requirePagePermission(PERMISSIONS.ACCOUNTING_VIEW);
   const supabase = await createClient();
   const { cashFlow: cf, trialBalance: tb, asOf } = await getAccountingData(supabase);
 

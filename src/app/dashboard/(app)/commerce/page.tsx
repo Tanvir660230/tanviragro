@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ShoppingCart } from "lucide-react";
 import { EnterpriseCommerceWorkspace } from "@/components/commerce/EnterpriseCommerceWorkspace";
 import { CommercialValuationEngine } from "@/lib/commerce";
+import { requirePagePermission } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const metadata: Metadata = {
   title: "Commerce, Sales & Logistics Hub | Tanvir Agro ERP",
@@ -13,6 +15,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CommercePage() {
+  await requirePagePermission(PERMISSIONS.COMMERCE_VIEW);
   const businessId = await getCachedBusinessId();
   if (!businessId) redirect("/login");
 

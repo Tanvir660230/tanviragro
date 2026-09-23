@@ -7,6 +7,8 @@ import { buildProtocolEvents } from "@/lib/healthProtocol";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { LivestockEventBus } from "@/lib/livestock/events";
 import type { AnimalWizardState } from "@/lib/validation/cattle-wizard";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type WizardActionResult = {
   success?: boolean;
@@ -18,6 +20,8 @@ export async function saveEnterpriseAnimalWizardAction(
   payload: AnimalWizardState,
   editAnimalId?: string
 ): Promise<WizardActionResult> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_CREATE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const {
     data: { user },

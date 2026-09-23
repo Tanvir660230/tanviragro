@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 type LoginState = { error?: string; magicLinkSent?: boolean } | undefined;
 
-export function LoginForm() {
+export function LoginForm({ redirectTo }: { redirectTo?: string }) {
   const [mode, setMode] = useState<"password" | "magic">("password");
 
   const [passwordState, passwordAction, isPasswordPending] = useActionState<LoginState, FormData>(
@@ -58,6 +58,7 @@ export function LoginForm() {
       {/* Password form */}
       {mode === "password" && (
         <form action={passwordAction} className="space-y-4">
+          {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
           <div className="space-y-1.5">
             <Label htmlFor="email">
               Email <span className="text-destructive">*</span>

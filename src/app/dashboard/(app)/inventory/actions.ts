@@ -7,6 +7,8 @@ import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { computeFIFOUnitCost, getItemStock as getItemStockShared } from "@/lib/inventory-fifo";
 import { AdjustmentEngine } from "@/lib/inventory/adjustment-engine";
 import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 export type InventoryFormState =
   | { error?: string; success?: boolean; warning?: string }
@@ -23,6 +25,8 @@ export async function createInventoryItem(
   _prevState: InventoryFormState,
   formData: FormData
 ): Promise<InventoryFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CREATE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -88,6 +92,8 @@ export async function adjustStock(
   _prevState: InventoryFormState,
   formData: FormData
 ): Promise<InventoryFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -129,6 +135,8 @@ export async function addStock(
   _prevState: InventoryFormState,
   formData: FormData
 ): Promise<InventoryFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_PURCHASE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -182,6 +190,8 @@ export async function logConsumption(
   _prevState: InventoryFormState,
   formData: FormData
 ): Promise<InventoryFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -263,6 +273,8 @@ export async function dailyFeedDeduction(
   cattle_count: number,
   recorded_at: string
 ): Promise<{ error?: string; count?: number }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -331,6 +343,8 @@ export async function dailyFeedDeduction(
 export async function archiveInventoryItem(
   id: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -363,6 +377,8 @@ export async function archiveInventoryItem(
 export async function unarchiveInventoryItem(
   id: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -391,6 +407,8 @@ export async function unarchiveInventoryItem(
 export async function deleteInventoryItem(
   id: string
 ): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_DELETE);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -427,6 +445,8 @@ export async function updateInventoryItem(
   _prevState: InventoryFormState,
   formData: FormData
 ): Promise<InventoryFormState> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -481,6 +501,8 @@ export async function getFarmDailyFeedRequirement(
   dateStr: string,
   roughageActiveFromCached?: string | null   // pre-fetched by caller to avoid N queries in loops
 ) {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_VIEW);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -611,6 +633,8 @@ export async function getFarmDailyFeedRequirement(
 }
 
 export async function setActiveRoughage(id: string | null, activeUntil?: string | null): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -655,6 +679,8 @@ export async function setActiveRoughage(id: string | null, activeUntil?: string 
 }
 
 export async function updateRoughageActiveUntil(activeUntil: string | null): Promise<{ error?: string }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -679,6 +705,8 @@ export async function markInventoryItemEmpty(
   itemId: string,
   finishDate: string
 ): Promise<{ error?: string; cattleCount?: number }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -756,6 +784,8 @@ export async function markInventoryItemEmpty(
 
 // ── Autonomous Auto-Feed Engine ────────────────────────────────────
 export async function runAutoFeedDeductions(): Promise<{ error?: string, executedDays?: number }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
+  if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
