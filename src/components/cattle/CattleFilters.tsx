@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Search, SlidersHorizontal, X, ArrowUpDown, AlertTriangle, Scale, HeartPulse } from "lucide-react";
+import { Search, SlidersHorizontal, X, ArrowUpDown, AlertTriangle, Scale, HeartPulse, Moon, ShieldAlert, TrendingUp, CheckSquare, Banknote, CalendarCheck } from "lucide-react";
 import { DataPagination } from "@/components/ui/data-pagination";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { CattleTable } from "./CattleTable";
 import { CattleCards } from "./CattleCards";
+import { BulkWeightDialog } from "./BulkWeightDialog";
+import { BulkHealthEventDialog } from "./BulkHealthEventDialog";
+import { BulkCostDialog } from "./BulkCostDialog";
 import type { CattleRowEnriched } from "@/app/dashboard/(app)/cattle/page";
 import type { CattleStatus } from "@/types/database";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -64,6 +67,10 @@ export function CattleFilters({ cattle, allBreeds, alerts }: Props) {
   const [page, setPage]       = useState(0);
   const [pageSize, setPageSize] = useState(20);
   const [nowMs] = useState(() => Date.now());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkWeighOpen, setBulkWeighOpen] = useState(false);
+  const [bulkHealthOpen, setBulkHealthOpen] = useState(false);
+  const [bulkCostOpen, setBulkCostOpen] = useState(false);
 
   const filtered = useMemo(() => {
     let list = cattle;
@@ -136,11 +143,61 @@ export function CattleFilters({ cattle, allBreeds, alerts }: Props) {
     return { activeCount: active.length, soldCount: sold, avgAdg, totalInvestment };
   }, [filtered]);
 
+  const herdMetrics = useMemo(() => {
+    const active = cattle.filter((c) => c.status === "active");
+    const highGain = active.filter((c) => c.adg !== null && c.adg >= 0.8).length;
+    const steadyGain = active.filter((c) => c.adg !== null && c.adg >= 0.4 && c.adg < 0.8).length;
+    const slowGain = active.filter((c) => c.adg !== null && c.adg < 0.4).length;
+    const quarantined = active.filter((c) => c.is_quarantined).length;
+    const qurbani = active.filter((c) => c.is_qurbani_marked).length;
+    return { highGain, steadyGain, slowGain, quarantined, qurbani, totalActive: active.length };
+  }, [cattle]);
+
   // Reset page on any filter change
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(0); }, [search, statusFilter, breedFilter, minWeight, maxWeight, minDays, maxDays, sortKey, quickFilter, pageSize]);
 
   const paginated = filtered.slice(page * pageSize, (page + 1) * pageSize);
+
+  const paginatedIds = useMemo(() => paginated.map((c) => c.id), [paginated]);
+  const allSelected = paginatedIds.length > 0 && paginatedIds.every((id) => selectedIds.has(id));
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of paginatedIds) next.delete(id);
+      } else {
+        for (const id of paginatedIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function deselectAll() {
+    setSelectedIds(new Set());
+  }
+
+  const selectedCattleOptions = useMemo(() => {
+    return cattle
+      .filter((c) => selectedIds.has(c.id))
+      .map((c) => ({ id: c.id, tag_id: c.tag_id }));
+  }, [cattle, selectedIds]);
+
+  const activeCattleOptions = useMemo(() => {
+    return cattle
+      .filter((c) => c.status === "active")
+      .map((c) => ({ id: c.id, tag_id: c.tag_id }));
+  }, [cattle]);
 
   function toggleStatus(s: CattleStatus) {
     setCattleStatus((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
@@ -232,51 +289,80 @@ export function CattleFilters({ cattle, allBreeds, alerts }: Props) {
         ))}
       </div>
 
-      {/* ── Smart action chips ── */}
-      {showChips && (
-        <div className="flex flex-wrap gap-2 print:hidden">
-          {alerts.overdueHealthCount > 0 && (
-            <Link
-              href="/dashboard/cattle/health"
-              className="inline-flex items-center gap-1.5 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-1.5 text-xs font-semibold text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors"
-            >
-              <HeartPulse className="h-3.5 w-3.5" />
-              {alerts.overdueHealthCount} overdue health
-              <span className="opacity-60">→</span>
-            </Link>
-          )}
-          {alerts.unweighedCount > 0 && (
+      {/* ── Smart action chips & Herd Matrix ── */}
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
+        {herdMetrics.totalActive > 0 && (
+          <>
             <button
-              onClick={() => setQuickFilter((q) => q === "unweighed" ? null : "unweighed")}
+              onClick={() => setSortKey((k) => k === "adg_desc" ? "default" : "adg_desc")}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
-                quickFilter === "unweighed"
-                  ? "bg-amber-500 text-white border-amber-500 shadow-card"
-                  : "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/60"
+                sortKey === "adg_desc"
+                  ? "bg-emerald-500 text-white border-emerald-500 shadow-card"
+                  : "border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50"
               )}
             >
-              <Scale className="h-3.5 w-3.5" />
-              {alerts.unweighedCount} unweighed
-              {quickFilter === "unweighed" && <X className="h-3 w-3 opacity-80" />}
+              <TrendingUp className="h-3.5 w-3.5" />
+              {herdMetrics.highGain} Fast Gain (≥0.8kg/d)
             </button>
-          )}
-          {alerts.highFcrCount > 0 && (
-            <button
-              onClick={() => setQuickFilter((q) => q === "high_fcr" ? null : "high_fcr")}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
-                quickFilter === "high_fcr"
-                  ? "bg-orange-500 text-white border-orange-500 shadow-card"
-                  : "border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-950/60"
-              )}
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {alerts.highFcrCount} high FCR
-              {quickFilter === "high_fcr" && <X className="h-3 w-3 opacity-80" />}
-            </button>
-          )}
-        </div>
-      )}
+
+            {herdMetrics.qurbani > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 dark:border-emerald-800 bg-emerald-100/60 dark:bg-emerald-900/30 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                <Moon className="h-3.5 w-3.5" />
+                {herdMetrics.qurbani} Qurbani Marked
+              </span>
+            )}
+
+            {herdMetrics.quarantined > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-red-300 dark:border-red-800 bg-red-100/60 dark:bg-red-900/30 px-3 py-1.5 text-xs font-semibold text-red-800 dark:text-red-300">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                {herdMetrics.quarantined} Quarantined
+              </span>
+            )}
+          </>
+        )}
+
+        {alerts.overdueHealthCount > 0 && (
+          <Link
+            href="/dashboard/cattle/health"
+            className="inline-flex items-center gap-1.5 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-1.5 text-xs font-semibold text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors"
+          >
+            <HeartPulse className="h-3.5 w-3.5" />
+            {alerts.overdueHealthCount} overdue health
+            <span className="opacity-60">→</span>
+          </Link>
+        )}
+        {alerts.unweighedCount > 0 && (
+          <button
+            onClick={() => setQuickFilter((q) => q === "unweighed" ? null : "unweighed")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+              quickFilter === "unweighed"
+                ? "bg-amber-500 text-white border-amber-500 shadow-card"
+                : "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/60"
+            )}
+          >
+            <Scale className="h-3.5 w-3.5" />
+            {alerts.unweighedCount} unweighed
+            {quickFilter === "unweighed" && <X className="h-3 w-3 opacity-80" />}
+          </button>
+        )}
+        {alerts.highFcrCount > 0 && (
+          <button
+            onClick={() => setQuickFilter((q) => q === "high_fcr" ? null : "high_fcr")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+              quickFilter === "high_fcr"
+                ? "bg-orange-500 text-white border-orange-500 shadow-card"
+                : "border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-950/60"
+            )}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {alerts.highFcrCount} high FCR
+            {quickFilter === "high_fcr" && <X className="h-3 w-3 opacity-80" />}
+          </button>
+        )}
+      </div>
 
       {/* ── Search + Filter + Sort bar ── */}
       <div className="flex flex-wrap items-center gap-2">
@@ -439,7 +525,15 @@ export function CattleFilters({ cattle, allBreeds, alerts }: Props) {
             <CattleCards cattle={paginated} allTagIds={cattle.map((c) => c.tag_id)} allBreeds={allBreeds} />
           </div>
           <div className="hidden md:block">
-            <CattleTable cattle={paginated} allTagIds={cattle.map((c) => c.tag_id)} allBreeds={allBreeds} />
+            <CattleTable
+              cattle={paginated}
+              allTagIds={cattle.map((c) => c.tag_id)}
+              allBreeds={allBreeds}
+              selectedIds={selectedIds}
+              onToggleSelectOne={toggleSelectOne}
+              onToggleSelectAll={toggleSelectAll}
+              allSelected={allSelected}
+            />
           </div>
           <DataPagination
             total={filtered.length}
@@ -448,6 +542,79 @@ export function CattleFilters({ cattle, allBreeds, alerts }: Props) {
             onPageChange={setPage}
             onPageSizeChange={(s) => { setPageSize(s); setPage(0); }}
           />
+
+          {/* Dialogs for Batch Operations */}
+          <BulkWeightDialog
+            cattle={selectedCattleOptions.length > 0 ? selectedCattleOptions : activeCattleOptions}
+            open={bulkWeighOpen}
+            onOpenChange={setBulkWeighOpen}
+          />
+          <BulkHealthEventDialog
+            activeCattle={activeCattleOptions}
+            initialSelectedIds={Array.from(selectedIds)}
+            open={bulkHealthOpen}
+            onOpenChange={setBulkHealthOpen}
+          />
+          <BulkCostDialog
+            activeCattle={activeCattleOptions}
+            initialSelectedIds={Array.from(selectedIds)}
+            open={bulkCostOpen}
+            onOpenChange={setBulkCostOpen}
+          />
+
+          {/* Floating Batch Actions Command Dock */}
+          {selectedIds.size > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-2xl bg-card/95 border border-border/80 shadow-2xl backdrop-blur-md px-4 py-2.5 max-w-[90vw] animate-in fade-in slide-in-from-bottom-4 duration-200">
+              <div className="flex items-center gap-2 pr-2 border-r border-border/60">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                  {selectedIds.size}
+                </span>
+                <span className="text-xs font-semibold hidden sm:inline text-foreground">Selected</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => setBulkWeighOpen(true)}
+                  className="h-8 gap-1.5 text-xs font-medium"
+                >
+                  <Scale className="h-3.5 w-3.5" />
+                  Weigh ({selectedIds.size})
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBulkHealthOpen(true)}
+                  className="h-8 gap-1.5 text-xs font-medium"
+                >
+                  <CalendarCheck className="h-3.5 w-3.5 text-blue-500" />
+                  Health Event
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBulkCostOpen(true)}
+                  className="h-8 gap-1.5 text-xs font-medium"
+                >
+                  <Banknote className="h-3.5 w-3.5 text-amber-500" />
+                  Log Expense
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={deselectAll}
+                  className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline ml-1">Clear</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

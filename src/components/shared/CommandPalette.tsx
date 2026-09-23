@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -154,7 +154,10 @@ export function CommandPalette() {
   }, [open, close, navItems.length, selected, executeAt]);
 
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+    if (open) {
+      const t = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
   }, [open]);
 
   if (!open) return null;
@@ -199,37 +202,41 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] sm:pt-[15vh] px-4 bg-black/40 backdrop-blur-md animate-fade-in"
       onClick={close}
     >
       <div
-        className="mx-4 w-full max-w-lg rounded-xl bg-card shadow-floating border border-border/60 overflow-hidden"
+        className="w-full max-w-xl rounded-2xl bg-card shadow-floating border border-border/80 overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3 bg-muted/20">
+          <Search className="h-4 w-4 shrink-0 text-primary" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search cattle tag, navigate, or run action…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 text-foreground font-medium"
+            autoFocus
           />
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+          <kbd className="rounded-md border border-border/70 bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/80">
             ESC
           </kbd>
         </div>
 
         {/* Results */}
-        <div className="max-h-80 overflow-y-auto p-2">
+        <div className="max-h-84 overflow-y-auto p-2 scrollbar-thin">
           {!hasResults ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No results found</p>
+            <div className="py-10 text-center">
+              <Search className="h-8 w-8 mx-auto mb-2 text-muted-foreground/20" />
+              <p className="text-sm font-medium text-muted-foreground">No results found</p>
+            </div>
           ) : (
             <>
               {filteredActions.length > 0 && (
-                <div className="mb-1">
-                  <p className="px-3 pt-1 pb-0.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="mb-2">
+                  <p className="px-3 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
                     Quick Actions
                   </p>
                   {filteredActions.map((a, i) => (
@@ -243,8 +250,8 @@ export function CommandPalette() {
               )}
 
               {filteredCattle.length > 0 && (
-                <div className="mb-1">
-                  <p className="px-3 pt-1 pb-0.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="mb-2">
+                  <p className="px-3 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
                     Cattle
                   </p>
                   {filteredCattle.map((c, i) => (
@@ -259,7 +266,7 @@ export function CommandPalette() {
 
               {filteredPages.length > 0 && (
                 <div>
-                  <p className="px-3 pt-1 pb-0.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <p className="px-3 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
                     Pages
                   </p>
                   {filteredPages.map((p, i) => (
@@ -276,10 +283,10 @@ export function CommandPalette() {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border px-4 py-2 flex items-center gap-3 text-xs text-muted-foreground">
-          <span><kbd className="font-mono">&uarr;&darr;</kbd> Navigate</span>
-          <span><kbd className="font-mono">&crarr;</kbd> Go</span>
-          <span><kbd className="font-mono">Esc</kbd> Close</span>
+        <div className="border-t border-border/60 px-4 py-2 flex items-center gap-4 text-xs text-muted-foreground/60 bg-muted/20">
+          <span className="flex items-center gap-1.5"><kbd className="font-mono rounded border border-border/60 bg-background/80 px-1.5 py-0.5 text-[10px] leading-none shadow-xs">&uarr;&darr;</kbd> Navigate</span>
+          <span className="flex items-center gap-1.5"><kbd className="font-mono rounded border border-border/60 bg-background/80 px-1.5 py-0.5 text-[10px] leading-none shadow-xs">&crarr;</kbd> Go</span>
+          <span className="flex items-center gap-1.5"><kbd className="font-mono rounded border border-border/60 bg-background/80 px-1.5 py-0.5 text-[10px] leading-none shadow-xs">Esc</kbd> Close</span>
         </div>
       </div>
     </div>

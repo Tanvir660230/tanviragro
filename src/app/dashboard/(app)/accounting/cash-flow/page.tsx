@@ -1,97 +1,235 @@
-import { PageHeader } from "@/components/shared/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
-import { buttonVariants } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowDownRight, ArrowUpRight, Activity, Building, Landmark } from "lucide-react";
+import { StatementReportHeader } from "@/components/finance/finance-ui";
 
-export const metadata: Metadata = { title: "Cash Flow Statement" };
+export const metadata: Metadata = { title: "Cash Flow Statement | Tanvir Agro Accounting" };
 
 function fmt(n: number) {
-  const abs = `৳${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+  const abs = `৳${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return n < 0 ? `(${abs})` : abs;
 }
 
-function Row({ label, value, indent, bold, border }: {
+function Row({
+  label,
+  value,
+  indent,
+  bold,
+  border,
+  highlight,
+  subtext,
+}: {
   label: string;
   value: number;
   indent?: boolean;
   bold?: boolean;
   border?: boolean;
+  highlight?: boolean;
+  subtext?: string;
 }) {
   const isNeg = value < 0;
   return (
-    <div className={`flex items-start justify-between py-2 px-4 gap-4 ${border ? "border-t border-foreground/20" : "border-b border-border/40"} ${bold ? "font-semibold" : ""}`}>
-      <span className={indent ? "pl-4 text-sm text-muted-foreground" : "text-sm"}>{label}</span>
-      <span className={`tabular-nums font-mono text-sm shrink-0 ${isNeg ? "text-red-600 dark:text-red-400" : ""}`}>
+    <div
+      className={`flex items-center justify-between py-2.5 px-5 gap-4 transition-colors ${
+        border ? "border-t border-border/80 bg-muted/20" : ""
+      } ${highlight ? "bg-muted/40 font-semibold" : "hover:bg-muted/20"} ${bold ? "font-bold" : ""}`}
+    >
+      <div className={indent ? "pl-5" : ""}>
+        <span className={indent ? "text-xs text-muted-foreground font-medium" : "text-sm text-foreground font-medium"}>
+          {label}
+        </span>
+        {subtext && <p className="text-[10px] text-muted-foreground">{subtext}</p>}
+      </div>
+      <span
+        className={`tabular-nums font-mono text-sm shrink-0 font-medium ${
+          isNeg ? "text-rose-600 dark:text-rose-400" : bold ? "text-foreground font-bold" : "text-foreground"
+        }`}
+      >
         {fmt(value)}
       </span>
     </div>
   );
 }
 
-function SectionHeader({ children }: { children: React.ReactNode }) {
+function SectionHeader({
+  children,
+  badge,
+  icon: Icon,
+}: {
+  children: React.ReactNode;
+  badge?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+}) {
   return (
-    <div className="px-4 py-2 bg-muted/30 border-b border-border">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>
+    <div className="px-5 py-3 bg-muted/40 border-b border-border/70 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+        <p className="text-xs font-bold uppercase tracking-wider text-foreground">{children}</p>
+      </div>
+      {badge && (
+        <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground border border-border/60">
+          {badge}
+        </span>
+      )}
     </div>
   );
 }
 
 export default async function CashFlowPage() {
-   
   const supabase = await createClient();
-  const { cashFlow: cf, asOf } = await getAccountingData(supabase);
+  const { cashFlow: cf, trialBalance: tb, asOf } = await getAccountingData(supabase);
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Back link */}
+      <div className="print:hidden">
+        <Link
+          href="/dashboard/accounting"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Accounting Hub
+        </Link>
+      </div>
+
+      {/* Statement Header */}
+      <StatementReportHeader
         title="Cash Flow Statement"
-        subtitle={`Direct method · as of ${new Date(asOf).toLocaleDateString("en-US", { dateStyle: "long" })}`}
-        back="/dashboard/accounting"
+        subtitle="Statement of Cash Flows · Direct Method"
+        asOfDate={asOf}
+        isAuditedBalanced={tb.isBalanced}
       />
 
-      {/* Operating — full width (most rows) */}
-      <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-        <SectionHeader>OPERATING ACTIVITIES</SectionHeader>
-        <Row label="Cash received from cattle sales" value={cf.cashFromSales} indent />
-        <Row label="Cash paid for cattle purchases" value={-cf.cashPaidCattle} indent />
-        <Row label="Cash paid for operating costs" value={-cf.cashPaidCosts} indent />
-        <Row label="Cash paid for feed & supplies" value={-cf.cashPaidInventory} indent />
-        <Row label="Net Cash from Operating Activities" value={cf.netOperating} bold border />
+      {/* Summary KPI Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Operating Cash</p>
+          <p className={`text-2xl font-bold font-mono tabular-nums mt-1 ${cf.netOperating < 0 ? "text-rose-600" : "text-foreground"}`}>
+            {fmt(cf.netOperating)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Core operations flow</p>
+        </div>
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Investing Cash</p>
+          <p className={`text-2xl font-bold font-mono tabular-nums mt-1 ${cf.netInvesting < 0 ? "text-rose-600" : "text-foreground"}`}>
+            {fmt(cf.netInvesting)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">CapEx &amp; equipment</p>
+        </div>
+        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">Financing Cash</p>
+          <p className={`text-2xl font-bold font-mono tabular-nums mt-1 ${cf.netFinancing < 0 ? "text-rose-600" : "text-foreground"}`}>
+            {fmt(cf.netFinancing)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Partner capital / loans</p>
+        </div>
+        <div className={`rounded-2xl border p-4 shadow-sm ${
+          cf.netCashFlow >= 0 ? "border-emerald-500/30 bg-emerald-500/[0.05]" : "border-rose-500/30 bg-rose-500/[0.05]"
+        }`}>
+          <p className={`text-[11px] font-bold uppercase tracking-wider ${
+            cf.netCashFlow >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
+          }`}>Net Cash Flow</p>
+          <p className={`text-2xl font-bold font-mono tabular-nums mt-1 ${
+            cf.netCashFlow >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
+          }`}>
+            {fmt(cf.netCashFlow)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Net liquidity change</p>
+        </div>
       </div>
 
-      {/* Investing + Financing — side by side on large screens */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-          <SectionHeader>INVESTING ACTIVITIES</SectionHeader>
-          <Row label="Fixed asset purchases" value={-cf.fixedAssetPurchases} indent />
-          <Row label="Net Cash from Investing Activities" value={cf.netInvesting} bold border />
+      {/* 1. OPERATING ACTIVITIES */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">1. Operating Activities</h2>
+          <div className="h-px flex-1 bg-border/60" />
         </div>
-        <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-          <SectionHeader>FINANCING ACTIVITIES</SectionHeader>
-          <Row label="Partner investments received" value={cf.partnerInvestments} indent />
-          <Row label="Partner withdrawals paid" value={-cf.partnerWithdrawals} indent />
-          <Row label="Net Cash from Financing Activities" value={cf.netFinancing} bold border />
-        </div>
-      </div>
 
-      {/* Net */}
-      <div className="rounded-xl ring-2 overflow-hidden" style={{
-        borderColor: cf.netCashFlow >= 0 ? "oklch(0.6 0.15 145 / 0.5)" : "rgb(220 38 38 / 0.3)"
-      }}>
-        <div className={`px-4 py-4 ${cf.netCashFlow >= 0 ? "bg-emerald-50 dark:bg-emerald-950/40" : "bg-red-50 dark:bg-red-950/30"}`}>
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-base">NET CHANGE IN CASH</span>
-            <span className={`text-2xl font-bold tabular-nums ${
-              cf.netCashFlow >= 0
-                ? "text-emerald-700 dark:text-emerald-400"
-                : "text-red-600 dark:text-red-400"
-            }`}>
-              {cf.netCashFlow < 0 ? "−" : ""}{fmt(cf.netCashFlow)}
-            </span>
+        <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden">
+          <SectionHeader icon={Activity} badge="Direct Inflows / Outflows">Operating Cash Flows</SectionHeader>
+          <div className="divide-y divide-border/30">
+            <Row label="Cash received from livestock sales" value={cf.cashFromSales} indent />
+            <Row label="Cash paid for livestock cattle purchases" value={-cf.cashPaidCattle} indent />
+            <Row label="Cash paid for farm operating expenses &amp; wages" value={-cf.cashPaidCosts} indent />
+            <Row label="Cash paid for feed &amp; supplies inventory" value={-cf.cashPaidInventory} indent />
           </div>
+          <Row label="NET CASH FROM OPERATING ACTIVITIES" value={cf.netOperating} bold border highlight />
+        </div>
+      </div>
+
+      {/* 2. INVESTING & FINANCING ACTIVITIES */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">2. Investing &amp; Financing Activities</h2>
+          <div className="h-px flex-1 bg-border/60" />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Investing */}
+          <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
+            <div>
+              <SectionHeader icon={Building} badge="CapEx">Investing Activities</SectionHeader>
+              <div className="divide-y divide-border/30">
+                <Row label="Fixed asset & equipment purchases" value={-cf.fixedAssetPurchases} indent />
+                {cf.fixedAssetPurchases === 0 && (
+                  <div className="py-4 px-5 text-xs text-muted-foreground italic">No capital asset investments recorded.</div>
+                )}
+              </div>
+            </div>
+            <Row label="NET CASH FROM INVESTING" value={cf.netInvesting} bold border highlight />
+          </div>
+
+          {/* Financing */}
+          <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
+            <div>
+              <SectionHeader icon={Landmark} badge="Capital / Equity">Financing Activities</SectionHeader>
+              <div className="divide-y divide-border/30">
+                <Row label="Partner investments received" value={cf.partnerInvestments} indent />
+                <Row label="Partner withdrawals / drawings paid" value={-cf.partnerWithdrawals} indent />
+                {cf.partnerInvestments === 0 && cf.partnerWithdrawals === 0 && (
+                  <div className="py-4 px-5 text-xs text-muted-foreground italic">No capital financing activities recorded.</div>
+                )}
+              </div>
+            </div>
+            <Row label="NET CASH FROM FINANCING" value={cf.netFinancing} bold border highlight />
+          </div>
+        </div>
+      </div>
+
+      {/* NET CHANGE IN CASH CARD */}
+      <div className={`rounded-2xl border p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${
+        cf.netCashFlow >= 0 ? "border-emerald-500/30 bg-emerald-500/[0.04]" : "border-rose-500/30 bg-rose-500/[0.04]"
+      }`}>
+        <div>
+          <div className="flex items-center gap-2">
+            {cf.netCashFlow >= 0 ? (
+              <div className="h-7 w-7 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <ArrowUpRight className="h-4 w-4" />
+              </div>
+            ) : (
+              <div className="h-7 w-7 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                <ArrowDownRight className="h-4 w-4" />
+              </div>
+            )}
+            <h3 className="text-lg font-bold text-foreground">
+              {cf.netCashFlow >= 0 ? "Net Positive Cash Generation" : "Net Cash Drawdown"}
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Sum of direct operating, capital investment, and financing cash flows.
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className={`text-3xl font-bold font-mono tabular-nums ${
+            cf.netCashFlow >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
+          }`}>
+            {fmt(cf.netCashFlow)}
+          </p>
+          <p className="text-xs font-semibold text-muted-foreground mt-0.5">
+            Net Direct Liquidity Change
+          </p>
         </div>
       </div>
     </div>

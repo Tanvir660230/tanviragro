@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useTransition } from "react";
 import { WifiOff, RefreshCw } from "lucide-react";
@@ -39,14 +39,15 @@ export function OfflineBanner() {
 
     for (const mutation of queue) {
       try {
+        const payload = mutation.payload;
         const fd = new FormData();
-        if (mutation.type === "weight-log") {
-          fd.set("cattle_id", mutation.cattle_id);
-          fd.set("weight_kg", String(mutation.weight_kg));
-          fd.set("recorded_at", mutation.recorded_at);
-          if (mutation.notes) fd.set("notes", mutation.notes);
-          if (mutation.girth_cm != null) fd.set("girth_cm", String(mutation.girth_cm));
-          if (mutation.length_cm != null) fd.set("length_cm", String(mutation.length_cm));
+        if (payload.type === "weight-log") {
+          fd.set("cattle_id", payload.cattle_id);
+          fd.set("weight_kg", String(payload.weight_kg));
+          fd.set("recorded_at", payload.recorded_at);
+          if (payload.notes) fd.set("notes", payload.notes);
+          if (payload.girth_cm != null) fd.set("girth_cm", String(payload.girth_cm));
+          if (payload.length_cm != null) fd.set("length_cm", String(payload.length_cm));
           const result = await createWeightLog(undefined, fd);
           if (!result?.error) {
             await removeQueued(mutation.id);
@@ -54,12 +55,12 @@ export function OfflineBanner() {
           } else {
             failed++;
           }
-        } else if (mutation.type === "consumption") {
-          fd.set("item_id", mutation.item_id);
-          fd.set("qty", String(mutation.qty));
-          fd.set("recorded_at", mutation.recorded_at);
-          if (mutation.cattle_id) fd.set("cattle_id", mutation.cattle_id);
-          if (mutation.notes) fd.set("notes", mutation.notes);
+        } else if (payload.type === "consumption") {
+          fd.set("item_id", payload.item_id);
+          fd.set("qty", String(payload.qty));
+          fd.set("recorded_at", payload.recorded_at);
+          if (payload.cattle_id) fd.set("cattle_id", payload.cattle_id);
+          if (payload.notes) fd.set("notes", payload.notes);
           const result = await logConsumption(undefined, fd);
           if (!result?.error) {
             await removeQueued(mutation.id);

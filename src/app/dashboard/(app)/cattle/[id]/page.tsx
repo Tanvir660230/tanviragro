@@ -15,9 +15,12 @@ import { CostTimelineCard } from "@/components/cattle/CostTimelineCard";
 import { QRCodeCard } from "@/components/cattle/QRCodeCard";
 import { PrintExportButton } from "@/components/cattle/PrintExportButton";
 import { EditCattleDialog } from "@/components/cattle/EditCattleDialog";
+import { CattleDetailMoreMenu } from "@/components/cattle/CattleDetailMoreMenu";
 import { MedicalHistoryTab } from "@/components/cattle/MedicalHistoryTab";
 import { SellCashImpactCard } from "@/components/cattle/SellCashImpactCard";
 import { LifeCycleTimeline } from "@/components/cattle/LifeCycleTimeline";
+import { AnimalUnifiedTimeline } from "@/components/cattle/AnimalUnifiedTimeline";
+import { getAnimalUnifiedTimelineAction } from "@/app/dashboard/(app)/cattle/lifecycle-actions";
 import type { Cattle, WeightLog, CattlePhoto, HealthEvent } from "@/types/database";
 import type { CattleTreatment } from "@/app/dashboard/(app)/cattle/medical-actions";
 import { getDictionary } from "@/i18n/getDictionary";
@@ -28,8 +31,16 @@ import { UndoSaleButton } from "@/components/cattle/UndoSaleButton";
 import { calculateDailyFeedRequirement, calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { InsuranceCard } from "@/components/cattle/InsuranceCard";
 import { CattleDetailTabs } from "@/components/cattle/CattleDetailTabs";
-import { CattleDetailMoreMenu } from "@/components/cattle/CattleDetailMoreMenu";
+import { Animal360Hero } from "@/components/cattle/Animal360Hero";
+import { QuickActionPanel } from "@/components/cattle/QuickActionPanel";
+import { Cattle360OverviewTab } from "@/components/cattle/Cattle360OverviewTab";
+import { Health360Dashboard } from "@/components/cattle/Health360Dashboard";
+import { Financial360Panel } from "@/components/cattle/Financial360Panel";
+import { RelatedRecordsPanel } from "@/components/cattle/RelatedRecordsPanel";
+import { StickyActionPanel } from "@/components/cattle/StickyActionPanel";
 import { TrackCattleView } from "@/components/cattle/TrackCattleView";
+import { HealthWorkspace } from "@/components/cattle/HealthWorkspace";
+
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -145,25 +156,71 @@ async function PhotosSection({ cattle, title }: { cattle: Cattle; title: string 
   );
 }
 
-async function HealthSection({ cattleId, businessId }: { cattleId: string; businessId: string }) {
+async function HealthSection({
+  cattle,
+  currentWeightKg,
+}: {
+  cattle: Cattle;
+  currentWeightKg: number;
+}) {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("health_events")
-    .select("*")
-    .eq("cattle_id", cattleId)
-    .eq("business_id", businessId)
-    .is("deleted_at", null)
-    .order("scheduled_at", { ascending: true });
+  const [
+    { data: eventsData },
+    { data: treatmentsData },
+    { data: medItemsData },
+    { data: medProtocolsData },
+  ] = await Promise.all([
+    supabase
+      .from("health_events")
+      .select("*")
+      .eq("cattle_id", cattle.id)
+      .eq("business_id", cattle.business_id)
+      .is("deleted_at", null)
+      .order("scheduled_at", { ascending: true }),
+    supabase
+      .from("cattle_treatments")
+      .select("*")
+      .eq("cattle_id", cattle.id)
+      .order("treated_at", { ascending: false }),
+    supabase
+      .from("inventory_items")
+      .select("id, name, unit")
+      .eq("category", "medicine")
+      .eq("business_id", cattle.business_id)
+      .is("deleted_at", null)
+      .order("name", { ascending: true }),
+    supabase
+      .from("medicine_protocols")
+      .select("item_id, dose_per_100kg_weight, frequency_days, notes"),
+  ]);
+
   return (
-    <HealthEventSection
-      cattleId={cattleId}
-      businessId={businessId}
-      events={(data ?? []) as HealthEvent[]}
+    <HealthWorkspace
+      cattle={cattle}
+      businessId={cattle.business_id}
+      currentWeightKg={currentWeightKg}
+      events={(eventsData ?? []) as HealthEvent[]}
+      treatments={((treatmentsData ?? []) as unknown) as CattleTreatment[]}
+      medicineItems={(medItemsData ?? []) as { id: string; name: string; unit: string }[]}
+      protocols={
+        (medProtocolsData ?? []) as {
+          item_id: string;
+          dose_per_100kg_weight: number;
+          frequency_days: number | null;
+          notes: string | null;
+        }[]
+      }
     />
   );
 }
 
 async function TimelineSection({ cattle, initialWeight, weights }: { cattle: Cattle, initialWeight: number, weights: LogRow[] }) {
+  const timelineResult = await getAnimalUnifiedTimelineAction(cattle.id);
+
+  if (timelineResult.success && timelineResult.events.length > 0) {
+    return <AnimalUnifiedTimeline events={timelineResult.events} cattleTag={cattle.tag_id} />;
+  }
+
   const supabase = await createClient();
   const [
     { data: healthData },
@@ -989,7 +1046,7 @@ async function ProfileSection({ id }: { id: string }) {
       </div>
 
       <CattleDetailTabs
-        defaultTab={c.status === "active" ? "growth_finance" : "overview"}
+        defaultTab={c.status === "active" ? "weight" : "overview"}
         overview={
           <>
             <DailyFeedRequirementCard
@@ -1027,17 +1084,51 @@ async function ProfileSection({ id }: { id: string }) {
         health={
           <>
             <Suspense fallback={<HealthSkeleton />}>
-              <HealthSection cattleId={c.id} businessId={c.business_id} />
-            </Suspense>
-            <Suspense fallback={<MedicalSkeleton />}>
-              <MedicalSection cattleId={c.id} currentWeightKg={latestWeight} />
+              <HealthSection cattle={c} currentWeightKg={latestWeight} />
             </Suspense>
             <Suspense fallback={<div className="h-48 rounded-xl border border-border animate-shimmer overflow-hidden" />}>
               <TimelineSection cattle={c} initialWeight={c.initial_weight_kg} weights={logs} />
             </Suspense>
           </>
         }
-        growthFinance={
+        weight={
+          <>
+            <WeightSection
+              cattleId={c.id}
+              cattleStatus={c.status}
+              initialLogs={logs}
+              purchaseDate={c.purchase_date}
+              initialWeight={c.initial_weight_kg}
+              totalConsumed={allocatedConcentrateKg + allocatedRoughageKg}
+            />
+            <GrowthForecastCard
+              initialWeight={c.initial_weight_kg}
+              currentWeight={latestWeight}
+              estimatedWeightToday={estimatedWeightToday}
+              purchaseDate={c.purchase_date}
+              logs={logs}
+              totalConsumed={allocatedConcentrateKg + allocatedRoughageKg}
+              totalCost={totalCost}
+              purchasePrice={c.purchase_price}
+              breedAverageAdg={breedAverageAdg}
+              breed={c.breed}
+              defaultMarketPrice={marketPriceData?.price_per_kg}
+            />
+          </>
+        }
+        feed={
+          <DailyFeedRequirementCard
+            cattleId={c.id}
+            initialWeightKg={c.initial_weight_kg ?? 0}
+            latestLoggedWeightKg={latestWeight}
+            lastWeighedAt={sortedLogs[0]?.recorded_at ?? null}
+            purchaseDate={c.purchase_date ?? new Date().toISOString()}
+            expectedDailyGainKg={c.expected_daily_gain_kg ?? 0.8}
+            roughageOverrideKg={(c.manual_feed_override as { roughageKg?: number } | null)?.roughageKg ?? null}
+            activeRoughage={currentRoughage}
+          />
+        }
+        finance={
           <>
             {c.status === "active" && (
               <Suspense fallback={<div className="h-[220px] rounded-xl border border-border/60 animate-shimmer overflow-hidden" />}>
@@ -1053,19 +1144,6 @@ async function ProfileSection({ id }: { id: string }) {
                 />
               </Suspense>
             )}
-            <GrowthForecastCard
-              initialWeight={c.initial_weight_kg}
-              currentWeight={latestWeight}
-              estimatedWeightToday={estimatedWeightToday}
-              purchaseDate={c.purchase_date}
-              logs={logs}
-              totalConsumed={allocatedConcentrateKg + allocatedRoughageKg}
-              totalCost={totalCost}
-              purchasePrice={c.purchase_price}
-              breedAverageAdg={breedAverageAdg}
-              breed={c.breed}
-              defaultMarketPrice={marketPriceData?.price_per_kg}
-            />
             {hasMissingFeedPrices && (
               <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
                 ⚠️ Feed cost cannot be calculated — no purchase price found for your active feed. Add a purchase transaction in Inventory to enable cost tracking.
@@ -1084,6 +1162,27 @@ async function ProfileSection({ id }: { id: string }) {
               activeRoughage={currentRoughage}
             />
           </>
+        }
+        gallery={
+          <Suspense fallback={<PhotosSkeleton />}>
+            <PhotosSection cattle={c} title={t.cattle_details.photos.photos} />
+          </Suspense>
+        }
+        timeline={
+          <Suspense fallback={<div className="h-48 rounded-xl border border-border animate-shimmer overflow-hidden" />}>
+            <TimelineSection cattle={c} initialWeight={c.initial_weight_kg} weights={logs} />
+          </Suspense>
+        }
+        identity={
+          <div className="grid gap-5 sm:grid-cols-2">
+            <QRCodeCard cattleId={c.id} tagId={c.tag_id} />
+            <InsuranceCard
+              cattleId={c.id}
+              provider={c.insurance_provider ?? null}
+              amount={c.insurance_amount ?? null}
+              expiry={c.insurance_expiry ?? null}
+            />
+          </div>
         }
       />
     </div>

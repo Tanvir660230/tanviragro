@@ -27,12 +27,12 @@ interface SectionCardProps {
 }
 
 const ICON_VARIANT: Record<NonNullable<SectionCardProps["iconVariant"]>, string> = {
-  primary: "bg-primary/10 text-primary",
-  emerald: "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400",
-  amber:   "bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400",
-  blue:    "bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400",
-  red:     "bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400",
-  purple:  "bg-purple-100 text-purple-600 dark:bg-purple-950/50 dark:text-purple-400",
+  primary: "bg-primary/10 text-primary border border-primary/20",
+  emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+  amber:   "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+  blue:    "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+  red:     "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+  purple:  "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
 };
 
 const PADDING: Record<NonNullable<SectionCardProps["padding"]>, string> = {
@@ -59,14 +59,14 @@ export function SectionCard({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border border-border bg-card shadow-card",
+        "overflow-hidden rounded-2xl border border-border/70 bg-card shadow-card",
         className
       )}
     >
       {hasHeader && (
         <div
           className={cn(
-            "flex items-center justify-between gap-3 border-b border-border/60 px-5 py-3.5",
+            "flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 sm:px-5 py-3.5",
             headerClassName
           )}
         >
@@ -74,16 +74,16 @@ export function SectionCard({
             {Icon && (
               <div
                 className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-xs",
                   ICON_VARIANT[iconVariant]
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-4 w-4" />
               </div>
             )}
             <div className="min-w-0">
               {title && (
-                <p className="text-sm font-semibold text-foreground truncate">{title}</p>
+                <p className="text-sm font-semibold text-foreground truncate font-heading">{title}</p>
               )}
               {description && (
                 <p className="text-xs text-muted-foreground truncate mt-0.5">{description}</p>
@@ -99,7 +99,7 @@ export function SectionCard({
       </div>
 
       {footer && (
-        <div className="border-t border-border/60 px-5 py-3">
+        <div className="border-t border-border/60 bg-muted/15 px-5 py-3">
           {footer}
         </div>
       )}

@@ -3,7 +3,7 @@ import { getDictionary } from "@/i18n/getDictionary";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Wallet, TrendingUp, TrendingDown, ArrowUpRight, Beef } from "lucide-react";
-import { getCashBalance } from "@/lib/supabase/queries/cash";
+import { getStatementData } from "@/app/dashboard/(app)/finance/statement-action";
 
 function fmt(n: number) {
   return `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
@@ -19,8 +19,8 @@ export async function CashBalanceCard() {
   const t = await getDictionary();
   const cb = t.cash_balance;
 
-  const [cash, activeCattleResult, marketPriceResult] = await Promise.all([
-    getCashBalance(supabase, businessId),
+  const [statement, activeCattleResult, marketPriceResult] = await Promise.all([
+    getStatementData(),
     supabase
       .from("cattle")
       .select("purchase_price")
@@ -35,7 +35,22 @@ export async function CashBalanceCard() {
       .maybeSingle(),
   ]);
 
-  const { balance, opening, capitalIn, capitalOut, salesTotal, cattleCost, invCost, opCost, fixedAssetCost, financingNet } = cash;
+  const opening = statement.openingBalance;
+  let totalIn = opening;
+  let totalOut = 0;
+
+  const categoriesMap: Record<string, number> = {};
+
+  for (const txn of statement.transactions) {
+    if (txn.direction === "in") {
+      totalIn += txn.amount;
+    } else {
+      totalOut += txn.amount;
+    }
+    categoriesMap[txn.category] = (categoriesMap[txn.category] || 0) + txn.amount;
+  }
+
+  const balance = totalIn - totalOut;
   const isPositive = balance >= 0;
 
   const activeCattle = (activeCattleResult.data ?? []) as { purchase_price: number }[];
@@ -44,20 +59,27 @@ export async function CashBalanceCard() {
   const activeCattleCount = activeCattle.length;
   const activeCattleInvestment = activeCattle.reduce((s, c) => s + c.purchase_price, 0);
 
+  const capitalIn = categoriesMap["Capital In"] || 0;
+  const capitalOut = categoriesMap["Capital Out"] || 0;
+  const salesTotal = categoriesMap["Cattle Sale"] || 0;
+  const cattleCost = categoriesMap["Cattle Purchase"] || 0;
+  const invCost = categoriesMap["Inventory"] || 0;
+  const opCost = categoriesMap["Operating Cost"] || 0;
+  const fixedAssetCost = categoriesMap["Asset Purchase"] || 0;
+  const loanReceived = categoriesMap["Loan Received"] || 0;
+  const loanRepayment = categoriesMap["Loan Repayment"] || 0;
+
   const breakdown = [
     { label: cb.opening,      value: opening,         positive: true },
-    { label: cb.capital_in,   value: capitalIn,        positive: true },
-    { label: cb.sales,        value: salesTotal,       positive: true },
-    ...(financingNet > 0
-      ? [{ label: cb.loans_received, value: financingNet, positive: true }]
-      : []),
-    { label: cb.capital_out,  value: capitalOut,       positive: false },
-    { label: cb.cattle_bought,value: cattleCost,       positive: false },
-    { label: cb.inventory,    value: invCost,          positive: false },
-    { label: cb.costs,        value: opCost,           positive: false },
-    ...(fixedAssetCost > 0
-      ? [{ label: cb.fixed_assets, value: fixedAssetCost, positive: false }]
-      : []),
+    ...(capitalIn > 0 ? [{ label: cb.capital_in,   value: capitalIn,        positive: true }] : []),
+    ...(salesTotal > 0 ? [{ label: cb.sales,        value: salesTotal,       positive: true }] : []),
+    ...(loanReceived > 0 ? [{ label: cb.loans_received, value: loanReceived, positive: true }] : []),
+    ...(capitalOut > 0 ? [{ label: cb.capital_out,  value: capitalOut,       positive: false }] : []),
+    ...(cattleCost > 0 ? [{ label: cb.cattle_bought,value: cattleCost,       positive: false }] : []),
+    ...(invCost > 0 ? [{ label: cb.inventory,    value: invCost,          positive: false }] : []),
+    ...(opCost > 0 ? [{ label: cb.costs,        value: opCost,           positive: false }] : []),
+    ...(fixedAssetCost > 0 ? [{ label: cb.fixed_assets, value: fixedAssetCost, positive: false }] : []),
+    ...(loanRepayment > 0 ? [{ label: "Loan Repayment", value: loanRepayment, positive: false }] : []),
   ];
 
   return (

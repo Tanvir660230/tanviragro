@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useActionState, useTransition, useEffect, useState } from "react";
 import { Lock, Unlock, Plus, Trash2 } from "lucide-react";

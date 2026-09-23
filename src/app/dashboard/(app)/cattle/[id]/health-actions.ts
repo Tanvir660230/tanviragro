@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import type { HealthEventType } from "@/types/database";
+import { LivestockEventBus } from "@/lib/livestock/events";
 
 export type HealthFormState = { error?: string; success?: boolean } | undefined;
 
@@ -34,16 +35,24 @@ export async function createHealthEvent(
     .maybeSingle();
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
 
-  const { error } = await supabase.from("health_events").insert({
+  const { data: eventData, error } = await supabase.from("health_events").insert({
     cattle_id: cattleId,
     business_id: businessId,
     title,
     event_type: eventType || "checkup",
     scheduled_at: scheduledAt,
     notes,
-  });
+  }).select("id").single();
 
   if (error) return { error: "Failed to save" };
+
+  await LivestockEventBus.publish(
+    "HealthEventScheduled",
+    businessId,
+    cattleId,
+    { eventId: eventData?.id, title, eventType, scheduledAt },
+    user.id
+  ).catch(() => {});
 
   revalidatePath(`/dashboard/cattle/${cattleId}`);
   revalidatePath("/dashboard/cattle/health");
@@ -70,13 +79,22 @@ export async function completeHealthEvent(
     .maybeSingle();
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
 
+  const today = new Date().toISOString().slice(0, 10);
   const { error } = await supabase
     .from("health_events")
-    .update({ completed_at: new Date().toISOString().slice(0, 10) })
+    .update({ completed_at: today })
     .eq("id", eventId)
     .eq("business_id", businessId);
 
   if (error) return { error: "Failed to update" };
+
+  await LivestockEventBus.publish(
+    "VaccinationCompleted",
+    businessId,
+    cattleId,
+    { eventId, completedAt: today },
+    user.id
+  ).catch(() => {});
 
   revalidatePath(`/dashboard/cattle/${cattleId}`);
   revalidatePath("/dashboard/cattle/health");

@@ -9,7 +9,9 @@ export type TxnCategory =
   | "Cattle Purchase"
   | "Inventory"
   | "Operating Cost"
-  | "Asset Purchase";
+  | "Asset Purchase"
+  | "Loan Received"
+  | "Loan Repayment";
 
 export type TxnRow = {
   id: string;
@@ -56,6 +58,7 @@ export async function getStatementData(
     { data: invData },
     { data: costData },
     { data: fixedAssetData },
+    { data: loansData },
   ] = await Promise.all([
     supabase
       .from("partner_transactions")
@@ -100,6 +103,12 @@ export async function getStatementData(
       .select("id, name, category, purchase_date, purchase_cost")
       .eq("business_id", businessId)
       .order("purchase_date", { ascending: true }),
+
+    supabase
+      .from("loans")
+      .select("id, lender_name, principal_amount, loan_date, loan_payments(id, amount, paid_at)")
+      .eq("business_id", businessId)
+      .is("deleted_at", null),
   ]);
 
   type PtRow = { id: string; amount: number; type: string; recorded_at: string; partners: { name: string } | null };
@@ -108,6 +117,13 @@ export async function getStatementData(
   type InvTxnRow = { id: string; qty: number; unit_cost: number; recorded_at: string; inventory_items: { name: string } | null };
   type CostRow = { id: string; amount: number; recorded_at: string; description: string | null; category: string; entry_class: string | null };
   type AssetRow = { id: string; name: string; category: string; purchase_date: string; purchase_cost: number };
+  type LoanRow = {
+    id: string;
+    lender_name: string;
+    principal_amount: number;
+    loan_date: string;
+    loan_payments: { id: string; amount: number; paid_at: string }[];
+  };
 
   const all: TxnRow[] = [];
 
@@ -181,6 +197,29 @@ export async function getStatementData(
       amount: Number(a.purchase_cost),
       direction: "out",
     });
+  }
+
+  for (const l of (loansData ?? []) as LoanRow[]) {
+    if (Number(l.principal_amount) > 0) {
+      all.push({
+        id: `loan-${l.id}`,
+        date: l.loan_date,
+        description: `Loan received — ${l.lender_name}`,
+        category: "Loan Received",
+        amount: Number(l.principal_amount),
+        direction: "in",
+      });
+    }
+    for (const p of l.loan_payments ?? []) {
+      all.push({
+        id: `loanpay-${p.id}`,
+        date: p.paid_at.slice(0, 10),
+        description: `Loan repayment — ${l.lender_name}`,
+        category: "Loan Repayment",
+        amount: Number(p.amount),
+        direction: "out",
+      });
+    }
   }
 
   // Sort chronologically; same-day: in before out

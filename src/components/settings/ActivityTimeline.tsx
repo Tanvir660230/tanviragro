@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Clock, Plus, ArrowRight, DollarSign, Package, Stethoscope, Syringe, Landmark, CreditCard } from "lucide-react";
+import { useState, useMemo } from "react";
+import { 
+  Clock, Plus, ArrowRight, DollarSign, Package, Stethoscope, 
+  Syringe, Landmark, CreditCard, Filter, Search, Calendar, FileDown, CheckCircle2 
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export interface ActivityItem {
   id: string;
@@ -24,7 +29,16 @@ const ICON_MAP = {
   loan: CreditCard,
 };
 
-const SHOW_LIMIT = 20;
+const CATEGORIES = [
+  { id: "all", label: "All Events" },
+  { id: "cattle", label: "Cattle & Sales", types: ["cattle_add", "cattle_sold"] },
+  { id: "finance", label: "Costs & Loans", types: ["cost_add", "loan"] },
+  { id: "inventory", label: "Feed & Supplies", types: ["inventory_purchase"] },
+  { id: "health", label: "Health & Vaccines", types: ["medical_treatment", "health_event"] },
+  { id: "partner", label: "Partners", types: ["partner_txn"] },
+];
+
+const SHOW_LIMIT = 25;
 
 const dhakaDayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" });
 
@@ -51,66 +65,132 @@ function groupByDay(activities: ActivityItem[]) {
 }
 
 export function ActivityTimeline({ activities }: { activities: ActivityItem[] }) {
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const displayed = showAll ? activities : activities.slice(0, SHOW_LIMIT);
 
-  if (activities.length === 0) {
-    return (
-      <div className="text-center py-20 text-muted-foreground">
-        No recent activity found.
-      </div>
-    );
-  }
+  const filtered = useMemo(() => {
+    return activities.filter((act) => {
+      // Category filter
+      if (activeCategory !== "all") {
+        const cat = CATEGORIES.find((c) => c.id === activeCategory);
+        if (cat?.types && !cat.types.includes(act.type)) return false;
+      }
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = act.title.toLowerCase().includes(q);
+        const matchesDesc = act.description.toLowerCase().includes(q);
+        if (!matchesTitle && !matchesDesc) return false;
+      }
+      return true;
+    });
+  }, [activities, activeCategory, searchQuery]);
 
+  const displayed = showAll ? filtered : filtered.slice(0, SHOW_LIMIT);
   const groups = groupByDay(displayed);
 
   return (
-    <div className="space-y-8">
-      {groups.map((group) => (
-        <div key={group.key}>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {group.label}
-          </h3>
-          <div className="relative space-y-3 pl-9">
-            <div className="absolute left-4 top-1 bottom-1 w-0.5 bg-border" />
-            {group.items.map((act) => {
-              const Icon = ICON_MAP[act.type];
-              const dt = new Date(act.date);
-              return (
-                <div key={act.id} className="relative">
-                  <div
-                    className={cn(
-                      "absolute -left-9 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background shadow-card",
-                      act.color
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                  </div>
-                  <div className="rounded-xl border bg-card p-4 shadow-card transition-all hover:shadow-md">
-                    <div className="flex items-start justify-between gap-3">
-                      <h4 className="text-sm font-semibold leading-snug">{act.title}</h4>
-                      <time className="mt-0.5 flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {dt.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit" })}
-                      </time>
-                    </div>
-                    <p className="mt-1 break-words text-sm text-muted-foreground">{act.description}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+    <div className="space-y-6">
+      {/* Search and Filters Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border/60 shadow-sm">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search events, cow tag, partner, amount..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9 text-xs"
+          />
         </div>
-      ))}
 
-      {!showAll && activities.length > SHOW_LIMIT && (
-        <div className="flex justify-center pt-2">
-          <button
-            onClick={() => setShowAll(true)}
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            Show {activities.length - SHOW_LIMIT} more activities
-          </button>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {CATEGORIES.map((cat) => {
+            const isSelected = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategory(cat.id)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors",
+                  isSelected
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Activity Timeline List */}
+      {filtered.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border/70 p-12 text-center bg-muted/10">
+          <Clock className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+          <p className="text-sm font-semibold text-foreground">No events match your criteria</p>
+          <p className="text-xs text-muted-foreground mt-1">Try resetting search keywords or selecting all event categories.</p>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <div key={group.key}>
+              <div className="flex items-center gap-2 mb-3">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </h3>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
+                  {group.items.length} {group.items.length === 1 ? "event" : "events"}
+                </span>
+              </div>
+
+              <div className="relative space-y-3 pl-9">
+                <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-border/60" />
+                {group.items.map((act) => {
+                  const Icon = ICON_MAP[act.type] || Clock;
+                  const dt = new Date(act.date);
+                  return (
+                    <div key={act.id} className="relative group">
+                      <div
+                        className={cn(
+                          "absolute -left-9 top-3.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background shadow-sm transition-transform group-hover:scale-110",
+                          act.color
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
+                        <div className="flex items-start justify-between gap-3">
+                          <h4 className="text-sm font-semibold text-foreground leading-snug">{act.title}</h4>
+                          <time className="mt-0.5 flex shrink-0 items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            {dt.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit" })}
+                          </time>
+                        </div>
+                        <p className="mt-1 break-words text-xs text-muted-foreground leading-relaxed">{act.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {!showAll && filtered.length > SHOW_LIMIT && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAll(true)}
+                className="text-xs font-medium"
+              >
+                Show {filtered.length - SHOW_LIMIT} more logged events
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

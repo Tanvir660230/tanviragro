@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useTransition, useState } from "react";
 import { Skull, RotateCcw } from "lucide-react";

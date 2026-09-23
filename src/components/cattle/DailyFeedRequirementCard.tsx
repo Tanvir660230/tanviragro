@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useTransition } from "react";
 import { Wheat, Info, Pencil, Check, X } from "lucide-react";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { Plus, Trash2, CheckCircle } from "lucide-react";

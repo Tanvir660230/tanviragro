@@ -148,6 +148,27 @@ export function HealthHubClient({ events, todayISO, in7ISO, stats }: Props) {
 
   return (
     <>
+      {/* ── Enterprise Vaccination Workspace Banner ── */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-blue-600/10 text-blue-600 flex items-center justify-center shrink-0">
+            <Syringe className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Enterprise Vaccination &amp; Immunization Platform</h3>
+            <p className="text-xs text-muted-foreground">Manage multi-dose protocols, mass herd campaigns, cold-chain inventory stock, and adverse reactions.</p>
+          </div>
+        </div>
+        <Link
+          href="/dashboard/cattle/vaccinations"
+          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors shrink-0"
+        >
+          <Syringe className="h-3.5 w-3.5" />
+          Open Vaccination Platform
+        </Link>
+      </div>
+
+
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
         <StatCard

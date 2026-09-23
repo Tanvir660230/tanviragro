@@ -2,9 +2,15 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentBusinessId } from "@/lib/supabase/get-business";
-import { weightLogSchema, validateDate, validatePositiveNumber, validateText } from "@/lib/validate";
+import { getBusinessContext } from "@/lib/context/business-context";
+import { requirePermission } from "@/lib/auth/permissions";
+import { assertResourceOwnership } from "@/lib/auth/ownership";
+import { PERMISSIONS } from "@/constants/roles";
+import { weightLogSchema } from "@/lib/validate";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
+import { CattleDomainService } from "@/lib/services/cattle.service";
+import { LivestockEventBus } from "@/lib/livestock/events";
+import type { Cattle } from "@/types/database";
 
 export type WeightLogFormState =
   | { error?: string; success?: boolean }
@@ -14,50 +20,55 @@ export async function createWeightLog(
   _prevState: WeightLogFormState,
   formData: FormData
 ): Promise<WeightLogFormState> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.WEIGHT_LOG);
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+    const parsed = weightLogSchema.safeParse({
+      cattle_id: (formData.get("cattle_id") as string)?.trim(),
+      weight_kg: formData.get("weight_kg"),
+      recorded_at: formData.get("recorded_at"),
+      notes: (formData.get("notes") as string)?.trim() || null,
+      girth_cm: formData.get("girth_cm") || null,
+      length_cm: formData.get("length_cm") || null,
+    });
+    if (!parsed.success) return { error: parsed.error.issues?.[0]?.message ?? "Invalid input" };
+    const { cattle_id, weight_kg, recorded_at, notes, girth_cm, length_cm } = parsed.data;
 
-  const parsed = weightLogSchema.safeParse({
-    cattle_id:   (formData.get("cattle_id") as string)?.trim(),
-    weight_kg:   formData.get("weight_kg"),
-    recorded_at: formData.get("recorded_at"),
-    notes:       (formData.get("notes") as string)?.trim() || null,
-    girth_cm:    formData.get("girth_cm") || null,
-    length_cm:   formData.get("length_cm") || null,
-  });
-  if (!parsed.success) return { error: parsed.error.issues?.[0]?.message ?? "Invalid input" };
-  const { cattle_id, weight_kg, recorded_at, notes, girth_cm, length_cm } = parsed.data;
+    const cattleRow = await assertResourceOwnership<Cattle>(supabase, "cattle", cattle_id, ctx.businessId);
+    if (cattleRow.status !== "active") {
+      return { error: "Cannot add weight logs to sold or deceased cattle" };
+    }
 
-  // Ownership check + status block
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
+    CattleDomainService.validateWeightLog(weight_kg, recorded_at);
 
-  const { data: cattleRow } = await supabase
-    .from("cattle")
-    .select("status, business_id")
-    .eq("id", cattle_id)
-    .maybeSingle();
-  if (!cattleRow || cattleRow.business_id !== businessId) return { error: "Unauthorized" };
-  if (cattleRow.status !== "active")
-    return { error: "Cannot add weight logs to sold or deceased cattle" };
+    const { data: insertedLog, error } = await supabase.from("weight_logs").insert({
+      cattle_id,
+      weight_kg,
+      recorded_at,
+      notes,
+      girth_cm,
+      length_cm,
+    }).select("id").single();
 
-  const { error } = await supabase.from("weight_logs").insert({
-    cattle_id,
-    weight_kg,
-    recorded_at,
-    notes,
-    girth_cm,
-    length_cm,
-  });
+    if (error) return { error: "Failed to save. Please try again." };
 
-  if (error) return { error: "Failed to save. Please try again." };
+    await LivestockEventBus.publish(
+      "WeightRecorded",
+      ctx.businessId,
+      cattle_id,
+      { weightKg: weight_kg, recordedAt: recorded_at, girthCm: girth_cm, lengthCm: length_cm },
+      ctx.user?.id
+    ).catch(() => {});
 
-  revalidatePath(`/dashboard/cattle/${cattle_id}`);
-  revalidatePath("/dashboard/cattle");
-  revalidatePath("/dashboard");
-  return { success: true };
+    revalidatePath(`/dashboard/cattle/${cattle_id}`);
+    revalidatePath("/dashboard/cattle");
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to record weight" };
+  }
 }
 
 export type SaleFormState = { error?: string; success?: boolean } | undefined;
@@ -66,177 +77,139 @@ export async function recordSale(
   _prevState: SaleFormState,
   formData: FormData
 ): Promise<SaleFormState> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.CATTLE_SELL);
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+    const cattle_id = (formData.get("cattle_id") as string)?.trim();
+    const sale_price_total = parseFloat(formData.get("sale_price_total") as string);
+    const weight_at_sale_kg = parseFloat(formData.get("weight_at_sale_kg") as string);
+    const sold_at = formData.get("sold_at") as string;
+    const buyer_name = (formData.get("buyer_name") as string)?.trim() || null;
 
-  const cattle_id = (formData.get("cattle_id") as string)?.trim();
-  const sale_price_total = parseFloat(formData.get("sale_price_total") as string);
-  const weight_at_sale_kg = parseFloat(formData.get("weight_at_sale_kg") as string);
-  const sold_at = formData.get("sold_at") as string;
-  const buyer_name = (formData.get("buyer_name") as string)?.trim() || null;
+    if (!cattle_id) return { error: "Invalid cattle" };
+    if (isNaN(sale_price_total) || sale_price_total <= 0)
+      return { error: "Enter a valid sale price" };
+    if (isNaN(weight_at_sale_kg) || weight_at_sale_kg <= 0)
+      return { error: "Enter a valid weight at sale" };
+    if (!sold_at) return { error: "Sale date is required" };
 
-  if (!cattle_id) return { error: "Invalid cattle" };
-  if (isNaN(sale_price_total) || sale_price_total <= 0)
-    return { error: "Enter a valid sale price" };
-  if (isNaN(weight_at_sale_kg) || weight_at_sale_kg <= 0)
-    return { error: "Enter a valid weight at sale" };
-  if (!sold_at) return { error: "Sale date is required" };
+    const cattleRow = await assertResourceOwnership<Cattle>(supabase, "cattle", cattle_id, ctx.businessId);
+    CattleDomainService.assertSaleEligibility(cattleRow.tag_id, cattleRow.status);
 
-  // Ownership check + status validation
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
+    const lockErr = await checkFinancialLock(supabase, ctx.businessId, sold_at);
+    if (lockErr) return { error: lockErr };
 
-  const { data: cattleRow } = await supabase
-    .from("cattle")
-    .select("status, business_id")
-    .eq("id", cattle_id)
-    .maybeSingle();
-  if (!cattleRow || cattleRow.business_id !== businessId) return { error: "Unauthorized" };
-  if (cattleRow.status === "sold") return { error: "This cattle has already been sold" };
-  if (cattleRow.status === "dead") return { error: "Cannot record a sale for deceased cattle" };
+    const { error: saleError } = await supabase.from("sales").insert({
+      cattle_id,
+      sold_at,
+      sale_price_total,
+      weight_at_sale_kg,
+      buyer_name,
+    });
 
-  const lockError = await checkFinancialLock(supabase, businessId, sold_at);
-  if (lockError) return { error: lockError };
+    if (saleError) return { error: "Failed to record sale. Please try again." };
 
-  // Call the ACID transaction RPC
-  const { data: saleId, error: rpcError } = await supabase.rpc("sell_cattle", {
-    p_cattle_id: cattle_id,
-    p_sale_price_total: sale_price_total,
-    p_weight_at_sale_kg: weight_at_sale_kg,
-    p_sold_at: sold_at,
-    p_buyer_name: buyer_name
-  });
+    const { error: updateError } = await supabase
+      .from("cattle")
+      .update({ status: "sold" })
+      .eq("id", cattle_id);
 
-  if (rpcError) {
-    console.error("sell_cattle RPC error:", rpcError);
-    return { error: "Sale could not be completed. Please ensure the cattle is active." };
+    if (updateError) return { error: "Sale saved, but status update failed." };
+
+    await LivestockEventBus.publish(
+      "CattleSold",
+      ctx.businessId,
+      cattle_id,
+      { salePriceTotal: sale_price_total, weightAtSaleKg: weight_at_sale_kg, soldAt: sold_at, buyerName: buyer_name },
+      ctx.user?.id
+    ).catch(() => {});
+
+    revalidatePath(`/dashboard/cattle/${cattle_id}`);
+    revalidatePath("/dashboard/cattle");
+    revalidatePath("/dashboard/finance");
+    revalidatePath("/dashboard");
+    revalidateTag("accounting", { expire: 0 });
+    return { success: true };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to record sale" };
   }
-
-  revalidatePath(`/dashboard/cattle/${cattle_id}`);
-  revalidatePath("/dashboard/cattle");
-  revalidatePath("/dashboard/finance");
-  revalidatePath("/dashboard");
-  revalidateTag("accounting", { expire: 0 });
-  return { success: true };
 }
 
 export async function revertSale(
   cattleId: string
 ): Promise<{ error?: string; success?: boolean }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.CATTLE_SELL);
 
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
+    await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
 
-  const { data: cattleRow } = await supabase
-    .from("cattle")
-    .select("business_id, status")
-    .eq("id", cattleId)
-    .maybeSingle();
-  if (!cattleRow || cattleRow.business_id !== businessId) return { error: "Unauthorized" };
-  if (cattleRow.status !== "sold") return { error: "This cattle is not marked as sold" };
+    const { error: delError } = await supabase.from("sales").delete().eq("cattle_id", cattleId);
+    if (delError) return { error: "Failed to delete sale record" };
 
-  // Fetch the most recent sale for this cattle
-  const { data: saleRow } = await supabase
-    .from("sales")
-    .select("id, sold_at")
-    .eq("cattle_id", cattleId)
-    .is("deleted_at", null)
-    .order("sold_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    const { error: upError } = await supabase.from("cattle").update({ status: "active" }).eq("id", cattleId);
+    if (upError) return { error: "Failed to reset cattle status" };
 
-  if (!saleRow) return { error: "No sale record found for this cattle" };
-
-  const revertLockError = await checkFinancialLock(supabase, businessId, saleRow.sold_at);
-  if (revertLockError) return { error: revertLockError };
-
-  // Time-gate: only allow reversal within 7 days of the sale
-  const saleDateMs = new Date(saleRow.sold_at).getTime();
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-  if (Date.now() - saleDateMs > sevenDaysMs) {
-    return { error: "Sale cannot be reversed — it was recorded more than 7 days ago. Contact your accountant to correct this manually." };
+    revalidatePath(`/dashboard/cattle/${cattleId}`);
+    revalidatePath("/dashboard/cattle");
+    revalidatePath("/dashboard/finance");
+    revalidatePath("/dashboard");
+    revalidateTag("accounting", { expire: 0 });
+    return { success: true };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to revert sale" };
   }
-
-  // Call the ACID transaction RPC to revert the sale
-  const { error: rpcError } = await supabase.rpc("revert_cattle_sale", {
-    p_cattle_id: cattleId,
-    p_sale_id: saleRow.id,
-    p_reason: "Sale manually reverted by owner"
-  });
-
-  if (rpcError) {
-    console.error("revert_cattle_sale RPC error:", rpcError);
-    return { error: "Failed to revert the sale. Please try again." };
-  }
-
-  revalidatePath(`/dashboard/cattle/${cattleId}`);
-  revalidatePath("/dashboard/cattle");
-  revalidatePath("/dashboard/finance");
-  revalidatePath("/dashboard");
-  revalidateTag("accounting", { expire: 0 });
-  return { success: true };
 }
 
 export async function deleteWeightLog(
   logId: string,
   cattleId: string
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.WEIGHT_LOG);
 
-  // Ownership check — verify this cattle belongs to the user's business
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
+    await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
 
-  const { data: cattle } = await supabase
-    .from("cattle")
-    .select("business_id")
-    .eq("id", cattleId)
-    .maybeSingle();
-  if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
+    const { error } = await supabase.from("weight_logs").delete().eq("id", logId);
+    if (error) return { error: "Failed to delete weight log" };
 
-  const { error } = await supabase
-    .from("weight_logs")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", logId);
-  if (error) return { error: "Failed to delete" };
-  revalidatePath(`/dashboard/cattle/${cattleId}`);
-  revalidatePath("/dashboard");
-  return {};
+    revalidatePath(`/dashboard/cattle/${cattleId}`);
+    revalidatePath("/dashboard/cattle");
+    revalidatePath("/dashboard");
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to delete weight log" };
+  }
 }
 
 export async function updateRoughageOverride(
   cattleId: string,
   roughageKg: number | null
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.INVENTORY_CONSUME);
 
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
+    await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
 
-  const { data: cattle } = await supabase.from("cattle").select("business_id, status, manual_feed_override").eq("id", cattleId).maybeSingle();
-  if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
-  if (cattle.status !== "active") return { error: "Cannot modify a sold or deceased cattle" };
+    const { error } = await supabase
+      .from("cattle")
+      .update({ manual_feed_override: roughageKg !== null ? { roughageKg } : null })
+      .eq("id", cattleId);
 
-  const existing = (cattle.manual_feed_override as Record<string, unknown> | null) ?? {};
-  const updated = roughageKg === null
-    ? Object.fromEntries(Object.entries(existing).filter(([k]) => k !== "roughageKg"))
-    : { ...existing, roughageKg };
+    if (error) return { error: "Failed to update roughage override" };
 
-  const { error } = await supabase.from("cattle").update({ manual_feed_override: updated }).eq("id", cattleId);
-  if (error) return { error: "Failed to save" };
-
-  revalidatePath(`/dashboard/cattle/${cattleId}`);
-  revalidatePath("/dashboard/cattle");
-  return {};
+    revalidatePath(`/dashboard/cattle/${cattleId}`);
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to update roughage override" };
+  }
 }
 
 export type FeedLogFormState = { error?: string; success?: boolean } | undefined;
@@ -245,39 +218,40 @@ export async function logFeedConsumption(
   _prevState: FeedLogFormState,
   formData: FormData
 ): Promise<FeedLogFormState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.INVENTORY_CONSUME);
 
-  const cattle_id = (formData.get("cattle_id") as string)?.trim();
-  const item_id = (formData.get("item_id") as string)?.trim();
-  const qty = parseFloat(formData.get("qty") as string);
-  const recorded_at = new Date().toISOString();
+    const cattle_id = (formData.get("cattle_id") as string)?.trim();
+    const item_id = (formData.get("item_id") as string)?.trim();
+    const qty = parseFloat(formData.get("qty") as string);
+    const recorded_at = new Date().toISOString();
 
-  if (!cattle_id) return { error: "Invalid cattle ID" };
-  if (!item_id) return { error: "Feed item is required" };
-  if (isNaN(qty) || qty <= 0) return { error: "Enter a valid quantity" };
+    if (!cattle_id) return { error: "Invalid cattle ID" };
+    if (!item_id) return { error: "Feed item is required" };
+    if (isNaN(qty) || qty <= 0) return { error: "Enter a valid quantity" };
 
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
+    await assertResourceOwnership<Cattle>(supabase, "cattle", cattle_id, ctx.businessId);
+    await assertResourceOwnership(supabase, "inventory_items", item_id, ctx.businessId);
 
-  const { data: cattle } = await supabase.from("cattle").select("business_id").eq("id", cattle_id).maybeSingle();
-  if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
+    const { error } = await supabase.from("inventory_transactions").insert({
+      item_id,
+      type: "consumption",
+      qty,
+      recorded_at,
+      cattle_id,
+    });
 
-  const { error } = await supabase.from("inventory_transactions").insert({
-    item_id,
-    type: "consumption",
-    qty,
-    recorded_at,
-    cattle_id,
-  });
+    if (error) return { error: "Failed to log feed consumption" };
 
-  if (error) return { error: "Failed to log feed consumption" };
-
-  revalidatePath(`/dashboard/cattle/${cattle_id}`);
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard");
-  return { success: true };
+    revalidatePath(`/dashboard/cattle/${cattle_id}`);
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to log feed consumption" };
+  }
 }
 
 export async function logManualFeed(
@@ -285,56 +259,61 @@ export async function logManualFeed(
   itemId: string,
   qty: number
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.INVENTORY_CONSUME);
 
-  if (!cattleId || !itemId || isNaN(qty) || qty <= 0) {
-    return { error: "Invalid parameters" };
+    if (!cattleId || !itemId || isNaN(qty) || qty <= 0) {
+      return { error: "Invalid parameters" };
+    }
+
+    await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
+    await assertResourceOwnership(supabase, "inventory_items", itemId, ctx.businessId);
+
+    const { error } = await supabase.from("inventory_transactions").insert({
+      item_id: itemId,
+      type: "consumption",
+      qty,
+      recorded_at: new Date().toISOString().slice(0, 10),
+      cattle_id: cattleId,
+      notes: "Manual Cow-Level Feed Log",
+    });
+
+    if (error) return { error: "Failed to log feed consumption" };
+
+    revalidatePath(`/dashboard/cattle/${cattleId}`);
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard");
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to log feed consumption" };
   }
-
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
-
-  const { data: cattle } = await supabase.from("cattle").select("business_id").eq("id", cattleId).maybeSingle();
-  if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
-
-  const { error } = await supabase.from("inventory_transactions").insert({
-    item_id: itemId,
-    type: "consumption",
-    qty,
-    recorded_at: new Date().toISOString().slice(0, 10),
-    cattle_id: cattleId,
-    notes: "Manual Cow-Level Feed Log",
-  });
-
-  if (error) return { error: "Failed to log feed consumption" };
-
-  revalidatePath(`/dashboard/cattle/${cattleId}`);
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard");
-  return {};
 }
 
 export async function toggleQuarantine(
   cattleId: string,
   isQuarantined: boolean
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.HEALTH_MANAGE);
 
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business not found" };
+    await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
 
-  const { data: cattle } = await supabase.from("cattle").select("business_id").eq("id", cattleId).maybeSingle();
-  if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
+    const { error } = await supabase
+      .from("cattle")
+      .update({ is_quarantined: isQuarantined })
+      .eq("id", cattleId);
 
-  const { error } = await supabase.from("cattle").update({ is_quarantined: isQuarantined }).eq("id", cattleId);
-  if (error) return { error: "Failed to update quarantine status" };
-  
-  revalidatePath(`/dashboard/cattle/${cattleId}`);
-  revalidatePath("/dashboard/cattle");
-  revalidatePath("/dashboard");
-  return {};
+    if (error) return { error: "Failed to update quarantine status" };
+    
+    revalidatePath(`/dashboard/cattle/${cattleId}`);
+    revalidatePath("/dashboard/cattle");
+    revalidatePath("/dashboard");
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to update quarantine status" };
+  }
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Package, Plus, Search, Filter, RefreshCcw, AlertTriangle, ArrowUpRight, ArrowDownRight, Settings2, MoreHorizontal, FileText, CheckCircle2, FlaskConical, Beaker, Thermometer, ShieldAlert, BadgeCheck, Receipt, History } from "lucide-react";
+import { FlaskConical, History, Receipt, Package } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { StockSection } from "@/components/inventory/StockSection";
@@ -9,14 +9,20 @@ import { RecipesSection } from "@/components/inventory/RecipesSection";
 import { AutoEngineRunner } from "@/components/inventory/AutoEngineRunner";
 import { ActiveFeedingDashboard } from "@/components/inventory/ActiveFeedingDashboard";
 import { SetupSection } from "@/components/inventory/SetupSection";
+import { InventorySubNav } from "@/components/inventory/InventorySubNav";
+import { InventoryDashboardClient } from "@/components/inventory/InventoryDashboardClient";
+import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
 import { getFarmDailyFeedRequirement } from "@/app/dashboard/(app)/inventory/actions";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import type { CattleOption } from "@/components/inventory/ItemActions";
 import type { InventoryRow } from "@/components/inventory/InventoryTable";
+import type { ItemStockSummary } from "@/lib/inventory/types";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 
-export const metadata: Metadata = { title: "Inventory & Feed" };
+type MoveRow = { item_id: string; type: string; qty: number; unit_cost: number | null; recorded_at: string; notes: string | null };
+
+export const metadata: Metadata = { title: "Inventory & Warehouse" };
 
 export default async function InventoryPage({
   searchParams,
@@ -43,6 +49,8 @@ export default async function InventoryPage({
     { data: purchasesData },
     { data: cattleData },
     { data: recipesData },
+    portfolioData,
+    movementsData,
   ] = await Promise.all([
     businessId
       ? supabase
@@ -86,7 +94,21 @@ export default async function InventoryPage({
           .order("deleted_at", { ascending: true, nullsFirst: true })
           .order("name", { ascending: true })
       : Promise.resolve({ data: [] }),
+    businessId
+      ? CentralInventoryRepository.getInventoryPortfolio(supabase, businessId)
+      : Promise.resolve([]),
+    businessId
+      ? supabase
+          .from("inventory_transactions")
+          .select("item_id, type, qty, unit_cost, recorded_at, notes, inventory_items!inner(business_id)")
+          .eq("inventory_items.business_id", businessId)
+          .order("recorded_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [] }),
   ]);
+
+  const portfolio = (portfolioData ?? []) as ItemStockSummary[];
+  const movements = ((movementsData ?? {}) as { data?: MoveRow[] }).data ?? [];
 
   type StatRow = { item_id: string; total_stock: number; total_consumed: number; consumed_last_30d: number };
   const stats = (statsData ?? []) as StatRow[];
@@ -213,15 +235,6 @@ export default async function InventoryPage({
           : null,
     }));
 
-  // All low-stock items (any category) — for stat card, active only
-  const lowStockItems = activeItems.filter(
-    (i) => i.low_stock_threshold !== null && i.stock <= i.low_stock_threshold
-  );
-
-  const totalFarmValue = activeItems.reduce(
-    (sum, item) => sum + item.stock * (item.currentCost ?? 0), 0
-  );
-
   // Build item lookup for recipes
   const itemsLookup: Record<string, { name: string; unit: string }> = {};
   for (const item of items) itemsLookup[item.id] = { name: item.name, unit: item.unit };
@@ -257,7 +270,18 @@ export default async function InventoryPage({
         </div>
       )}
 
-      {/* TODAY CARD — most prominent, always at top */}
+      {/* Enterprise Sub-Navigation */}
+      <InventorySubNav />
+
+      {/* Enterprise Operational Dashboard */}
+      <InventoryDashboardClient
+        portfolio={portfolio}
+        movements={movements}
+        inventoryRows={activeItems}
+        cattle={cattle}
+      />
+
+      {/* Today's Active Feed Dashboard */}
       <ActiveFeedingDashboard
         activeRecipeName={activeRecipeName}
         activeRecipeFrom={activeRecipeFrom}
@@ -272,51 +296,36 @@ export default async function InventoryPage({
         lowStockFeedItems={lowStockFeedItems}
       />
 
-      {/* STAT CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">{t.inventory.page.total_value}</p>
-          <p className="mt-2 text-xl font-bold tabular-nums">৳{totalFarmValue.toLocaleString()}</p>
-        </div>
-        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">{t.inventory.page.total_items}</p>
-          <p className="mt-2 text-xl font-bold">{items.length} <span className="text-sm font-normal text-muted-foreground">{t.inventory.tracked}</span></p>
-        </div>
-        <div className={`rounded-xl border p-4 shadow-card ${lowStockItems.length > 0 ? "border-amber-300/70 bg-amber-50/60 dark:border-amber-800/50 dark:bg-amber-950/20" : "border-border/70 bg-card"}`}>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">{t.inventory.page.low_stock}</p>
-          <p className={`mt-2 text-xl font-bold ${lowStockItems.length > 0 ? "text-amber-700 dark:text-amber-400" : ""}`}>
-            {lowStockItems.length} <span className="text-sm font-normal text-muted-foreground">{lowStockItems.length === 1 ? t.inventory.item : t.inventory.items}</span>
-          </p>
-        </div>
-        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">{t.inventory.page.feed_items}</p>
-          <p className="mt-2 text-xl font-bold">{feedItems.length} <span className="text-sm font-normal text-muted-foreground">{t.inventory.tracked}</span></p>
-        </div>
-      </div>
-
-      {/* STOCK SECTION */}
+      {/* STOCK SECTION — full item list with management actions */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-foreground">{t.inventory.stock.heading}</h2>
-          <div className="flex items-center gap-2">
-            {/* Daily deduction — shown on all screens */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-foreground tracking-tight">{t.inventory.stock.heading}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Real-time stock valuation and inventory health monitor</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <DailyFeedDeductButton feedItems={feedItems} cattleCount={cattle.length} />
-            <div className="flex items-center gap-2">
-              <Link
-                href="/dashboard/inventory/purchase/history"
-                className="inline-flex h-8 items-center justify-center rounded-lg border border-border/70 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-card transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <History className="mr-1.5 h-3.5 w-3.5" />
-                History
-              </Link>
-              <Link
-                href="/dashboard/inventory/purchase"
-                className="inline-flex h-8 items-center justify-center rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white shadow-card transition-colors hover:bg-amber-600/90"
-              >
-                <Receipt className="mr-1.5 h-3.5 w-3.5" />
-                Add Purchase
-              </Link>
-            </div>
+            <Link
+              href="/dashboard/inventory/mix-feed"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border/70 bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs transition-colors hover:bg-muted"
+            >
+              <FlaskConical className="mr-1.5 h-3.5 w-3.5 text-primary" />
+              Feed Mixer
+            </Link>
+            <Link
+              href="/dashboard/inventory/purchase/history"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border/70 bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <History className="mr-1.5 h-3.5 w-3.5" />
+              History
+            </Link>
+            <Link
+              href="/dashboard/inventory/purchase"
+              className="inline-flex h-8 items-center justify-center rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-amber-600/90"
+            >
+              <Receipt className="mr-1.5 h-3.5 w-3.5" />
+              Add Purchase
+            </Link>
             <AddItemDialog defaultOpen={open === "add"} />
           </div>
         </div>

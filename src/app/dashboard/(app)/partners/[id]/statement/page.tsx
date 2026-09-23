@@ -4,92 +4,16 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { Partner, PartnerTransaction, ManagementFeeRate } from "@/types/database";
 import { StatementClient } from "@/components/partners/StatementClient";
+import {
+  effectiveShare,
+  computeAccount,
+  type PartnerAccountSummary as AccountSummary,
+} from "@/lib/partners/calculations";
+import { PartnerEngine } from "@/lib/partners/partner-engine";
 
 export const metadata: Metadata = { title: "Partner Statement" };
 
-// ── Pure helpers (same logic as profile page) ─────────────────────────────────
-
-function totalCapitalOf(txns: PartnerTransaction[]): number {
-  return txns.filter((t) => t.type === "investment").reduce((s, t) => s + t.amount, 0);
-}
-
-function monthsActive(joinedAt: string): number {
-  const joined = new Date(joinedAt + "T00:00:00");
-  const now = new Date();
-  let months =
-    (now.getFullYear() - joined.getFullYear()) * 12 +
-    (now.getMonth() - joined.getMonth());
-  if (now.getDate() < joined.getDate()) months--;
-  return Math.max(0, months);
-}
-
-function computeNetInvestment(p: Partner, txns: PartnerTransaction[]): number {
-  const invested = totalCapitalOf(txns);
-  const withdrawn = txns.filter((t) => t.type === "withdrawal").reduce((s, t) => s + t.amount, 0);
-  const months = monthsActive(p.joined_at);
-  const cliff = p.cliff_months ?? 0;
-  const vestedMonths = months >= cliff ? months : 0;
-  const laborValue = p.labor_value_monthly ? p.labor_value_monthly * vestedMonths : 0;
-  return Math.max(0, invested - withdrawn + laborValue);
-}
-
-function effectiveShare(
-  p: Partner,
-  allPartners: Partner[],
-  txnsByPartner: Record<string, PartnerTransaction[]>
-): number {
-  if (p.share_mode === "manual") return p.profit_share_pct;
-  const manualTotal = allPartners
-    .filter((x) => x.share_mode === "manual")
-    .reduce((s, x) => s + x.profit_share_pct, 0);
-  const remainingPool = Math.max(0, 100 - manualTotal);
-  const autoPartners = allPartners.filter((x) => x.share_mode !== "manual");
-  const totalAutoInvested = autoPartners.reduce(
-    (s, x) => s + computeNetInvestment(x, txnsByPartner[x.id] ?? []),
-    0
-  );
-  if (totalAutoInvested === 0) return 0;
-  return (computeNetInvestment(p, txnsByPartner[p.id] ?? []) / totalAutoInvested) * remainingPool;
-}
-
-export interface AccountSummary {
-  totalInvested: number;
-  withdrawn: number;
-  profitReceived: number;
-  lossBorne: number;
-  laborValue: number;
-  months: number;
-  equity: number;
-  pendingProfit: number;
-  pendingLoss: number;
-}
-
-function computeAccount(
-  p: Partner,
-  txns: PartnerTransaction[],
-  netPL: number,
-  sharePct: number
-): AccountSummary {
-  const totalInvested = totalCapitalOf(txns);
-  const withdrawn = txns.filter((t) => t.type === "withdrawal").reduce((s, t) => s + t.amount, 0);
-  const profitReceived = txns.filter((t) => t.type === "profit").reduce((s, t) => s + t.amount, 0);
-  const lossBorne = txns.filter((t) => t.type === "loss_allocation").reduce((s, t) => s + t.amount, 0);
-  const months = monthsActive(p.joined_at);
-  const cliff = p.cliff_months ?? 0;
-  const vestedMonths = months >= cliff ? months : 0;
-  const laborValue =
-    p.partner_type !== "capital" && p.labor_value_monthly
-      ? p.labor_value_monthly * vestedMonths
-      : 0;
-  const pendingProfit =
-    netPL > 0 && sharePct > 0 ? Math.max(0, (netPL * sharePct) / 100 - profitReceived) : 0;
-  const pendingLoss =
-    netPL < 0 && sharePct > 0 && p.bears_loss
-      ? Math.max(0, (Math.abs(netPL) * sharePct) / 100 - lossBorne)
-      : 0;
-  const equity = totalInvested + laborValue - withdrawn - lossBorne + pendingProfit - pendingLoss;
-  return { totalInvested, withdrawn, profitReceived, lossBorne, laborValue, months, equity, pendingProfit, pendingLoss };
-}
+export type { AccountSummary };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -238,8 +162,25 @@ export default async function StatementPage({
   const netPLAfterFee = netPL - mgmtFeeAmount;
   const netPLForPartner = netPLAfterFee - (partner.entry_netpl ?? 0);
 
-  const sharePct = effectiveShare(partner, allPartners, txnsByPartner);
-  const acc = computeAccount(partner, transactions, netPLForPartner, sharePct);
+  const partnerEquity = PartnerEngine.calculatePartnerEquity({
+    partner,
+    allPartners,
+    txnsByPartner,
+    netPLAfterFee,
+  });
+
+  const sharePct = partnerEquity.effectiveSharePct;
+  const acc: AccountSummary = {
+    totalInvested: partnerEquity.totalContributedCapital,
+    withdrawn: partnerEquity.totalWithdrawnCapital,
+    profitReceived: partnerEquity.totalRealizedProfit,
+    lossBorne: partnerEquity.totalRealizedLoss,
+    laborValue: partnerEquity.vestedLaborValue,
+    months: partnerEquity.monthsActive,
+    equity: partnerEquity.currentBookEquity,
+    pendingProfit: partnerEquity.pendingProfit,
+    pendingLoss: partnerEquity.pendingLoss,
+  };
 
   const statementDate = new Date().toLocaleDateString("en-US", {
     day: "numeric",

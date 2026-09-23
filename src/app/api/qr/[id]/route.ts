@@ -1,26 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import QRCode from "qrcode";
+import { authenticateApiRoute } from "@/lib/auth/api-guard";
+import { assertResourceOwnership } from "@/lib/auth/ownership";
 import { createClient } from "@/lib/supabase/server";
+import { PERMISSIONS } from "@/constants/roles";
 
 export const runtime = "nodejs";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
+  const authResult = await authenticateApiRoute(request, {
+    requiredPermission: PERMISSIONS.CATTLE_VIEW,
+    rateLimitConfig: { maxRequests: 60, windowMs: 60_000 },
+  });
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  if ("response" in authResult) {
+    return authResult.response;
+  }
+
+  const { id } = await params;
+  const { auth } = authResult;
+
+  if (auth.type === "user") {
+    const supabase = await createClient();
+    try {
+      await assertResourceOwnership(supabase, "cattle", id, auth.context.businessId);
+    } catch {
+      return new NextResponse("Not Found or Access Denied", { status: 404 });
+    }
+  }
 
   const proto = request.headers.get("x-forwarded-proto") ?? "https";
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
   const baseUrl = host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_APP_URL ?? "";
   const cattleUrl = `${baseUrl}/dashboard/cattle/${id}`;
 
-  // Return SVG string — avoids all Buffer/ArrayBuffer TypeScript issues
+  // Return SVG string
   const svg = await QRCode.toString(cattleUrl, {
     type: "svg",
     errorCorrectionLevel: "M",

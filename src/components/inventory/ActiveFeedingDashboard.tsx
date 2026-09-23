@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useTransition } from "react";
 import { Scale, Wheat, CalendarDays, AlertTriangle } from "lucide-react";
@@ -55,18 +55,27 @@ function DateEditor({
   const diff = currentDate ? daysUntil(currentDate) : null;
 
   return (
-    <div className="flex items-center gap-2 mt-2 flex-wrap">
-      <CalendarDays className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      <label className="text-xs text-muted-foreground shrink-0">{finishDateLabel}</label>
-      <input
-        type="date"
-        defaultValue={currentDate ?? ""}
-        onChange={handleChange}
-        disabled={isPending}
-        className="text-xs rounded border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 cursor-pointer"
-      />
+    <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 px-2 py-1 rounded-lg border border-border/60">
+        <CalendarDays className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0" />
+        <label className="text-xs font-medium shrink-0">{finishDateLabel}</label>
+        <input
+          type="date"
+          defaultValue={currentDate ?? ""}
+          onChange={handleChange}
+          disabled={isPending}
+          className="text-xs rounded-md border border-border bg-card px-2 py-0.5 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 cursor-pointer shadow-xs"
+        />
+      </div>
       {currentDate && diff !== null && (
-        <span className={diff >= 0 ? "text-xs text-emerald-600 dark:text-emerald-400" : "text-xs text-destructive"}>
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded-md font-semibold border",
+            diff >= 0
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+              : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800"
+          )}
+        >
           {diff >= 0 ? daysLeftLabel.replace("{{n}}", String(diff)) : overdueLabel}
         </span>
       )}
@@ -118,23 +127,23 @@ export function ActiveFeedingDashboard({
     : null;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-card">
+    <div className="rounded-2xl border border-border/80 bg-card overflow-hidden shadow-card">
       {/* Header row */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/60 bg-muted/20">
-        <div className="flex items-center gap-3">
-          <h2 className="text-base font-semibold">{tr.today_heading}</h2>
-          <span className="text-xs bg-muted rounded-full px-2.5 py-1 text-muted-foreground">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 px-5 py-3.5 border-b border-border/70 bg-muted/20">
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-sm sm:text-base font-semibold text-foreground tracking-tight">{tr.today_heading}</h2>
+          <span className="inline-flex items-center text-xs font-semibold bg-primary/10 text-primary rounded-full px-2.5 py-0.5 border border-primary/20">
             {tr.cattle_active.replace("{{n}}", String(cattleCount))}
           </span>
         </div>
         {estimatedDailyCost > 0 && (
-          <div className="flex items-center gap-2 text-right">
-            <span className="text-sm font-bold">
+          <div className="flex items-center gap-2 sm:text-right">
+            <span className="text-xs sm:text-sm font-bold text-foreground tabular-nums">
               {tr.est_cost_day.replace("{{amount}}", Math.round(estimatedDailyCost).toLocaleString())}
             </span>
             {perHead && (
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                {tr.est_cost_head.replace("{{amount}}", perHead.toLocaleString())}
+              <span className="text-xs text-muted-foreground tabular-nums">
+                ({tr.est_cost_head.replace("{{amount}}", perHead.toLocaleString())})
               </span>
             )}
           </div>
@@ -142,20 +151,20 @@ export function ActiveFeedingDashboard({
       </div>
 
       {/* Diet panels */}
-      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
+      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/70">
         {/* Roughage */}
-        <div className="p-5">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/30 shrink-0">
-              <Wheat className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+        <div className="p-5 flex flex-col justify-between">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 shrink-0 border border-amber-200 dark:border-amber-800">
+              <Wheat className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-muted-foreground mb-1">{tr.roughage_label}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 mb-0.5">{tr.roughage_label}</p>
               {activeRoughageName ? (
                 <>
-                  <p className="font-semibold text-base">{activeRoughageName}</p>
+                  <p className="font-bold text-base text-foreground tracking-tight">{activeRoughageName}</p>
                   {dailyRoughageKg > 0 && (
-                    <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {tr.requiring_today.replace("{{n}}", dailyRoughageKg.toFixed(1))}
                     </p>
                   )}
@@ -169,8 +178,8 @@ export function ActiveFeedingDashboard({
                 </>
               ) : (
                 <div>
-                  <p className="font-medium text-muted-foreground">{tr.none_set}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{tr.no_roughage_hint}</p>
+                  <p className="font-medium text-muted-foreground text-sm">{tr.none_set}</p>
+                  <p className="text-xs text-muted-foreground/80 mt-1">{tr.no_roughage_hint}</p>
                 </div>
               )}
             </div>
@@ -178,18 +187,18 @@ export function ActiveFeedingDashboard({
         </div>
 
         {/* Concentrate */}
-        <div className="p-5">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/30 shrink-0">
-              <Scale className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <div className="p-5 flex flex-col justify-between">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shrink-0 border border-blue-200 dark:border-blue-800">
+              <Scale className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-muted-foreground mb-1">{tr.concentrate_label}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 mb-0.5">{tr.concentrate_label}</p>
               {activeRecipeName ? (
                 <>
-                  <p className="font-semibold text-base">{activeRecipeName}</p>
+                  <p className="font-bold text-base text-foreground tracking-tight">{activeRecipeName}</p>
                   {dailyConcentrateKg > 0 && (
-                    <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {tr.requiring_today.replace("{{n}}", dailyConcentrateKg.toFixed(1))}
                     </p>
                   )}
@@ -200,7 +209,7 @@ export function ActiveFeedingDashboard({
                     const totalDays = (daysElapsed ?? 0) + (daysLeft ?? 0);
                     const pct = totalDays > 0 ? Math.round(((daysElapsed ?? 0) / totalDays) * 100) : 0;
                     const barColor = daysLeft === null ? "bg-blue-500"
-                      : daysLeft <= 1 ? "bg-red-500"
+                      : daysLeft <= 1 ? "bg-rose-500"
                       : daysLeft <= 3 ? "bg-amber-500"
                       : "bg-emerald-500";
 
@@ -209,19 +218,19 @@ export function ActiveFeedingDashboard({
                         {/* Progress bar */}
                         {totalDays > 0 && (
                           <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-medium text-muted-foreground">
+                            <div className="flex items-center justify-between mb-1 text-xs">
+                              <span className="font-medium text-muted-foreground">
                                 {daysElapsed ?? 0} দিন চলছে
                               </span>
                               {daysLeft !== null && (
-                                <span className={cn("text-xs font-semibold", daysLeft <= 1 ? "text-red-600 dark:text-red-400" : daysLeft <= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
+                                <span className={cn("font-semibold", daysLeft <= 1 ? "text-rose-600 dark:text-rose-400" : daysLeft <= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
                                   {daysLeft === 0 ? "আজ শেষ" : `${daysLeft} দিন বাকি`}
                                 </span>
                               )}
                             </div>
                             <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                               <div
-                                className={cn("h-full rounded-full transition-all", barColor)}
+                                className={cn("h-full rounded-full transition-all duration-300", barColor)}
                                 style={{ width: `${Math.min(100, pct)}%` }}
                               />
                             </div>
@@ -230,26 +239,26 @@ export function ActiveFeedingDashboard({
 
                         {/* Date range row */}
                         <div className="flex items-center gap-2 flex-wrap">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">শুরু</span>
+                          <div className="flex items-center gap-1.5 min-w-0 bg-muted/40 px-2 py-1 rounded-lg border border-border/60">
+                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">শুরু</span>
                             <input
                               type="date"
                               defaultValue={activeRecipeFrom ?? ""}
                               max={new Date().toISOString().slice(0, 10)}
                               onChange={(e) => saveRecipeFrom(e.target.value || null)}
-                              className="text-xs rounded-lg border border-border bg-background px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer transition-shadow"
+                              className="text-xs rounded-md border border-border bg-card px-2 py-0.5 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-xs cursor-pointer"
                               title="শুরুর তারিখ পরিবর্তন করলে engine সেই তারিখ থেকে recalculate করবে"
                             />
                           </div>
-                          <div className="h-px flex-1 min-w-[16px] bg-border" />
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">শেষ</span>
+                          <div className="h-px flex-1 min-w-[12px] bg-border" />
+                          <div className="flex items-center gap-1.5 min-w-0 bg-muted/40 px-2 py-1 rounded-lg border border-border/60">
+                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">শেষ</span>
                             <input
                               type="date"
                               defaultValue={activeRecipeUntil ?? ""}
                               min={activeRecipeFrom ?? undefined}
                               onChange={(e) => saveRecipeUntil(e.target.value || null)}
-                              className="text-xs rounded-lg border border-border bg-background px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer transition-shadow"
+                              className="text-xs rounded-md border border-border bg-card px-2 py-0.5 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-xs cursor-pointer"
                               placeholder="?"
                               title="শেষের তারিখ (পরিবর্তনযোগ্য)"
                             />
@@ -261,8 +270,8 @@ export function ActiveFeedingDashboard({
                 </>
               ) : (
                 <div>
-                  <p className="font-medium text-muted-foreground">{tr.none_set}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{tr.no_concentrate_hint}</p>
+                  <p className="font-medium text-muted-foreground text-sm">{tr.none_set}</p>
+                  <p className="text-xs text-muted-foreground/80 mt-1">{tr.no_concentrate_hint}</p>
                 </div>
               )}
             </div>

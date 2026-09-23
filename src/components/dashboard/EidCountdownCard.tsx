@@ -1,4 +1,4 @@
-﻿import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
+import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { getDictionary } from "@/i18n/getDictionary";
 import { cn } from "@/lib/utils";
 import { Moon } from "lucide-react";

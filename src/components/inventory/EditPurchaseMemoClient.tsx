@@ -47,6 +47,18 @@ const UNITS = [
   { value: "feed-kg", label: "Feed-KG (Supplement)" },
 ];
 
+export type ExistingPurchaseTxn = {
+  id: string;
+  item_id: string;
+  qty: number;
+  unit_cost: number | null;
+  mode?: "bags" | "bag" | "loose" | string;
+  bags?: string | number;
+  kgPerBag?: string | number;
+  raw_total_cost?: number;
+  [key: string]: unknown;
+};
+
 let _rowIdCounter = 0;
 function genRowId() { return `row-${++_rowIdCounter}`; }
 
@@ -60,7 +72,7 @@ export function EditPurchaseMemoClient({
 }: { 
   date: string, 
   supplierName: string, 
-  existingTxns: any[], 
+  existingTxns: ExistingPurchaseTxn[], 
   extraNotes: string,
   initialTransportCost?: number,
   items: InventoryItem[] 
@@ -83,9 +95,9 @@ export function EditPurchaseMemoClient({
       newItemName: "",
       newItemCategory: "feed",
       newItemUnit: "kg",
-      mode: tx.mode || "loose",
-      bags: tx.bags || "",
-      kgPerBag: tx.kgPerBag || "",
+      mode: (tx.mode === "bag" || tx.mode === "bags") ? "bags" : "loose",
+      bags: tx.bags ? String(tx.bags) : "",
+      kgPerBag: tx.kgPerBag ? String(tx.kgPerBag) : "",
       looseQty: tx.qty.toString(),
       totalCost: (tx.raw_total_cost || (tx.qty * (tx.unit_cost || 0))).toFixed(2),
       costMode: "total",
@@ -121,7 +133,7 @@ export function EditPurchaseMemoClient({
     setRows([...rows, createEmptyRow()]);
   }
 
-  function updateRow(uiId: string, field: keyof RowData, value: any) {
+  function updateRow<K extends keyof RowData>(uiId: string, field: K, value: RowData[K]) {
     setRows(prevRows => prevRows.map(r => r.uiId === uiId ? { ...r, [field]: value } : r));
   }
 
@@ -289,7 +301,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
   row: RowData;
   idx: number;
   items: InventoryItem[];
-  updateRow: (uiId: string, field: keyof RowData, value: any) => void;
+  updateRow: <K extends keyof RowData>(uiId: string, field: K, value: RowData[K]) => void;
   removeRow: (uiId: string) => void;
   canRemove: boolean;
 }) {
@@ -378,7 +390,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs uppercase">Category</Label>
-                <Select value={row.newItemCategory} onValueChange={v => updateRow(row.uiId, "newItemCategory", v)}>
+                <Select value={row.newItemCategory} onValueChange={v => updateRow(row.uiId, "newItemCategory", v || "feed")}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>)}
@@ -387,7 +399,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs uppercase">Unit</Label>
-                <Select value={row.newItemUnit} onValueChange={v => updateRow(row.uiId, "newItemUnit", v)}>
+                <Select value={row.newItemUnit} onValueChange={v => updateRow(row.uiId, "newItemUnit", v || "kg")}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {UNITS.map(c => <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>)}
@@ -559,7 +571,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
   );
 }
 
-function XIcon(props: any) {
+function XIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
   );

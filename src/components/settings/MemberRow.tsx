@@ -1,17 +1,17 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, Shield, User, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { updateMemberRole, removeMember } from "@/app/dashboard/(app)/settings/team/actions";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 const ROLE_BADGE: Record<string, string> = {
-  admin:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
-  manager: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
-  worker:  "bg-muted text-muted-foreground",
+  admin:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800",
+  manager: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-300 dark:border-blue-800",
+  worker:  "bg-muted text-muted-foreground border border-border",
 };
 
 interface Props {
@@ -34,7 +34,7 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
     startUpdate(async () => {
       const result = await updateMemberRole(id, newRole);
       if (result.error) { toast.error(result.error); setCurrentRole(role); }
-      else toast.success("Role updated");
+      else toast.success("Role updated successfully");
     });
   }
 
@@ -43,42 +43,53 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
     startRemove(async () => {
       const result = await removeMember(id);
       if (result.error) toast.error(result.error);
-      else { toast.success("Member removed"); router.refresh(); }
+      else { toast.success("Member access revoked"); router.refresh(); }
     });
   }
 
   const joinDate = new Date(joinedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   return (
-    <div className="flex items-center gap-3 px-5 py-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate font-mono text-xs text-muted-foreground">{userId.slice(0, 8)}…</p>
-        <p className="text-xs text-muted-foreground">Joined {joinDate}</p>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 hover:bg-muted/20 transition-colors">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-xs shrink-0">
+          <User className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate font-mono text-xs">User ID: {userId.slice(0, 12)}…</p>
+          <p className="text-xs text-muted-foreground">Joined {joinDate}</p>
+        </div>
       </div>
-      <select
-        value={currentRole}
-        onChange={handleRoleChange}
-        disabled={updating || removing}
-        className="rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
-      >
-        <option value="manager">Manager</option>
-        <option value="worker">Worker</option>
-      </select>
-      {updating && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="text-muted-foreground hover:text-destructive"
-        disabled={removing || updating}
-        onClick={() => setConfirmRemove(true)}
-      >
-        {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-      </Button>
+
+      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+        <select
+          value={currentRole}
+          onChange={handleRoleChange}
+          disabled={updating || removing}
+          aria-label="Change user role"
+          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 cursor-pointer shadow-sm"
+        >
+          <option value="manager">Manager (Operations)</option>
+          <option value="worker">Worker (Staff)</option>
+        </select>
+        {updating && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          disabled={removing || updating}
+          onClick={() => setConfirmRemove(true)}
+          title="Revoke access"
+        >
+          {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+
       <ConfirmDialog
         open={confirmRemove}
-        title="Remove Team Member"
-        description="This will revoke their access to this business."
-        confirmLabel="Remove"
+        title="Revoke Team Member Access"
+        description="Are you sure you want to remove this user? They will immediately lose access to this farm workspace and all its data."
+        confirmLabel="Revoke Access"
         destructive
         onConfirm={handleRemove}
         onCancel={() => setConfirmRemove(false)}

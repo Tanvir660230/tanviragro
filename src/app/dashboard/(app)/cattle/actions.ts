@@ -7,6 +7,8 @@ import type { HealthEventType } from "@/types/database";
 import { buildProtocolEvents } from "@/lib/healthProtocol";
 import { createCattleSchema, validateDate, validatePositiveNumber, validateText } from "@/lib/validate";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
+import { CattleDomainService } from "@/lib/services/cattle.service";
+import { LivestockEventBus } from "@/lib/livestock/events";
 
 export type CattleFormState =
   | { error?: string; success?: boolean }
@@ -116,6 +118,15 @@ export async function createCattle(
     }
   }
 
+  // Publish domain event
+  await LivestockEventBus.publish(
+    "CattleRegistered",
+    businessId,
+    newCattle.id,
+    { tagId: tag_id, purchasePrice: purchase_price, initialWeightKg: initial_weight_kg },
+    user.id
+  ).catch(() => {});
+
   revalidatePath("/dashboard/cattle");
   revalidatePath("/dashboard");
   return { success: true };
@@ -218,8 +229,11 @@ export async function markAsDeceased(
     .maybeSingle();
 
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
-  if (cattle.status === "dead") return { error: "Cattle is already marked as dead" };
-  if (cattle.status === "sold") return { error: "Cannot mark a sold cattle as dead" };
+  try {
+    CattleDomainService.validateStatusTransition(cattle.status, "dead");
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Invalid status transition" };
+  }
 
   const { error } = await supabase
     .from("cattle")
@@ -231,6 +245,14 @@ export async function markAsDeceased(
     .eq("business_id", businessId);
 
   if (error) return { error: "Failed to update" };
+
+  await LivestockEventBus.publish(
+    "StatusChanged",
+    businessId,
+    id,
+    { previousStatus: cattle.status, newStatus: "dead", notes },
+    user.id
+  ).catch(() => {});
 
   revalidatePath(`/dashboard/cattle/${id}`);
   revalidatePath("/dashboard/cattle");

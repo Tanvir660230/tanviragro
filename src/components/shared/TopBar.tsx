@@ -1,10 +1,6 @@
-import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedTopBarAlerts } from "@/lib/supabase/topbar-alerts";
-import { UserMenu } from "./UserMenu";
-import { ThemeToggle } from "./ThemeToggle";
-import { SearchBox } from "./SearchBox";
-import { SmartAlertsDropdown } from "./SmartAlertsDropdown";
+import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import type {
   HealthEvent,
   InventoryItem,
@@ -57,47 +53,20 @@ export async function TopBar() {
     tag_id: cattleTagMap[id] ?? id.slice(0, 6),
   }));
 
-  const email   = user?.email ?? "";
-  const bizName = bizData?.name ?? "Chowdhury Agro";
-  const bizLogo = bizData?.logo_url;
-
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border/50 bg-background/95 backdrop-blur-md px-4 md:px-5">
-
-      {/* Mobile: Logo + name */}
-      <div className="flex items-center gap-2 md:hidden shrink-0">
-        <div className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-primary overflow-hidden shrink-0">
-          {bizLogo ? (
-            <Image src={bizLogo} alt={bizName} fill className="object-cover" />
-          ) : (
-            <span className="text-sm leading-none">🌿</span>
-          )}
-        </div>
-        <span className="text-sm font-bold text-foreground truncate max-w-[140px]">{bizName}</span>
-      </div>
-
-      {/* Desktop: Search bar */}
-      <div className="hidden md:flex flex-1 max-w-xl">
-        <SearchBox />
-      </div>
-
-      {/* Mobile spacer */}
-      <div className="flex-1 md:hidden" />
-
-      {/* Right: Alerts · Theme · User — 3 items only */}
-      <div className="flex items-center gap-1 ml-auto">
-        <SmartAlertsDropdown
-          overdueHealth={overdueHealth}
-          upcomingHealth={upcomingHealth}
-          lowStockItems={lowStockItems}
-          loansDue={loansDue}
-          insuranceExpiring={insuranceExpiring}
-          unweighedCattle={unweighedCattle}
-        />
-        <ThemeToggle compact />
-        <div className="w-px h-4 bg-border/50 mx-1" />
-        <UserMenu email={email} profile={profileData} />
-      </div>
-    </header>
+    <DashboardHeader
+      business={bizData}
+      user={user}
+      profile={profileData}
+      alerts={{
+        overdueHealth,
+        upcomingHealth,
+        lowStockItems,
+        loansDue,
+        insuranceExpiring,
+        unweighedCattle,
+      }}
+    />
   );
 }
+

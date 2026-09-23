@@ -33,12 +33,13 @@ interface Props {
   activeCattle: CattleOption[];
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
+  initialSelectedIds?: string[];
 }
 
 const COST_CATEGORY_VALUES = ["doctor_fee", "medicine", "transport", "labor", "other"] as const;
 type CostCategoryValue = typeof COST_CATEGORY_VALUES[number];
 
-export function BulkCostDialog({ activeCattle, open: externalOpen, onOpenChange: externalOnChange }: Props) {
+export function BulkCostDialog({ activeCattle, open: externalOpen, onOpenChange: externalOnChange, initialSelectedIds }: Props) {
   const { t } = useTranslation();
   const cc = t.cattle_details.cost_categories as Record<CostCategoryValue, string>;
   const sm = t.cattle_details.smart;
@@ -46,7 +47,17 @@ export function BulkCostDialog({ activeCattle, open: externalOpen, onOpenChange:
   const [internalOpen, setInternalOpen] = useState(false);
   const open    = externalOpen    ?? internalOpen;
   const setOpen = externalOnChange ?? setInternalOpen;
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(initialSelectedIds ?? [])
+  );
+  const [prevOpen, setPrevOpen] = useState(open);
+
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open && initialSelectedIds && initialSelectedIds.length > 0) {
+      setSelectedIds(new Set(initialSelectedIds));
+    }
+  }
   const [category, setCategory] = useState<CostCategoryValue>("doctor_fee");
   const [amount, setAmount] = useState("");
   const [state, action, isPending] = useActionState<BulkCostFormState, FormData>(

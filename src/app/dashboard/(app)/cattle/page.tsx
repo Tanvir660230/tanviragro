@@ -3,9 +3,7 @@ import type { Metadata } from "next";
 import { Beef } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AddCattleDialog } from "@/components/cattle/AddCattleDialog";
-import { CattleActionsMenu } from "@/components/cattle/CattleActionsMenu";
-import { TodayWorkPanel } from "@/components/cattle/TodayWorkPanel";
-import { CattleFilters } from "@/components/cattle/CattleFilters";
+import { LivestockWorkspace } from "@/components/cattle/LivestockWorkspace";
 import type { Cattle } from "@/types/database";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
@@ -214,41 +212,29 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <PageHeader
-          title={t.cattle.title}
-          subtitle={cattle.length === 0 ? t.cattle.no_cattle_yet : `${cattle.length} ${t.cattle.cattle_in_operation}`}
-          icon={Beef}
-          badge={cattle.filter(c => c.status === "active").length || undefined}
-        />
-        <div className="flex items-center gap-2">
-          <CattleActionsMenu
-            activeCattle={activeCattle}
-            defaultOpenWeigh={open === "bulk-weigh"}
-          />
-          <AddCattleDialog existingTagIds={existingTagIds} existingBreeds={allBreeds} />
-        </div>
-      </div>
-
       {enriched.length === 0 ? (
-        <EmptyState t={t} />
-      ) : (
         <>
-          <TodayWorkPanel
-            unweighedCattle={unweighedCattle}
-            overdueHealthCount={overdueHealthCount ?? 0}
-            highFcrCount={highFcrCount}
-          />
-          <CattleFilters
-            cattle={enriched}
-            allBreeds={allBreeds}
-            alerts={{
-              unweighedCount,
-              overdueHealthCount: overdueHealthCount ?? 0,
-              highFcrCount,
-            }}
-          />
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <PageHeader
+              title={t.cattle.title}
+              subtitle={t.cattle.no_cattle_yet}
+              icon={Beef}
+            />
+            <AddCattleDialog existingTagIds={[]} existingBreeds={[]} />
+          </div>
+          <EmptyState t={t} />
         </>
+      ) : (
+        <LivestockWorkspace
+          cattle={enriched}
+          allBreeds={allBreeds}
+          existingTagIds={existingTagIds}
+          alerts={{
+            unweighedCount,
+            overdueHealthCount: overdueHealthCount ?? 0,
+            highFcrCount,
+          }}
+        />
       )}
     </>
   );

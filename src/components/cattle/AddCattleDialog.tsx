@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -27,10 +27,11 @@ import {
 import { createCattle, type CattleFormState } from "@/app/dashboard/(app)/cattle/actions";
 import { toast } from "sonner";
 
-const COMMON_BREEDS = [
-  "Brahman", "Crossbred", "Frieswal", "Hariana", "Indigenous (Deshi)",
-  "Nellore", "Ongole", "Sahiwal", "Sindhi", "Sirohi", "Tharparkar",
-];
+import { EnterpriseAnimalWizard } from "@/components/livestock/wizard/EnterpriseAnimalWizard";
+
+import { MASTER_BREEDS } from "@/constants/master-data";
+const COMMON_BREEDS = MASTER_BREEDS;
+
 
 function suggestNextTagId(existingTagIds: string[]): string {
   let bestNum = -1;
@@ -558,44 +559,23 @@ interface Props {
 
 export function AddCattleDialog({ existingTagIds, existingBreeds }: Props) {
   const [open, setOpen] = useState(false);
-  const [formKey, setFormKey] = useState(0);
-  const [allTagIds, setAllTagIds] = useState(existingTagIds);
-
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next) {
-      setAllTagIds(existingTagIds);
-      setFormKey((k) => k + 1);
-    }
-  };
-
-  const handleAddAnother = (addedTag: string) => {
-    setAllTagIds((prev) => [...prev, addedTag]);
-    setFormKey((k) => k + 1);
-  };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        className={buttonVariants({ size: "sm" })}
+    <>
+      <Button
+        size="sm"
+        onClick={() => setOpen(true)}
         aria-label="Add cattle"
       >
         <Plus className="mr-1.5 h-4 w-4" />
         Add Cattle
-      </DialogTrigger>
+      </Button>
 
-      <DialogContent className="sm:max-w-md max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add New Cattle</DialogTitle>
-        </DialogHeader>
-        <CattleForm
-          key={formKey}
-          existingTagIds={allTagIds}
-          existingBreeds={existingBreeds}
-          onAddAnother={handleAddAnother}
-          onDone={() => setOpen(false)}
-        />
-      </DialogContent>
-    </Dialog>
+      <EnterpriseAnimalWizard
+        open={open}
+        onOpenChange={setOpen}
+        existingTagIds={existingTagIds}
+      />
+    </>
   );
 }

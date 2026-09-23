@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { Printer, ArrowLeft, Building2, CheckCircle2 } from "lucide-react";
+import { Printer, ArrowLeft, Building2, CheckCircle2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Partner, PartnerTransaction, PartnerTransactionType } from "@/types/database";
 import type { AccountSummary } from "@/app/dashboard/(app)/partners/[id]/statement/page";
@@ -61,6 +61,49 @@ export function StatementClient({
     window.print();
   }
 
+  function exportToCsv() {
+    const metaRows = [
+      ["Partner Statement", `"${p.name.replace(/"/g, '""')}"`],
+      ["Statement Date", `"${statementDate}"`],
+      ["Business Name", `"${businessName.replace(/"/g, '""')}"`],
+      ["Partner Type", `"${TYPE_LABEL[p.partner_type] ?? p.partner_type}"`],
+      ["Profit Share", `"${sharePct.toFixed(1)}%"`],
+      ["Total Invested", acc.totalInvested],
+      ["Total Withdrawn", acc.withdrawn],
+      ["Profit Received", acc.profitReceived],
+      ["Loss Allocated", acc.lossBorne],
+      ["Current Capital Equity", acc.equity],
+      [],
+      ["Date", "Type", "Notes", "Debit (Out)", "Credit (In)", "Balance"],
+    ];
+
+    const txnRows = withBalance.map((t) => {
+      const isCredit = t.type === "investment" || t.type === "profit";
+      return [
+        `"${t.recorded_at}"`,
+        `"${TXN_LABEL[t.type] ?? t.type}"`,
+        `"${(t.notes ?? "").replace(/"/g, '""')}"`,
+        isCredit ? "" : t.amount,
+        isCredit ? t.amount : "",
+        t.balance,
+      ];
+    });
+
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [...metaRows.map((r) => r.join(",")), ...txnRows.map((r) => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute(
+      "download",
+      `partner_statement_${p.name.toLowerCase().replace(/\s+/g, "_")}_${statementDate}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   // Build running balance
   const withBalance = transactions.reduce(
     (arr, txn) => {
@@ -93,13 +136,22 @@ export function StatementClient({
           <ArrowLeft className="h-4 w-4" />
           Back to Profile
         </Link>
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
-        >
-          <Printer className="h-4 w-4" />
-          Print / Save PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportToCsv}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors"
+          >
+            <Download className="h-4 w-4 text-muted-foreground" />
+            Export CSV
+          </button>
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors"
+          >
+            <Printer className="h-4 w-4" />
+            Print / Save PDF
+          </button>
+        </div>
       </div>
 
       {/* ── Printable Statement ───────────────────────────────────── */}

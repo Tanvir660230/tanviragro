@@ -1,0 +1,93 @@
+import { Metadata } from "next";
+import { getServerClient } from "@/lib/supabase/cached";
+import { AnalyticsAggregationService } from "@/lib/analytics/aggregation-service";
+import { ReportHubClient } from "@/components/report/ReportHubClient";
+import { ReportEngine } from "@/lib/reports/report-engine";
+
+export const metadata: Metadata = {
+  title: "Analytics, BI & Report Center | Tanvir Agro",
+  description: "Enterprise executive decision platform, operational KPIs, custom report builder & financial statements",
+};
+
+export default async function ReportPage() {
+  const supabase = await getServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const userId = user?.id ?? "";
+
+  const { data: bizRow } = userId
+    ? await supabase
+        .from("businesses")
+        .select("id, name")
+        .eq("owner_id", userId)
+        .maybeSingle()
+    : { data: null };
+
+  const businessId: string | null = (bizRow as { id?: string } | null)?.id ?? null;
+  const bizName: string           = (bizRow as { name?: string } | null)?.name ?? "Tanvir Agro Enterprise";
+
+  if (!businessId) {
+    return (
+      <ReportHubClient
+        bizName={bizName}
+        reportDate={new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+        reportId="TA-RPT-EMPTY"
+        totalCattle={0}
+        activeCattle={0}
+        soldCattle={0}
+        activeCattleValuation={0}
+        revenue={0}
+        soldCattleCost={0}
+        feedCost={0}
+        operatingCosts={0}
+        netPL={0}
+        cashBalance={0}
+        bankBalance={0}
+        totalLiquidCash={0}
+        totalInventoryValue={0}
+        inventoryWithStock={[]}
+        totalLiabilities={0}
+        netEquity={0}
+        zakatAssets={0}
+        analyticsPayload={null}
+      />
+    );
+  }
+
+  const [reportData, analyticsPayload] = await Promise.all([
+    ReportEngine.generateFinancialStatementReport(supabase, businessId, bizName).catch((err) => {
+      console.error("ReportEngine.generateFinancialStatementReport error:", err);
+      return {
+        bizName,
+        reportDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+        reportId: "TA-RPT-FALLBACK",
+        totalCattle: 0,
+        activeCattle: 0,
+        soldCattle: 0,
+        activeCattleValuation: 0,
+        revenue: 0,
+        soldCattleCost: 0,
+        feedCost: 0,
+        operatingCosts: 0,
+        netPL: 0,
+        cashBalance: 0,
+        bankBalance: 0,
+        totalLiquidCash: 0,
+        totalInventoryValue: 0,
+        inventoryWithStock: [],
+        totalLiabilities: 0,
+        netEquity: 0,
+        zakatAssets: 0,
+      };
+    }),
+    AnalyticsAggregationService.getExecutiveDashboardData(supabase, businessId, "ceo").catch((err) => {
+      console.error("AnalyticsAggregationService error:", err);
+      return null;
+    }),
+  ]);
+
+  return <ReportHubClient {...reportData} analyticsPayload={analyticsPayload} />;
+}
+

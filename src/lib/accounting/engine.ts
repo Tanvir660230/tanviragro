@@ -1,3 +1,5 @@
+import { calculateDepreciation } from "@/lib/financial/calculations";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
@@ -147,70 +149,7 @@ function monthsBetween(from: Date, to: Date): number {
   return Math.max(0, months);
 }
 
-export function computeDepreciation(asset: {
-  purchase_cost: number;
-  salvage_value: number;
-  useful_life_years: number;
-  depreciation_method: string;
-  declining_rate: number | null;
-  purchase_date: string;
-  disposed_at: string | null;
-}): { monthly: number; annual: number; accumulated: number; bookValue: number } {
-  const cost = asset.purchase_cost;
-  const salvage = Math.min(asset.salvage_value, cost);
-  const lifeYears = asset.useful_life_years;
-
-  // Guard: no useful life means no depreciation
-  if (lifeYears <= 0 || cost <= 0) {
-    return { monthly: 0, annual: 0, accumulated: 0, bookValue: cost };
-  }
-
-  const startDate = new Date(asset.purchase_date);
-  const endDate = asset.disposed_at ? new Date(asset.disposed_at) : new Date();
-  const ageMonths = monthsBetween(startDate, endDate);
-
-  if (asset.depreciation_method === "straight_line") {
-    const annualDep = (cost - salvage) / lifeYears;
-    const monthlyDep = annualDep / 12;
-    const maxDep = cost - salvage;
-    const accumulated = Math.min(monthlyDep * ageMonths, maxDep);
-    const rounded = Math.round(accumulated * 100) / 100;
-    return {
-      monthly: Math.round(monthlyDep * 100) / 100,
-      annual: Math.round(annualDep * 100) / 100,
-      accumulated: rounded,
-      bookValue: Math.round(Math.max(salvage, cost - rounded) * 100) / 100,
-    };
-  } else {
-    // Declining Balance — apply annual rate annually, and prorate the final fractional year
-    const annualRate = Math.min(asset.declining_rate ?? 1 / lifeYears, 0.99);
-    let bookVal = cost;
-    const totalYears = Math.floor(ageMonths / 12);
-    const extraMonths = ageMonths % 12;
-
-    for (let y = 0; y < totalYears; y++) {
-      const dep = bookVal * annualRate;
-      if (bookVal - dep <= salvage) { bookVal = salvage; break; }
-      bookVal -= dep;
-    }
-    
-    // Final fractional year
-    if (bookVal > salvage && extraMonths > 0) {
-      const dep = (bookVal * annualRate) * (extraMonths / 12);
-      bookVal = Math.max(salvage, bookVal - dep);
-    }
-    
-    // Accumulated = cost minus current bookVal
-    const accumulated = Math.round((cost - bookVal) * 100) / 100;
-    const fullyDepreciated = bookVal <= salvage;
-    return {
-      monthly: fullyDepreciated ? 0 : Math.round(bookVal * annualRate / 12 * 100) / 100,
-      annual:  fullyDepreciated ? 0 : Math.round(bookVal * annualRate * 100) / 100,
-      accumulated,
-      bookValue: Math.round(bookVal * 100) / 100,
-    };
-  }
-}
+export const computeDepreciation = calculateDepreciation;
 
 // ── Cached Database Fetch ─────────────────────────────────────────
 // Extracts all heavy Supabase queries into a single unstable_cache block.
@@ -302,11 +241,33 @@ export async function getAccountingData(
   // getUser() verifies the JWT server-side — required for auth-gated queries.
   const { data: { user } } = await supabase.auth.getUser();
   const userId = user?.id;
-  const { data: bizData } = userId
-    ? await supabase.from("businesses").select("id, opening_cash_balance").eq("owner_id", userId).maybeSingle()
-    : { data: null };
-  const openingCash = Number((bizData as { opening_cash_balance?: number } | null)?.opening_cash_balance ?? 0);
-  const businessId = (bizData as { id?: string } | null)?.id ?? null;
+  let businessId: string | null = null;
+  let openingCash = 0;
+
+  if (userId) {
+    const { data: ownerBiz } = await supabase
+      .from("businesses")
+      .select("id, opening_cash_balance")
+      .eq("owner_id", userId)
+      .maybeSingle();
+
+    if (ownerBiz) {
+      businessId = ownerBiz.id;
+      openingCash = Number(ownerBiz.opening_cash_balance ?? 0);
+    } else {
+      const { data: memberBiz } = await supabase
+        .from("business_users")
+        .select("business_id, businesses(id, opening_cash_balance)")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (memberBiz?.business_id) {
+        businessId = memberBiz.business_id;
+        const b = memberBiz.businesses as any;
+        openingCash = Number(b?.opening_cash_balance ?? 0);
+      }
+    }
+  }
 
   if (!businessId) {
     throw new Error("Business ID not found for user");

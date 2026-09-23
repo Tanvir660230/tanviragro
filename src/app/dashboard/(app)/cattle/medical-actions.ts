@@ -1,10 +1,22 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeFIFOUnitCost, getItemStock as getItemStockShared } from "@/lib/inventory-fifo";
+import { LivestockEventBus } from "@/lib/livestock/events";
+
+import { HealthEngine } from "@/lib/livestock/health-engine";
+import { checkFinancialLock } from "@/lib/utils/financialLock";
+import type {
+  ClinicalVisitRecord,
+  HealthAlert,
+  HealthCertificateSummary,
+  VitalSigns,
+  PrescriptionItem,
+} from "@/lib/livestock/types";
+import type { UserRole } from "@/types/database";
 
 export type TreatmentFormState = { error?: string; success?: boolean } | undefined;
 
@@ -137,6 +149,14 @@ export async function administerMedicine(
     });
   }
 
+  await LivestockEventBus.publish(
+    "TreatmentRecorded",
+    bizId,
+    cattle_id,
+    { treatmentId: treatment.id, diagnosis, vetFee: vet_fee, treatedAt: treated_at },
+    user.id
+  ).catch(() => {});
+
   revalidatePath(`/dashboard/cattle/${cattle_id}`);
   revalidatePath("/dashboard/cattle/health");
   revalidatePath("/dashboard/inventory");
@@ -144,3 +164,214 @@ export async function administerMedicine(
   revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
+
+/**
+ * Records a comprehensive clinical visit, including vitals, diagnosis, prescriptions,
+ * automated inventory deduction, financial cost linkage, and follow-up scheduling.
+ */
+export async function recordClinicalVisitAction(
+  payload: ClinicalVisitRecord & { actorRole?: UserRole }
+): Promise<{ success: boolean; visitId?: string; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
+  const bizId = await getCurrentBusinessId(supabase);
+  if (!bizId) return { success: false, error: "Business not found" };
+
+  const userRole: UserRole = payload.actorRole || "veterinarian";
+
+  try {
+    HealthEngine.validateMedicalPermission("prescribe", userRole);
+    if (payload.vitals) HealthEngine.validateVitals(payload.vitals);
+
+    const { data: cattle, error: cattleErr } = await supabase
+      .from("cattle")
+      .select("id, business_id, tag_id, status, is_quarantined, pen_id, withdrawal_end_date")
+      .eq("id", payload.cattleId)
+      .eq("business_id", bizId)
+      .single();
+
+    if (cattleErr || !cattle) return { success: false, error: "Animal not found" };
+
+    const lockErr = await checkFinancialLock(supabase, bizId, payload.visitDate);
+    if (lockErr) return { success: false, error: lockErr };
+
+    const medicineDeductions: { itemId: string; dose: number; unit: string; fifoCost: number | null; withdrawalDays: number }[] = [];
+    let maxWithdrawalDays = 0;
+
+    for (const item of payload.prescriptions || []) {
+      if (item.medicineItemId && item.dose > 0) {
+        const stock = await getItemStock(supabase, item.medicineItemId);
+        if (item.dose > stock + 0.0001) {
+          return {
+            success: false,
+            error: `Insufficient inventory for ${item.medicineName}. Requested: ${item.dose} ${item.doseUnit}, Available: ${stock.toFixed(3)} ${item.doseUnit}`,
+          };
+        }
+        let fifoCost: number | null = null;
+        try { fifoCost = await computeFIFOCost(supabase, item.medicineItemId, item.dose); } catch { /* non-fatal */ }
+        medicineDeductions.push({ itemId: item.medicineItemId, dose: item.dose, unit: item.doseUnit, fifoCost, withdrawalDays: item.withdrawalDays || 0 });
+        if (item.withdrawalDays > maxWithdrawalDays) maxWithdrawalDays = item.withdrawalDays;
+      }
+    }
+
+    for (const item of payload.prescriptions || []) {
+      const { error: treatErr } = await supabase.from("cattle_treatments").insert({
+        cattle_id: payload.cattleId,
+        medicine_item_id: item.medicineItemId || null,
+        dose_administered: item.dose || null,
+        dose_unit: item.doseUnit || "ml",
+        vet_fee: payload.vetFeeBdt || 0,
+        additional_medical_cost: (payload.labTestFeeBdt || 0) + (payload.additionalCostBdt || 0),
+        diagnosis: `${payload.primaryDiagnosis}${item.route ? ` [${item.route}]` : ""}`,
+        notes: payload.recommendations || item.notes || null,
+        treated_at: payload.visitDate,
+      });
+      if (treatErr) throw treatErr;
+    }
+
+    if (!payload.prescriptions || payload.prescriptions.length === 0) {
+      await supabase.from("cattle_treatments").insert({
+        cattle_id: payload.cattleId,
+        medicine_item_id: null,
+        dose_administered: null,
+        dose_unit: "ml",
+        vet_fee: payload.vetFeeBdt || 0,
+        additional_medical_cost: (payload.labTestFeeBdt || 0) + (payload.additionalCostBdt || 0),
+        diagnosis: payload.primaryDiagnosis,
+        notes: payload.recommendations || null,
+        treated_at: payload.visitDate,
+      });
+    }
+
+    for (const deduction of medicineDeductions) {
+      await supabase.from("inventory_transactions").insert({
+        item_id: deduction.itemId,
+        type: "consumption",
+        qty: deduction.dose,
+        unit_cost: deduction.fifoCost,
+        cattle_id: payload.cattleId,
+        recorded_at: payload.visitDate,
+        notes: `Prescription: ${payload.primaryDiagnosis}`,
+      });
+    }
+
+    const totalMedicalCost = (payload.vetFeeBdt || 0) + (payload.labTestFeeBdt || 0) + (payload.additionalCostBdt || 0);
+    if (totalMedicalCost > 0) {
+      await supabase.from("cost_entries").insert({
+        business_id: bizId,
+        cattle_id: payload.cattleId,
+        type: "variable",
+        category: "Medical/Vet Fee",
+        amount: totalMedicalCost,
+        recorded_at: payload.visitDate,
+        description: `Clinical Visit #${cattle.tag_id} — ${payload.primaryDiagnosis} (Dr. ${payload.veterinarianName})`,
+      });
+    }
+
+    const cattleUpdates: Record<string, unknown> = {};
+    if (payload.requiresQuarantine && !cattle.is_quarantined) {
+      cattleUpdates.is_quarantined = true;
+      if (payload.targetPenId) cattleUpdates.pen_id = payload.targetPenId;
+    } else if (!payload.requiresQuarantine && cattle.is_quarantined && payload.visitType === "discharge") {
+      cattleUpdates.is_quarantined = false;
+    }
+
+    if (maxWithdrawalDays > 0) {
+      const calculatedEndDate = HealthEngine.calculateWithdrawalPeriod(payload.visitDate, maxWithdrawalDays);
+      if (!cattle.withdrawal_end_date || calculatedEndDate > cattle.withdrawal_end_date) {
+        cattleUpdates.withdrawal_end_date = calculatedEndDate;
+      }
+    }
+
+    if (Object.keys(cattleUpdates).length > 0) {
+      await supabase.from("cattle").update(cattleUpdates as any).eq("id", payload.cattleId).eq("business_id", bizId);
+    }
+
+    if (payload.nextFollowUpDate) {
+      await supabase.from("health_events").insert({
+        cattle_id: payload.cattleId,
+        business_id: bizId,
+        title: `Follow-up: ${payload.primaryDiagnosis}`,
+        event_type: "checkup",
+        scheduled_at: payload.nextFollowUpDate,
+        notes: `Clinical follow-up scheduled by Dr. ${payload.veterinarianName}`,
+      });
+    }
+
+    await LivestockEventBus.publish(
+      "TreatmentRecorded",
+      bizId,
+      payload.cattleId,
+      { primaryDiagnosis: payload.primaryDiagnosis, veterinarian: payload.veterinarianName, totalCost: totalMedicalCost, visitDate: payload.visitDate },
+      user.id
+    ).catch(() => {});
+
+    revalidatePath(`/dashboard/cattle/${payload.cattleId}`);
+    revalidatePath("/dashboard/cattle/health");
+    revalidatePath("/dashboard/inventory");
+    if (totalMedicalCost > 0) revalidatePath("/dashboard/finance");
+    revalidateTag("accounting", { expire: 0 });
+
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "Failed to record clinical visit" };
+  }
+}
+
+/**
+ * Generates an official health certificate summary.
+ */
+export async function generateHealthCertificateAction(
+  cattleId: string,
+  weightKg: number,
+  certifyingVet: string
+): Promise<{ success: boolean; certificate?: HealthCertificateSummary; error?: string }> {
+  const supabase = await createClient();
+  const bizId = await getCurrentBusinessId(supabase);
+  if (!bizId) return { success: false, error: "Unauthorized" };
+
+  try {
+    const [cattleRes, eventsRes, treatRes] = await Promise.all([
+      supabase
+        .from("cattle")
+        .select("id, tag_id, breed, gender, dob, purchase_date, status, is_quarantined, withdrawal_end_date")
+        .eq("id", cattleId)
+        .eq("business_id", bizId)
+        .single(),
+      supabase
+        .from("health_events")
+        .select("title, event_type, completed_at, scheduled_at")
+        .eq("cattle_id", cattleId)
+        .eq("business_id", bizId)
+        .is("deleted_at", null)
+        .order("scheduled_at", { ascending: false }),
+      supabase
+        .from("cattle_treatments")
+        .select("diagnosis, treated_at")
+        .eq("cattle_id", cattleId)
+        .order("treated_at", { ascending: false }),
+    ]);
+
+    if (cattleRes.error || !cattleRes.data) {
+      return { success: false, error: "Animal record not found" };
+    }
+
+    const cert = HealthEngine.compileHealthCertificate(
+      cattleRes.data,
+      weightKg,
+      eventsRes.data || [],
+      treatRes.data || [],
+      certifyingVet
+    );
+
+    return { success: true, certificate: cert };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to generate health certificate",
+    };
+  }
+}
+

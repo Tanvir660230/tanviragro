@@ -9,14 +9,17 @@ export type Json =
 // ── Enum types ────────────────────────────────────────────────────
 
 export type BusinessType = "cattle" | "poultry" | "fish" | "crop" | "other";
-export type UserRole = "owner" | "manager" | "worker";
-export type CattleStatus = "active" | "sold" | "dead" | "stolen";
+export type UserRole = "owner" | "manager" | "veterinarian" | "staff" | "viewer" | "worker";
+export type CattleStatus = "active" | "sold" | "dead" | "stolen" | "quarantined" | "culled" | "archived";
 export type CattleGender = "male" | "female";
+export type InseminationType = "AI" | "natural";
+export type BreedingStatus = "open" | "inseminated" | "pregnant" | "calved" | "failed";
+export type HealthRecordType = "vaccine" | "deworming" | "checkup" | "treatment" | "disease_outbreak" | "surgery" | "other";
 export type InventoryCategory = "feed" | "medicine" | "equipment" | "other" | "roughage";
 export type TransactionType = "purchase" | "consumption";
 export type CostType = "fixed" | "variable";
 export type CostEntryClass = "expense" | "asset";
-export type PhotoType = "purchase" | "current" | "other";
+export type PhotoType = "purchase" | "current" | "medical" | "breeding" | "other";
 export type HealthEventType = "vaccine" | "checkup" | "deworming" | "treatment" | "other";
 export type VendorType = "cattle" | "feed" | "medicine" | "other";
 export type PartnerType = "capital" | "labor" | "hybrid";
@@ -56,8 +59,13 @@ export type Business = {
 export type Cattle = {
   id: string;
   business_id: string;
+  farm_id?: string | null;
+  pen_id?: string | null;
   tag_id: string;
+  electronic_id?: string | null; // RFID/EID
   breed: string | null;
+  breed_id?: string | null;
+  category_id?: string | null;
   gender: CattleGender;
   dob: string | null;
   purchase_date: string;
@@ -67,16 +75,153 @@ export type Cattle = {
   expected_daily_gain_kg: number | null;
   manual_feed_override: { roughageKg?: number } | null;
   status: CattleStatus;
+  dam_id?: string | null; // Mother ID
+  sire_id?: string | null; // Father ID
   notes: string | null;
   vendor_id: string | null;
   is_quarantined: boolean;
   is_qurbani_marked: boolean;
+  withdrawal_end_date?: string | null;
   insurance_provider: string | null;
   insurance_amount: number | null;
   insurance_expiry: string | null;
   deleted_at: string | null;
   updated_at: string | null;
   created_at: string;
+};
+
+export type Farm = {
+  id: string;
+  business_id: string;
+  name: string;
+  code: string;
+  location: string | null;
+  capacity: number | null;
+  manager_id: string | null;
+  notes: string | null;
+  is_active: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Pen = {
+  id: string;
+  business_id: string;
+  farm_id: string;
+  name: string;
+  code: string;
+  type: "fattening" | "quarantine" | "nursery" | "maternity" | "isolation" | "general";
+  capacity: number;
+  current_occupancy: number;
+  notes: string | null;
+  is_active: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AnimalBreed = {
+  id: string;
+  business_id: string | null;
+  species: "cattle" | "buffalo" | "goat" | "sheep";
+  name: string;
+  code: string;
+  description: string | null;
+  origin_country: string | null;
+  avg_daily_gain_kg: number | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type AnimalCategory = {
+  id: string;
+  business_id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type DiseaseRecord = {
+  id: string;
+  business_id: string;
+  cattle_id: string;
+  disease_name: string;
+  symptoms: string[];
+  diagnosis_date: string;
+  diagnosed_by_vet_id: string | null;
+  severity: "mild" | "moderate" | "severe" | "critical";
+  is_contagious: boolean;
+  isolation_pen_id: string | null;
+  status: "active" | "under_treatment" | "recovered" | "chronic" | "deceased";
+  resolution_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BreedingRecordEntity = {
+  id: string;
+  business_id: string;
+  cow_id: string;
+  sire_id: string | null;
+  sire_tag_or_breed: string;
+  insemination_date: string;
+  insemination_type: InseminationType;
+  technician_name: string | null;
+  status: BreedingStatus;
+  pd_check_date: string | null;
+  is_pregnant: boolean | null;
+  pd_confirmed_at: string | null;
+  expected_calving_date: string | null;
+  actual_calving_date: string | null;
+  dry_off_date: string | null;
+  calf_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CattleDeathRecord = {
+  id: string;
+  business_id: string;
+  cattle_id: string;
+  death_date: string;
+  cause_of_death: string;
+  post_mortem_notes: string | null;
+  certified_by_vet_id: string | null;
+  estimated_casualty_loss_bdt: number;
+  disposal_method: "burial" | "incineration" | "rendering" | "other";
+  created_at: string;
+};
+
+export type DocumentAttachment = {
+  id: string;
+  business_id: string;
+  entity_type: "cattle" | "health_event" | "breeding" | "sale" | "death" | "farm";
+  entity_id: string;
+  file_name: string;
+  file_type: string;
+  file_size_bytes: number;
+  storage_path: string;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
+export type LivestockAuditLog = {
+  id: string;
+  business_id: string;
+  entity_type: string;
+  entity_id: string;
+  action: "CREATE" | "UPDATE" | "DELETE" | "STATUS_CHANGE" | "HEALTH_ADMINISTERED" | "BREEDING_EVENT" | "SALE" | "DEATH";
+  actor_id: string;
+  actor_role: UserRole;
+  previous_state: Json | null;
+  new_state: Json | null;
+  ip_address?: string | null;
+  timestamp: string;
 };
 
 export type WeightLog = {
@@ -381,6 +526,45 @@ export type Database = {
         Row: Business;
         Insert: { id?: string; name: string; type: BusinessType; owner_id: string; logo_url?: string | null; address?: string | null; phone?: string | null; email?: string | null; opening_cash_balance?: number; default_tax_rate?: number; billing_plan?: string; unit_price_bdt?: number; created_at?: string };
         Update: Partial<Business>;
+        Relationships: [];
+      };
+      farms: {
+        Row: Farm;
+        Insert: {
+          id?: string;
+          business_id: string;
+          name: string;
+          code: string;
+          location?: string | null;
+          capacity?: number | null;
+          manager_id?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Farm>;
+        Relationships: [];
+      };
+      pens: {
+        Row: Pen;
+        Insert: {
+          id?: string;
+          business_id: string;
+          farm_id: string;
+          name: string;
+          code: string;
+          type?: "fattening" | "quarantine" | "nursery" | "maternity" | "isolation" | "general";
+          capacity?: number;
+          current_occupancy?: number;
+          notes?: string | null;
+          is_active?: boolean;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Pen>;
         Relationships: [];
       };
       cattle: {

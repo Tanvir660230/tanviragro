@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, Loader2, Plus, Trash2 } from "lucide-react";
+import { Camera, Loader2, Plus, Trash2, ZoomIn, X, Download } from "lucide-react";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { Button, buttonVariants } from "@/components/ui/button";
 
@@ -44,6 +44,7 @@ export function CattlePhotoGallery({ cattleId, photos: initialPhotos }: Props) {
   const router = useRouter();
   const [photos, setPhotos] = useState<CattlePhoto[]>(initialPhotos);
   const [open, setOpen] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState<CattlePhoto | null>(null);
   const [photoType, setPhotoType] = useState<PhotoType>("current");
   const [takenAt, setTakenAt] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
@@ -61,6 +62,8 @@ export function CattlePhotoGallery({ cattleId, photos: initialPhotos }: Props) {
   const TYPE_LABEL: Record<PhotoType, string> = {
     purchase: t.cattle_details.photos.purchase_photo,
     current: t.cattle_details.photos.current_photo,
+    medical: "Medical",
+    breeding: "Breeding",
     other: t.cattle_details.photos.other_photo,
   };
 
@@ -112,32 +115,43 @@ export function CattlePhotoGallery({ cattleId, photos: initialPhotos }: Props) {
           return (
             <div key={type} className="relative">
               <div className="absolute top-2 left-2 z-10">
-                <span className="rounded-full bg-background/80 px-2 py-0.5 text-xs font-medium backdrop-blur-sm">
+                <span className="rounded-full bg-background/85 px-2.5 py-0.5 text-xs font-semibold backdrop-blur-md shadow-xs border border-border/40">
                   {TYPE_LABEL[type]}
                 </span>
               </div>
               {photo ? (
-                <div className="group relative aspect-square overflow-hidden rounded-xl bg-muted border border-border/60 shadow-card">
+                <div
+                  onClick={() => setLightboxPhoto(photo)}
+                  className="group relative aspect-square overflow-hidden rounded-2xl bg-muted border border-border/80 shadow-card cursor-pointer"
+                >
                   <Image
                     src={photoUrl(photo.storage_path)}
                     alt={type}
                     fill
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
-                    sizes="(max-width: 768px) 50vw, 200px"
+                    sizes="(max-width: 768px) 50vw, 250px"
                   />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-background/90 text-foreground text-xs font-semibold px-2.5 py-1 rounded-lg backdrop-blur-sm flex items-center gap-1 shadow-md">
+                      <ZoomIn className="h-3.5 w-3.5" /> View
+                    </span>
+                  </div>
                   <button
-                    onClick={() => setConfirmPhoto(photo)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmPhoto(photo);
+                    }}
                     disabled={isPending}
-                    className="absolute right-2 bottom-2 rounded-lg bg-destructive/90 p-1.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute right-2 bottom-2 rounded-lg bg-destructive/90 p-1.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 cursor-pointer shadow-md"
                     aria-label={t.cattle_details.photos.delete}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ) : (
-                <div className="flex h-32 md:h-40 flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/30 text-muted-foreground/50">
-                  <Camera className="mb-2 h-8 w-8" />
-                  <span className="text-xs">{t.cattle_details.photos.no_photo}</span>
+                <div className="flex h-36 md:h-44 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-muted/20 text-muted-foreground/60 transition-colors hover:bg-muted/40">
+                  <Camera className="mb-2 h-8 w-8 opacity-60" />
+                  <span className="text-xs font-medium">{t.cattle_details.photos.no_photo}</span>
                 </div>
               )}
             </div>
@@ -220,6 +234,38 @@ export function CattlePhotoGallery({ cattleId, photos: initialPhotos }: Props) {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fullscreen Lightbox Modal */}
+      <Dialog open={lightboxPhoto !== null} onOpenChange={(v) => !v && setLightboxPhoto(null)}>
+        <DialogContent className="max-w-3xl p-2 bg-black/95 border-border/40 text-white overflow-hidden">
+          {lightboxPhoto && (
+            <div className="relative flex flex-col items-center">
+              <div className="relative w-full aspect-video max-h-[75vh] overflow-hidden rounded-xl bg-black">
+                <Image
+                  src={photoUrl(lightboxPhoto.storage_path)}
+                  alt={lightboxPhoto.photo_type}
+                  fill
+                  className="object-contain"
+                  sizes="(max-width: 1200px) 100vw, 800px"
+                  priority
+                />
+              </div>
+              <div className="w-full flex items-center justify-between px-3 py-2 text-xs text-zinc-300">
+                <span className="font-semibold uppercase tracking-wider bg-white/10 px-2 py-0.5 rounded">
+                  {TYPE_LABEL[lightboxPhoto.photo_type]}
+                </span>
+                <span>
+                  {new Date(lightboxPhoto.taken_at || lightboxPhoto.created_at).toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

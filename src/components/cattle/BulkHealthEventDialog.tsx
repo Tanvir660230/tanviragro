@@ -33,6 +33,7 @@ interface Props {
   activeCattle: CattleOption[];
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
+  initialSelectedIds?: string[];
 }
 
 const EVENT_TYPES = [
@@ -43,12 +44,22 @@ const EVENT_TYPES = [
   { value: "other", label: "Other" },
 ] as const;
 
-export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpenChange: externalOnChange }: Props) {
+export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpenChange: externalOnChange, initialSelectedIds }: Props) {
   const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const open    = externalOpen    ?? internalOpen;
   const setOpen = externalOnChange ?? setInternalOpen;
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(initialSelectedIds ?? [])
+  );
+  const [prevOpen, setPrevOpen] = useState(open);
+
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open && initialSelectedIds && initialSelectedIds.length > 0) {
+      setSelectedIds(new Set(initialSelectedIds));
+    }
+  }
   const [eventType, setEventType] = useState("vaccine");
   const [state, action, isPending] = useActionState<BulkHealthFormState, FormData>(
     createBulkHealthEvents,

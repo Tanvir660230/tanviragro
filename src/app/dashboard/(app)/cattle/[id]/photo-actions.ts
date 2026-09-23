@@ -24,6 +24,10 @@ export async function uploadCattlePhoto(
   if (file.size > 5 * 1024 * 1024) return { error: "File must be under 5 MB" };
   if (!file.type.startsWith("image/")) return { error: "Only image files allowed" };
 
+  const rawExt = (file.name.split(".").pop() || "").toLowerCase();
+  const allowedExts = ["jpg", "jpeg", "png", "webp"];
+  const ext = allowedExts.includes(rawExt) ? rawExt : "jpg";
+
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
 
@@ -34,8 +38,8 @@ export async function uploadCattlePhoto(
     .maybeSingle();
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
 
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const path = `${user.id}/${cattleId}/${photoType}-${Date.now()}.${ext}`;
+  const cleanPhotoType = ["current", "profile", "medical", "tag"].includes(photoType) ? photoType : "current";
+  const path = `${user.id}/${cattleId}/${cleanPhotoType}-${Date.now()}.${ext}`;
 
   const { error: uploadErr } = await supabase.storage
     .from(BUCKET)

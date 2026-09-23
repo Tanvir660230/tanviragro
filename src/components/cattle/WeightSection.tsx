@@ -1,4 +1,4 @@
-﻿﻿"use client";
+﻿"use client";
 
 import { useOptimistic, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -9,9 +9,11 @@ import { WeightChart } from "./WeightChart";
 import { WeightLogTable } from "./WeightLogTable";
 import { useTranslation } from "@/i18n/I18nProvider";
 
+import type { CattleStatus } from "@/types/database";
+
 interface Props {
   cattleId: string;
-  cattleStatus: "active" | "sold" | "dead" | "stolen";
+  cattleStatus: CattleStatus;
   initialLogs: WeightLogRow[];
   purchaseDate: string;
   initialWeight: number;

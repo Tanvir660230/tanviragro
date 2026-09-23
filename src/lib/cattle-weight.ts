@@ -103,6 +103,15 @@ export function predictWeight(
   };
 }
 
+export function getCurrentLiveWeight(
+  cattle: CattleWeightInfo,
+  logs: WeightLogEntry[],
+  asOf: Date = new Date()
+): number {
+  const prediction = predictWeight(cattle, logs, asOf);
+  return prediction.predictedWeight;
+}
+
 /**
  * Build a map of cattleId → WeightPrediction for all active cattle.
  */

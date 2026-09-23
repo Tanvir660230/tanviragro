@@ -3,38 +3,67 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
-import { buttonVariants } from "@/components/ui/button";
-import { ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, Scale } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { ArrowLeft, CheckCircle2, AlertTriangle, ShieldCheck, Scale, Building2, Landmark, Wallet } from "lucide-react";
 import { AssetDepreciationTable, type AssetEntry } from "@/components/accounting/AssetDepreciationTable";
+import { StatementReportHeader, fmtBDT } from "@/components/finance/finance-ui";
 
-export const metadata: Metadata = { title: "Balance Sheet" };
+export const metadata: Metadata = { title: "Balance Sheet Statement" };
 
 function fmt(n: number) {
   const abs = Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return n < 0 ? `(৳${abs})` : `৳${abs}`;
 }
 
-function Row({ label, value, indent, bold, border }: {
+function Row({
+  label,
+  value,
+  indent,
+  bold,
+  border,
+  highlight,
+}: {
   label: string;
   value: number | string;
   indent?: boolean;
   bold?: boolean;
   border?: boolean;
+  highlight?: boolean;
 }) {
   const formatted = typeof value === "number" ? fmt(value) : value;
   return (
-    <div className={`flex items-start justify-between py-2 px-4 gap-4 ${border ? "border-t border-foreground/20" : "border-b border-border/40"} ${bold ? "font-semibold" : ""}`}>
-      <span className={indent ? "pl-4 text-sm text-muted-foreground" : "text-sm"}>{label}</span>
+    <div
+      className={`flex items-start justify-between py-2.5 px-4 gap-4 ${
+        border ? "border-t border-border/80" : "border-b border-border/40"
+      } ${bold ? "font-bold text-foreground" : "text-sm"} ${
+        highlight ? "bg-muted/40 font-semibold" : ""
+      }`}
+    >
+      <span className={indent ? "pl-5 text-sm text-muted-foreground" : ""}>{label}</span>
       <span className="tabular-nums font-mono text-sm shrink-0">{formatted}</span>
     </div>
   );
 }
 
-function SectionHeader({ children }: { children: React.ReactNode }) {
+function SectionHeader({
+  icon: Icon,
+  children,
+  badge,
+}: {
+  icon?: React.ElementType;
+  children: React.ReactNode;
+  badge?: string;
+}) {
   return (
-    <div className="px-4 py-2 bg-muted/30 border-b border-border">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>
+    <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border/70">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon className="h-4 w-4 text-primary" />}
+        <p className="text-xs font-bold uppercase tracking-wider text-foreground">{children}</p>
+      </div>
+      {badge && (
+        <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground border border-border/60">
+          {badge}
+        </span>
+      )}
     </div>
   );
 }
@@ -86,92 +115,142 @@ export default async function BalanceSheetPage() {
     ((loanRows ?? []) as LoanRow[]).filter(l => l.status !== "paid" && l.due_date && l.due_date > oneYearStr).reduce((s, l) => s + calcLoanOutstanding(l), 0);
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Back link */}
+      <div className="print:hidden">
+        <Link
+          href="/dashboard/accounting"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Accounting Hub
+        </Link>
+      </div>
+
+      {/* Statement Header */}
+      <StatementReportHeader
         title="Balance Sheet"
-        subtitle={`As of ${new Date(asOf).toLocaleDateString("en-US", { dateStyle: "long" })}`}
-        icon={Scale}
-        back="/dashboard/accounting"
+        subtitle="Statement of Financial Position · Standard Double-Entry"
+        asOfDate={asOf}
+        isAuditedBalanced={tb.isBalanced}
       />
 
-      {/* Balance check */}
-      <div className={`flex items-center gap-3 rounded-xl p-4 ring-1 text-sm font-medium ${
-        bs.isBalanced
-          ? "bg-emerald-50 dark:bg-emerald-950/30 ring-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-          : "bg-amber-50 dark:bg-amber-950/30 ring-amber-500/30 text-amber-700 dark:text-amber-400"
-      }`}>
-        {bs.isBalanced
-          ? <CheckCircle2 className="h-5 w-5 shrink-0" />
-          : <AlertCircle className="h-5 w-5 shrink-0" />}
-        {bs.isBalanced
-          ? "Assets = Liabilities + Equity"
-          : `Off-balance by ৳${bs.discrepancy.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
+      {/* High-Level Executive Summary Pill Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Total Assets</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(bs.totalAssets)}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Current + Non-Current Assets</p>
+        </div>
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Total Liabilities</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(bs.totalLiabilities)}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Current &amp; Long-term obligations</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Total Equity</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(bs.totalEquity)}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Partner capital + Retained earnings</p>
+        </div>
       </div>
 
       {/* ASSETS — current / non-current */}
-      <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-        <SectionHeader>CURRENT ASSETS</SectionHeader>
-        <Row label="Cash & Bank" value={bs.cashAndBank} indent />
-        <Row label="Feed & Supplies Inventory" value={bs.feedInventory} indent />
-        <Row label="TOTAL CURRENT ASSETS" value={bs.cashAndBank + bs.feedInventory} bold border />
-      </div>
-      <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-        <SectionHeader>NON-CURRENT ASSETS</SectionHeader>
-        <Row label="Livestock (Active, at cost)" value={bs.livestock} indent />
-        <Row label="Fixed Assets (at cost)" value={bs.fixedAssets} indent />
-        <Row label="Less: Accumulated Depreciation" value={`(${fmt(bs.accumulatedDepreciation)})`} indent />
-        <Row label="Net Fixed Assets" value={bs.netFixedAssets} indent />
-        <Row label="TOTAL NON-CURRENT ASSETS" value={bs.livestock + bs.netFixedAssets} bold border />
-      </div>
-      <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-        <Row label="TOTAL ASSETS" value={bs.totalAssets} bold />
-      </div>
-
-      {/* LIABILITIES + EQUITY — side by side on large screens */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-          <SectionHeader>LIABILITIES</SectionHeader>
-          {currentPrincipal > 0 && <Row label="Current (due ≤ 1 yr)" value={currentPrincipal} indent />}
-          {longTermPrincipal > 0 && <Row label="Long-term (due > 1 yr)" value={longTermPrincipal} indent />}
-          {bs.accruedInterestPayable > 0 && <Row label="Accrued Interest Payable" value={bs.accruedInterestPayable} indent />}
-          <Row label="TOTAL LIABILITIES" value={bs.totalLiabilities} bold border />
-        </div>
-        <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden">
-          <SectionHeader>EQUITY</SectionHeader>
-          <Row label="Partner Contributed Capital" value={bs.partnerCapital} indent />
-          <Row label="Retained Earnings" value={bs.retainedEarnings} indent />
-          <Row label="TOTAL EQUITY" value={bs.totalEquity} bold border />
-        </div>
-      </div>
-
-      {/* Check line */}
-      <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-hidden mb-6">
-        <Row label="TOTAL LIABILITIES + EQUITY" value={bs.totalLiabilitiesAndEquity} bold />
-      </div>
-
-      {!tb.isBalanced && (
-        <div className="bg-destructive/15 text-destructive border border-destructive/30 px-4 py-3 rounded-lg flex items-start gap-3 mb-6">
-          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
           <div>
-            <p className="font-semibold">Audit Warning: Ledger Out of Balance</p>
-            <p className="text-sm mt-1">Total Debits do not match Total Credits. This indicates a potential logic discrepancy in the accounting engine. Debits: {fmt(tb.totalDebit)}, Credits: {fmt(tb.totalCredit)}</p>
+            <SectionHeader icon={Building2} badge="1100-1200">Current Assets</SectionHeader>
+            <div className="divide-y divide-border/30">
+              <Row label="Cash & Bank Balances" value={bs.cashAndBank} indent />
+              <Row label="Feed & Consumable Inventory" value={bs.feedInventory} indent />
+            </div>
+          </div>
+          <Row label="TOTAL CURRENT ASSETS" value={bs.cashAndBank + bs.feedInventory} bold border highlight />
+        </div>
+        <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
+          <div>
+            <SectionHeader icon={Scale} badge="1300-1500">Non-Current Assets</SectionHeader>
+            <div className="divide-y divide-border/30">
+              <Row label="Livestock (Active, at cost)" value={bs.livestock} indent />
+              <Row label="Fixed Assets (Gross Cost)" value={bs.fixedAssets} indent />
+              <Row label="Less: Accumulated Depreciation" value={-bs.accumulatedDepreciation} indent />
+              <Row label="Net Fixed Assets" value={bs.netFixedAssets} indent />
+            </div>
+          </div>
+          <Row label="TOTAL NON-CURRENT ASSETS" value={bs.livestock + bs.netFixedAssets} bold border highlight />
+        </div>
+      </div>
+      <div className="rounded-2xl bg-card border border-blue-500/30 p-4 shadow-sm flex items-center justify-between">
+        <span className="text-base font-bold text-foreground">TOTAL ASSETS</span>
+        <span className="text-xl font-bold font-mono tabular-nums text-foreground">{fmt(bs.totalAssets)}</span>
+      </div>
+
+      {/* LIABILITIES & EQUITY SECTION */}
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Liabilities */}
+          <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
+            <div>
+              <SectionHeader icon={Landmark} badge="2000">Liabilities</SectionHeader>
+              <div className="divide-y divide-border/30">
+                {currentPrincipal > 0 && <Row label="Current Liabilities (due ≤ 1 yr)" value={currentPrincipal} indent />}
+                {longTermPrincipal > 0 && <Row label="Long-term Obligations (due > 1 yr)" value={longTermPrincipal} indent />}
+                {bs.accruedInterestPayable > 0 && <Row label="Accrued Interest Payable" value={bs.accruedInterestPayable} indent />}
+                {currentPrincipal === 0 && longTermPrincipal === 0 && bs.accruedInterestPayable === 0 && (
+                  <div className="py-4 px-5 text-xs text-muted-foreground italic">No outstanding liabilities.</div>
+                )}
+              </div>
+            </div>
+            <Row label="TOTAL LIABILITIES" value={bs.totalLiabilities} bold border highlight />
+          </div>
+
+          {/* Equity */}
+          <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
+            <div>
+              <SectionHeader icon={Wallet} badge="3000">Equity</SectionHeader>
+              <div className="divide-y divide-border/30">
+                <Row label="Partner Contributed Capital" value={bs.partnerCapital} indent />
+                <Row label="Retained Earnings / (Losses)" value={bs.retainedEarnings} indent />
+              </div>
+            </div>
+            <Row label="TOTAL EQUITY" value={bs.totalEquity} bold border highlight />
+          </div>
+        </div>
+
+        {/* Total Liabilities + Equity Bar */}
+        <div className="rounded-2xl bg-card border border-emerald-500/30 p-4 shadow-sm flex items-center justify-between">
+          <span className="text-base font-bold text-foreground">TOTAL LIABILITIES &amp; EQUITY</span>
+          <span className="text-xl font-bold font-mono tabular-nums text-foreground">{fmt(bs.totalLiabilitiesAndEquity)}</span>
+        </div>
+      </div>
+
+      {/* Audit Balance Verification */}
+      {tb.isBalanced ? (
+        <div className="rounded-2xl bg-emerald-500/[0.04] border border-emerald-500/30 p-4 flex items-center gap-3.5">
+          <div className="h-9 w-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-emerald-950 dark:text-emerald-200">Accounting Equation Balanced: Assets = Liabilities + Equity</p>
+            <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
+              Verified double-entry integrity. Total Assets ({fmt(bs.totalAssets)}) equals Total Liabilities + Equity ({fmt(bs.totalLiabilitiesAndEquity)}).
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-amber-500/[0.04] border border-amber-500/30 p-4 flex items-center gap-3.5">
+          <div className="h-9 w-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-amber-950 dark:text-amber-200">Audit Discrepancy Detected</p>
+            <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+              Total Debits ({fmt(tb.totalDebit)}) do not match Total Credits ({fmt(tb.totalCredit)}). Discrepancy: {fmt(bs.discrepancy)}.
+            </p>
           </div>
         </div>
       )}
 
-      {tb.isBalanced && (
-        <div className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-4 py-3 rounded-lg flex items-start gap-3 mb-6">
-          <div className="h-5 w-5 mt-0.5 shrink-0 bg-emerald-500/20 rounded-full flex items-center justify-center">
-            <div className="h-2.5 w-2.5 bg-emerald-500 rounded-full"></div>
-          </div>
-          <div>
-            <p className="font-semibold">System Audited & Balanced</p>
-            <p className="text-sm mt-1 text-emerald-600/80 dark:text-emerald-400/80">Double-entry ledger is perfectly balanced. Data integrity is fully verified.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Asset Depreciation Schedule — cost_entries assets */}
+      {/* Asset Depreciation Schedule */}
       <AssetDepreciationTable assets={assetEntries} />
     </div>
   );

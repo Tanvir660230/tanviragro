@@ -1,4 +1,4 @@
-﻿﻿import { Activity } from "lucide-react";
+﻿import { Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { HealthScore } from "@/lib/supabase/queries/analytics";
 import type { Dictionary } from "@/i18n/getDictionary";

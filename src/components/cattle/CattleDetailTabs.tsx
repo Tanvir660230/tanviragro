@@ -2,54 +2,118 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Activity, Heart, TrendingUp } from "lucide-react";
+import {
+  Activity,
+  HeartPulse,
+  Scale,
+  Utensils,
+  Receipt,
+  Images,
+  History,
+  QrCode,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/i18n/I18nProvider";
 
-type TabId = "overview" | "health" | "growth_finance";
+export type CattleWorkspaceTabId =
+  | "overview"
+  | "health"
+  | "weight"
+  | "feed"
+  | "finance"
+  | "gallery"
+  | "timeline"
+  | "identity";
 
-const TAB_ICONS: Record<TabId, React.ElementType> = {
-  overview: Activity,
-  health: Heart,
-  growth_finance: TrendingUp,
-};
+interface TabItem {
+  id: CattleWorkspaceTabId;
+  label: string;
+  icon: React.ElementType;
+  badge?: string | number;
+}
 
-const TAB_ORDER: TabId[] = ["overview", "health", "growth_finance"];
+interface Props {
+  overview: React.ReactNode;
+  health: React.ReactNode;
+  weight: React.ReactNode;
+  feed: React.ReactNode;
+  finance: React.ReactNode;
+  gallery: React.ReactNode;
+  timeline: React.ReactNode;
+  identity: React.ReactNode;
+  defaultTab?: CattleWorkspaceTabId;
+  healthPendingCount?: number;
+  weightLogsCount?: number;
+  photosCount?: number;
+}
 
 export function CattleDetailTabs({
   overview,
   health,
-  growthFinance,
+  weight,
+  feed,
+  finance,
+  gallery,
+  timeline,
+  identity,
   defaultTab = "overview",
-}: {
-  overview: React.ReactNode;
-  health: React.ReactNode;
-  growthFinance: React.ReactNode;
-  defaultTab?: TabId;
-}) {
+  healthPendingCount = 0,
+  weightLogsCount,
+  photosCount,
+}: Props) {
   const { t } = useTranslation();
-  const tabs = t.cattle_details.tabs;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Derive active tab from URL — fall back to defaultTab prop
-  const tabParam = searchParams.get("tab") as TabId | null;
-  const active: TabId = TAB_ORDER.includes(tabParam as TabId) ? (tabParam as TabId) : defaultTab;
+  const TABS: TabItem[] = [
+    { id: "overview", label: t.cattle_details.tabs.overview || "Overview", icon: Activity },
+    {
+      id: "health",
+      label: t.cattle_details.tabs.health || "Health",
+      icon: HeartPulse,
+      badge: healthPendingCount > 0 ? healthPendingCount : undefined,
+    },
+    {
+      id: "weight",
+      label: "Weight & Growth",
+      icon: Scale,
+      badge: weightLogsCount !== undefined ? weightLogsCount : undefined,
+    },
+    { id: "feed", label: "Feed & Ration", icon: Utensils },
+    { id: "finance", label: "Financial 360°", icon: Receipt },
+    {
+      id: "gallery",
+      label: t.cattle_details.photos.photos || "Gallery",
+      icon: Images,
+      badge: photosCount !== undefined ? photosCount : undefined,
+    },
+    { id: "timeline", label: "Timeline", icon: History },
+    { id: "identity", label: "QR & ID", icon: QrCode },
+  ];
 
-  // Track which tabs have been visited for lazy rendering
-  const [visited, setVisited] = useState<Set<TabId>>(new Set([active]));
+  const TAB_ORDER = TABS.map((t) => t.id);
+
+  const tabParam = searchParams.get("tab") as CattleWorkspaceTabId | null;
+  const active: CattleWorkspaceTabId =
+    tabParam && TAB_ORDER.includes(tabParam)
+      ? tabParam
+      : (defaultTab as CattleWorkspaceTabId);
+
+  const [visited, setVisited] = useState<Set<CattleWorkspaceTabId>>(new Set([active]));
   const navRef = useRef<HTMLDivElement>(null);
 
-  const setActive = useCallback((id: TabId) => {
-    setVisited(prev => new Set([...prev, id]));
-    const params = new URLSearchParams(searchParams.toString());
-    if (id === "overview") params.delete("tab");
-    else params.set("tab", id);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [router, pathname, searchParams]);
+  const setActive = useCallback(
+    (id: CattleWorkspaceTabId) => {
+      setVisited((prev) => new Set([...prev, id]));
+      const params = new URLSearchParams(searchParams.toString());
+      if (id === "overview") params.delete("tab");
+      else params.set("tab", id);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
 
-  // Keyboard navigation: arrow keys cycle through tabs
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!navRef.current?.contains(document.activeElement)) return;
@@ -64,62 +128,82 @@ export function CattleDetailTabs({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [active, setActive]);
-
-  const TABS: { id: TabId; label: string }[] = [
-    { id: "overview",      label: tabs.overview },
-    { id: "health",        label: tabs.health },
-    { id: "growth_finance",label: tabs.growth_finance },
-  ];
+  }, [active, setActive, TAB_ORDER]);
 
   return (
-    <div className="space-y-5">
-      {/* Tab navigation */}
-      <div ref={navRef} className="flex border-b border-border overflow-x-auto scrollbar-none" role="tablist">
-        {TABS.map(({ id, label }) => {
-          const Icon = TAB_ICONS[id];
-          return (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={active === id}
-              aria-controls={`tab-panel-${id}`}
-              onClick={() => setActive(id)}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
-                active === id
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </button>
-          );
-        })}
+    <div className="space-y-6">
+      {/* Workspace Tab Navigation Bar */}
+      <div className="sticky top-14 z-20 -mx-4 sm:mx-0 px-4 sm:px-0 bg-background/95 backdrop-blur-md py-2 border-b border-border/40 sm:border-0 sm:bg-transparent">
+        <div
+          ref={navRef}
+          className="inline-flex p-1.5 rounded-2xl bg-muted/70 border border-border/70 shadow-2xs gap-1 overflow-x-auto max-w-full scrollbar-none"
+          role="tablist"
+        >
+          {TABS.map(({ id, label, icon: Icon, badge }) => {
+            const isSelected = active === id;
+            return (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={`tab-panel-${id}`}
+                onClick={() => setActive(id)}
+                className={cn(
+                  "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring select-none cursor-pointer",
+                  isSelected
+                    ? "bg-card text-foreground shadow-xs border border-border/80"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    isSelected ? "text-primary" : "text-muted-foreground"
+                  )}
+                />
+                <span>{label}</span>
+                {badge !== undefined && (
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.2 rounded-full text-[10px] font-bold font-mono",
+                      isSelected
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground border border-border"
+                    )}
+                  >
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Tab panels — lazy: only render once visited */}
-      <div
-        id="tab-panel-overview"
-        role="tabpanel"
-        className={cn("space-y-5", active !== "overview" && "hidden")}
-      >
+      <div id="tab-panel-overview" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "overview" && "hidden")}>
         {visited.has("overview") && overview}
       </div>
-      <div
-        id="tab-panel-health"
-        role="tabpanel"
-        className={cn("space-y-5", active !== "health" && "hidden")}
-      >
+      <div id="tab-panel-health" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "health" && "hidden")}>
         {visited.has("health") && health}
       </div>
-      <div
-        id="tab-panel-growth_finance"
-        role="tabpanel"
-        className={cn("space-y-5", active !== "growth_finance" && "hidden")}
-      >
-        {visited.has("growth_finance") && growthFinance}
+      <div id="tab-panel-weight" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "weight" && "hidden")}>
+        {visited.has("weight") && weight}
+      </div>
+      <div id="tab-panel-feed" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "feed" && "hidden")}>
+        {visited.has("feed") && feed}
+      </div>
+      <div id="tab-panel-finance" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "finance" && "hidden")}>
+        {visited.has("finance") && finance}
+      </div>
+      <div id="tab-panel-gallery" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "gallery" && "hidden")}>
+        {visited.has("gallery") && gallery}
+      </div>
+      <div id="tab-panel-timeline" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "timeline" && "hidden")}>
+        {visited.has("timeline") && timeline}
+      </div>
+      <div id="tab-panel-identity" role="tabpanel" className={cn("space-y-6 animate-fade-in", active !== "identity" && "hidden")}>
+        {visited.has("identity") && identity}
       </div>
     </div>
   );

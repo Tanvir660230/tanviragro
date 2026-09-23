@@ -65,11 +65,11 @@ export function FinanceTabs({
 
   return (
     <div className="space-y-0">
-      {/* ── Tab bar — underline style ── */}
+      {/* ── Tab bar — modern segment pill style ── */}
       <div
         role="tablist"
         aria-label="Finance sections"
-        className="flex min-w-0 overflow-x-auto scrollbar-none border-b border-border"
+        className="flex min-w-0 overflow-x-auto scrollbar-none border-b border-border/60 bg-muted/25 p-1.5 gap-1 rounded-t-xl"
       >
         {TABS.map(({ value, label, icon: Icon }) => {
           const count =
@@ -89,11 +89,10 @@ export function FinanceTabs({
               aria-controls={`panel-${value}`}
               onClick={() => handleTabChange(value)}
               className={cn(
-                "relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors duration-150",
-                "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-t-full after:transition-all after:duration-150",
+                "relative flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all duration-150 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isActive
-                  ? "text-foreground after:bg-primary"
-                  : "text-muted-foreground hover:text-foreground after:bg-transparent"
+                  ? "bg-card text-foreground font-semibold shadow-xs dark:bg-card/90"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
               )}
             >
               <Icon className={cn(

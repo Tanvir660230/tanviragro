@@ -1,12 +1,13 @@
 "use client";
 
-import { useOptimistic } from "react";
+import { useState, useOptimistic, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Package } from "lucide-react";
 import { ItemActions, type CattleOption } from "./ItemActions";
 import { ArchiveItemButton } from "./ArchiveItemButton";
 import { DaysRemainingBadge } from "./DaysRemainingBadge";
 import { EditItemDialog } from "./EditItemDialog";
+import { CategoryBadge } from "./inventory-ui";
 
 export interface InventoryRow {
   id: string;
@@ -21,13 +22,8 @@ export interface InventoryRow {
   is_discontinued?: boolean;
 }
 
-const CATEGORY_STYLE: Record<string, string> = {
-  feed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
-  medicine: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
-  equipment: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400",
-  roughage: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
-  other: "bg-muted text-muted-foreground",
-};
+export type SortField = "name" | "category" | "stock" | "cost" | "value" | "alert" | "days";
+export type SortOrder = "asc" | "desc";
 
 function fmtCost(cost: number, unit: string) {
   return `৳${cost.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}/${unit}`;
@@ -40,6 +36,9 @@ export function InventoryTable({
   items: InventoryRow[];
   cattle: CattleOption[];
 }) {
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
   const [optimisticItems, updateOptimistic] = useOptimistic(
     items,
     (state, { id, delta }: { id: string; delta: number }) =>
@@ -50,110 +49,292 @@ export function InventoryTable({
       )
   );
 
-  if (!optimisticItems.length) return null;
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  }
+
+  const sortedItems = useMemo(() => {
+    return [...optimisticItems].sort((a, b) => {
+      let comparison = 0;
+      if (sortField === "name") {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortField === "category") {
+        comparison = a.category.localeCompare(b.category);
+      } else if (sortField === "stock") {
+        comparison = a.stock - b.stock;
+      } else if (sortField === "cost") {
+        comparison = (a.currentCost ?? 0) - (b.currentCost ?? 0);
+      } else if (sortField === "value") {
+        const valA = a.stock * (a.currentCost ?? 0);
+        const valB = b.stock * (b.currentCost ?? 0);
+        comparison = valA - valB;
+      } else if (sortField === "alert") {
+        comparison = (a.low_stock_threshold ?? 0) - (b.low_stock_threshold ?? 0);
+      } else if (sortField === "days") {
+        const daysA = a.avgDailyConsumption ? a.stock / a.avgDailyConsumption : 99999;
+        const daysB = b.avgDailyConsumption ? b.stock / b.avgDailyConsumption : 99999;
+        comparison = daysA - daysB;
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+  }, [optimisticItems, sortField, sortOrder]);
+
+  if (!sortedItems.length) return null;
 
   return (
-    <div className="hidden md:block overflow-x-auto overflow-hidden rounded-xl border border-border bg-card">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-muted/40">
-            <th className="px-4 py-3 text-left font-medium text-muted-foreground">Item</th>
-            <th className="px-4 py-3 text-left font-medium text-muted-foreground">Category</th>
-            <th className="px-4 py-3 text-right font-medium text-muted-foreground">Current Stock</th>
-            <th className="px-4 py-3 text-right font-medium text-muted-foreground">FIFO Cost</th>
-            <th className="px-4 py-3 text-right font-medium text-muted-foreground">Alert At</th>
-            <th className="px-4 py-3 text-right font-medium text-muted-foreground">Days Left</th>
-            <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
-            <th className="px-4 py-3 w-10" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {optimisticItems.map((item) => {
-            const isLow =
-              item.low_stock_threshold !== null &&
-              item.stock <= item.low_stock_threshold;
-            const isOut = item.stock <= 0;
+    <div className="hidden md:block overflow-hidden rounded-2xl border border-border/80 bg-card shadow-card">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-border/80 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 select-none">
+              <th scope="col" className="py-3.5 pl-5 pr-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("name")}
+                  className="group flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
+                >
+                  <span>Item Name</span>
+                  {sortField === "name" ? (
+                    sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-0 group-hover:opacity-50" />
+                  )}
+                </button>
+              </th>
+              <th scope="col" className="px-3 py-3.5">
+                <button
+                  type="button"
+                  onClick={() => handleSort("category")}
+                  className="group flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
+                >
+                  <span>Category</span>
+                  {sortField === "category" ? (
+                    sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-0 group-hover:opacity-50" />
+                  )}
+                </button>
+              </th>
+              <th scope="col" className="px-3 py-3.5 text-right">
+                <button
+                  type="button"
+                  onClick={() => handleSort("stock")}
+                  className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
+                >
+                  <span>Available Stock</span>
+                  {sortField === "stock" ? (
+                    sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-0 group-hover:opacity-50" />
+                  )}
+                </button>
+              </th>
+              <th scope="col" className="px-3 py-3.5 text-right">
+                <button
+                  type="button"
+                  onClick={() => handleSort("cost")}
+                  className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
+                >
+                  <span>FIFO Unit Cost</span>
+                  {sortField === "cost" ? (
+                    sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-0 group-hover:opacity-50" />
+                  )}
+                </button>
+              </th>
+              <th scope="col" className="px-3 py-3.5 text-right">
+                <button
+                  type="button"
+                  onClick={() => handleSort("alert")}
+                  className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
+                >
+                  <span>Alert Level</span>
+                  {sortField === "alert" ? (
+                    sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-0 group-hover:opacity-50" />
+                  )}
+                </button>
+              </th>
+              <th scope="col" className="px-3 py-3.5 text-right">
+                <button
+                  type="button"
+                  onClick={() => handleSort("days")}
+                  className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
+                >
+                  <span>Runway</span>
+                  {sortField === "days" ? (
+                    sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-0 group-hover:opacity-50" />
+                  )}
+                </button>
+              </th>
+              <th scope="col" className="px-4 py-3.5 text-right font-semibold text-xs uppercase tracking-wider">
+                Quick Actions
+              </th>
+              <th scope="col" className="py-3.5 pr-4 pl-1 w-16 text-right" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60 bg-card">
+            {sortedItems.map((item) => {
+              const isOut = item.stock <= 0;
+              const isLow =
+                !isOut &&
+                item.low_stock_threshold !== null &&
+                item.stock <= item.low_stock_threshold;
 
-            return (
-              <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    {isLow && (
-                      <AlertTriangle
-                        className={cn(
-                          "h-4 w-4 shrink-0",
-                          isOut
-                            ? "text-destructive"
-                            : "text-amber-500 dark:text-amber-400"
+              return (
+                <tr
+                  key={item.id}
+                  className={cn(
+                    "group transition-colors hover:bg-muted/30",
+                    isOut
+                      ? "bg-rose-500/[0.02]"
+                      : isLow
+                      ? "bg-amber-500/[0.02]"
+                      : ""
+                  )}
+                >
+                  {/* Name */}
+                  <td className="py-3.5 pl-5 pr-3">
+                    <div className="flex items-center gap-2.5">
+                      {isOut ? (
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                        </span>
+                      ) : isLow ? (
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                        </span>
+                      ) : (
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                          <Package className="h-3.5 w-3.5" />
+                        </span>
+                      )}
+                      <div>
+                        <span className="font-semibold text-foreground tracking-tight text-sm block">
+                          {item.name}
+                        </span>
+                        {item.is_active_roughage && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                            ★ Active Roughage
+                          </span>
                         )}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Category */}
+                  <td className="px-3 py-3.5">
+                    <CategoryBadge category={item.category} />
+                  </td>
+                  {/* Stock */}
+                  <td className="px-3 py-3.5 text-right">
+                    <div className="inline-flex flex-col items-end">
+                      <span
+                        className={cn(
+                          "font-bold tabular-nums text-sm",
+                          isOut
+                            ? "text-rose-600 dark:text-rose-400"
+                            : isLow
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-foreground"
+                        )}
+                      >
+                        {item.stock.toLocaleString("en-IN", { maximumFractionDigits: 2 })}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {item.unit}
+                        </span>
+                      </span>
+                      {item.low_stock_threshold !== null && item.low_stock_threshold > 0 && (
+                        <div className="w-16 h-1 bg-muted rounded-full overflow-hidden mt-1">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all",
+                              isOut
+                                ? "bg-rose-500 w-0"
+                                : isLow
+                                ? "bg-amber-500"
+                                : "bg-emerald-500"
+                            )}
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                Math.max(10, (item.stock / (item.low_stock_threshold * 2)) * 100)
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* FIFO Unit Cost */}
+                  <td className="px-3 py-3.5 text-right">
+                    {item.currentCost != null ? (
+                      <span className="text-xs font-medium text-foreground tabular-nums">
+                        {fmtCost(item.currentCost, item.unit)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/60">—</span>
+                    )}
+                  </td>
+
+                  {/* Alert Threshold */}
+                  <td className="px-3 py-3.5 text-right text-xs text-muted-foreground tabular-nums">
+                    {item.low_stock_threshold !== null ? (
+                      <span>
+                        {item.low_stock_threshold}{" "}
+                        <span className="text-[10px] uppercase">{item.unit}</span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+
+                  {/* Runway / Days Left */}
+                  <td className="px-3 py-3.5 text-right">
+                    <DaysRemainingBadge
+                      stock={item.stock}
+                      avgDailyConsumption={item.avgDailyConsumption}
+                    />
+                  </td>
+
+                  {/* Quick Actions */}
+                  <td className="px-4 py-3.5 text-right">
+                    <ItemActions
+                      item={item}
+                      cattle={cattle}
+                      onOptimisticConsume={(qty) =>
+                        updateOptimistic({ id: item.id, delta: qty })
+                      }
+                    />
+                  </td>
+
+                  {/* Edit / Archive options */}
+                  <td className="py-3.5 pr-4 pl-1 text-right">
+                    <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                      <EditItemDialog item={item} />
+                      <ArchiveItemButton
+                        id={item.id}
+                        name={item.name}
+                        isDiscontinued={item.is_discontinued ?? false}
                       />
-                    )}
-                    <span className="font-medium truncate max-w-[180px] block">{item.name}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-                      CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE.other
-                    )}
-                  >
-                    {item.category}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <span
-                    className={cn(
-                      "font-semibold tabular-nums",
-                      isOut
-                        ? "text-destructive"
-                        : isLow
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-foreground"
-                    )}
-                  >
-                    {item.stock.toLocaleString("en-IN", { maximumFractionDigits: 2 })}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {item.unit}
-                    </span>
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right text-muted-foreground text-xs tabular-nums">
-                  {item.currentCost != null
-                    ? fmtCost(item.currentCost, item.unit)
-                    : "—"}
-                </td>
-                <td className="px-4 py-3 text-right text-muted-foreground">
-                  {item.low_stock_threshold !== null
-                    ? `${item.low_stock_threshold} ${item.unit}`
-                    : "—"}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <DaysRemainingBadge
-                    stock={item.stock}
-                    avgDailyConsumption={item.avgDailyConsumption}
-                  />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <ItemActions
-                    item={item}
-                    cattle={cattle}
-                    onOptimisticConsume={(qty) =>
-                      updateOptimistic({ id: item.id, delta: qty })
-                    }
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <EditItemDialog item={item} />
-                    <ArchiveItemButton id={item.id} name={item.name} isDiscontinued={item.is_discontinued ?? false} />
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-﻿import { Wheat, PackageOpen, AlertTriangle, ArrowRight } from "lucide-react";
+import { Wheat, PackageOpen, AlertTriangle, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";

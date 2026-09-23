@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -154,20 +154,36 @@ export function RecipesSection({
             return (
               <div
                 key={recipe.id}
-                className="overflow-hidden rounded-xl border border-border bg-card"
+                className={cn(
+                  "overflow-hidden rounded-2xl border bg-card shadow-card transition-all",
+                  recipe.is_active ? "border-emerald-500/40 dark:border-emerald-500/30" : "border-border/80"
+                )}
               >
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+                  className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left hover:bg-muted/30 transition-colors"
                   onClick={() => setExpandedId(expanded ? null : recipe.id)}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950">
-                      <FlaskConical className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <div className="flex items-center gap-3.5">
+                    <div className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                      recipe.is_active
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300/50 dark:border-emerald-800"
+                        : "bg-muted text-muted-foreground border border-border"
+                    )}>
+                      <FlaskConical className="h-4.5 w-4.5" />
                     </div>
                     <div>
-                      <p className="font-medium">{recipe.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-bold text-base tracking-tight text-foreground">{recipe.name}</p>
+                        {recipe.is_active && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            {tr.active_recipe}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground font-medium mt-0.5">
                         {tr.ingredients_summary
                           .replace("{{n}}", String(recipe.ingredients.length))
                           .replace("{{qty}}", String(recipe.output_qty))
@@ -175,20 +191,22 @@ export function RecipesSection({
                       </p>
                     </div>
                   </div>
-                  {expanded
-                    ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  <div className="flex items-center gap-2">
+                    {expanded
+                      ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </div>
                 </button>
 
                 {expanded && (
-                  <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
-                    <div className="rounded-lg border border-border overflow-hidden">
-                      <div className="bg-muted/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="border-t border-border/70 px-5 pb-5 pt-3.5 space-y-3.5 bg-muted/5">
+                    <div className="rounded-xl border border-border/70 overflow-hidden bg-background">
+                      <div className="bg-muted/40 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/60">
                         {tr.per_batch
                           .replace("{{qty}}", String(recipe.output_qty))
                           .replace("{{unit}}", recipe.output_unit)}
                       </div>
-                      <div className="divide-y divide-border">
+                      <div className="divide-y divide-border/60">
                         {recipe.ingredients.map((ing, idx) => {
                           const pct = totalIngWeight > 0
                             ? ((ing.qty_per_batch / totalIngWeight) * 100).toFixed(1)
@@ -201,28 +219,28 @@ export function RecipesSection({
 
                           return (
                             <div key={ing.item_id} className={cn(
-                              "flex items-center gap-3 px-3 py-2 text-sm",
-                              isBottleneck && "bg-amber-50/60 dark:bg-amber-950/20"
+                              "flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors",
+                              isBottleneck && "bg-amber-500/10 dark:bg-amber-950/25"
                             )}>
-                              <span className="flex-1 font-medium">
+                              <span className="flex-1 font-medium text-foreground">
                                 {ing.item_name}
                                 {isBottleneck && (
-                                  <span className="ml-2 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                                  <span className="ml-2 inline-flex text-xs font-semibold uppercase tracking-wider text-amber-700 bg-amber-100 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-300/40 dark:border-amber-800">
                                     {tr.bottleneck}
                                   </span>
                                 )}
                               </span>
-                              <span className="tabular-nums text-muted-foreground">
+                              <span className="tabular-nums text-muted-foreground font-medium">
                                 {ing.qty_per_batch} {ing.item_unit}
                               </span>
-                              <span className="w-10 text-right text-xs text-muted-foreground">{pct}%</span>
+                              <span className="w-12 text-right text-xs text-muted-foreground tabular-nums">{pct}%</span>
                               <span className={cn(
-                                "text-xs rounded px-1.5 py-0.5",
+                                "text-xs rounded-md px-2 py-0.5 font-semibold border",
                                 batches === 0
-                                  ? "bg-destructive/10 text-destructive"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800"
                                   : batches < 3
-                                  ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
-                                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
                               )}>
                                 {tr.batches_left.replace("{{n}}", String(batches))}
                               </span>
@@ -233,10 +251,10 @@ export function RecipesSection({
                     </div>
 
                     {recipe.notes && (
-                      <p className="text-xs text-muted-foreground">{recipe.notes}</p>
+                      <p className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">{recipe.notes}</p>
                     )}
 
-                    <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           type="button"

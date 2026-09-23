@@ -1,30 +1,32 @@
-import { Suspense } from "react";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { getDictionary } from "@/i18n/getDictionary";
 import { cookies } from "next/headers";
 import type { Locale } from "@/i18n/getDictionary";
-import { getDashboardStats, getRecentActivity } from "@/lib/supabase/queries/dashboard";
-import { getLiveHerdValuation } from "@/lib/supabase/queries/valuation";
-import { getSmartInsights, getPortfolioHealthScore } from "@/lib/supabase/queries/analytics";
-import { Beef, CircleDollarSign, TrendingUp, Wallet, ArrowRight } from "lucide-react";
+import { DashboardDataService } from "@/lib/services/dashboard.service";
+import { AnalyticsAggregationService } from "@/lib/analytics/aggregation-service";
+import type { OperationalAlertItem } from "@/lib/analytics/types";
+import type { AttentionItem } from "@/components/dashboard/CommandCenterBanner";
 import Link from "next/link";
-import { fmtBDT } from "@/lib/format";
-import { cn } from "@/lib/utils";
-
-// Components
 import { DashboardHero } from "@/components/dashboard/DashboardHero";
-import { StatCard } from "@/components/shared/StatCard";
-import { LiveHerdValueCard } from "@/components/dashboard/LiveHerdValueCard";
-import { QuickActionsBar } from "@/components/dashboard/QuickActionsBar";
+import { EnterpriseDashboard } from "@/components/dashboard/EnterpriseDashboard";
+import { EidCountdownCard } from "@/components/dashboard/EidCountdownCard";
 import { TodayTasksCard } from "@/components/dashboard/TodayTasksCard";
-import { InsightsPanel } from "@/components/dashboard/InsightsPanel";
-import { CashBalanceCard } from "@/components/dashboard/CashBalanceCard";
 import { FarmFeedSummaryCard } from "@/components/dashboard/FarmFeedSummaryCard";
 import { CashFlowForecastCard } from "@/components/dashboard/CashFlowForecastCard";
-import { FarmAdvisorPanel } from "@/components/dashboard/FarmAdvisorPanel";
-import { EidCountdownCard } from "@/components/dashboard/EidCountdownCard";
+import { CashBalanceCard } from "@/components/dashboard/CashBalanceCard";
 
 export const revalidate = 0; // Ensures fresh data for the dashboard
+
+/** Maps the backend AlertEngine output into the CommandCenterBanner UI format */
+function toAttentionItems(alerts: OperationalAlertItem[]): AttentionItem[] {
+  return alerts.slice(0, 6).map((a) => ({
+    id: a.id,
+    type: a.severity === "high" ? "critical" : a.severity === "medium" ? "warning" : "info",
+    title: a.title,
+    subtitle: a.description,
+    href: a.actionUrl ?? "/dashboard",
+  }));
+}
 
 export default async function DashboardPage() {
   const supabase = await getServerClient();
@@ -38,126 +40,53 @@ export default async function DashboardPage() {
       <div className="flex flex-col items-center justify-center h-[50vh] text-center space-y-4">
         <h2 className="text-2xl font-bold tracking-tight">No Business Found</h2>
         <p className="text-muted-foreground">Please create or join a business to view the dashboard.</p>
-        <Link href="/onboarding" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90">
+        <Link
+          href="/onboarding"
+          className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90 transition-all"
+        >
           Go to Onboarding
         </Link>
       </div>
     );
   }
 
-  // Fetch all dashboard data in parallel
-  const [stats, activities, valuation, insights, healthScore] = await Promise.all([
-    getDashboardStats(supabase, businessId),
-    getRecentActivity(supabase, businessId, t),
-    getLiveHerdValuation(supabase, businessId),
-    getSmartInsights(supabase, businessId, t),
-    getPortfolioHealthScore(supabase, businessId),
-  ]);
+  // Fetch unified dashboard payload through the centralized Dashboard Data Service
+  const dashboardData = await DashboardDataService.getUnifiedDashboardData(supabase, businessId, t);
+  const { stats, activities, valuation, insights, healthScore, monthlyPoints, trends } = dashboardData;
+
+  // Wire the AlertEngine + analytics pipeline for the Command Center banner
+  let attentionItems: AttentionItem[] | undefined;
+  try {
+    const execData = await AnalyticsAggregationService.getExecutiveDashboardData(supabase, businessId, "ceo");
+    attentionItems = toAttentionItems(execData.alerts);
+  } catch {
+    // Fall back to hiding the banner when analytics are unavailable
+    attentionItems = undefined;
+  }
 
   return (
-    <div className="space-y-6 pb-10">
-      
-      {/* 1. Dashboard Hero (Greeting & Net P&L Summary) */}
-      <DashboardHero stats={stats} t={t} locale={locale} />
-      
-      {/* 2. Top-level Overview Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-fade-in-up delay-75">
-        <StatCard
-          label={t.dashboard.active_cattle}
-          value={stats.totalCattle.toString()}
-          icon={Beef}
-          subtext="Currently in farm"
-          href="/dashboard/cattle"
-        />
-        <StatCard
-          label="Cost Basis (Sold)"
-          value={fmtBDT(stats.totalInvestment)}
-          icon={Wallet}
-          subtext="Total realized costs"
-          accentColor="blue"
-        />
-        <StatCard
-          label={t.dashboard.total_sales}
-          value={fmtBDT(stats.totalSales)}
-          icon={CircleDollarSign}
-          subtext="Total revenue"
-          accentColor="amber"
-        />
-        <StatCard
-          label="Net Realized P&L"
-          value={(stats.netProfitLoss > 0 ? "+" : "") + fmtBDT(stats.netProfitLoss)}
-          icon={TrendingUp}
-          subtext="Revenue minus realized costs"
-          positive={stats.netProfitLoss > 0 ? true : stats.netProfitLoss < 0 ? false : undefined}
-        />
-      </div>
+    <div className="space-y-6 pb-12">
+      {/* 1. Executive Hero Header — global farm health pulse */}
+      <DashboardHero stats={stats} healthScore={healthScore} valuation={valuation} t={t} locale={locale} />
 
-      {/* 3. Cash Balance and Live Herd Valuation (What-If) side-by-side */}
-      <div className={cn(
-        "grid gap-6 animate-fade-in-up delay-150",
-        (valuation.activeCattleCount > 0 && valuation.marketPricePerKg > 0) ? "lg:grid-cols-2" : "lg:grid-cols-1"
-      )}>
-        <CashBalanceCard />
-        <LiveHerdValueCard valuation={valuation} />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-12 animate-fade-in-up delay-150">
-        
-        {/* Main Column (Left/Center) */}
-        <div className="space-y-6 lg:col-span-8">
-          <QuickActionsBar t={t} />
-          <TodayTasksCard />
-
-          <div className="grid gap-6 sm:grid-cols-2">
-            <FarmFeedSummaryCard />
-            <CashFlowForecastCard />
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold tracking-tight">{t.dashboard.recent_activity}</h2>
-              <Link href="/dashboard/settings/activity" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
-                View All <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-            
-            {activities.length > 0 ? (
-              <div className="rounded-xl border bg-card">
-                <div className="divide-y">
-                  {activities.map((activity) => (
-                    <div key={activity.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
-                      <div>
-                        <p className="font-medium">{activity.label}</p>
-                        <p className="text-sm text-muted-foreground">{activity.detail}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(activity.date).toLocaleDateString(locale, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric"
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">
-                <p>No recent activity</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar Column (Right) */}
-        <div className="space-y-6 lg:col-span-4">
-          <EidCountdownCard />
-          <FarmAdvisorPanel />
-          <InsightsPanel insights={insights} t={t} />
-        </div>
-      </div>
+      {/* 2. Enterprise Operational Command Center Experience */}
+      <EnterpriseDashboard
+        stats={stats}
+        activities={activities}
+        valuation={valuation}
+        insights={insights}
+        healthScore={healthScore}
+        monthlyPoints={monthlyPoints}
+        trends={trends}
+        attentionItems={attentionItems}
+        todayTasksSlot={<TodayTasksCard />}
+        farmFeedSummarySlot={<FarmFeedSummaryCard />}
+        cashFlowForecastSlot={<CashFlowForecastCard />}
+        eidCountdownSlot={<EidCountdownCard />}
+        cashBalanceSlot={<CashBalanceCard />}
+        t={t}
+        locale={locale}
+      />
     </div>
   );
 }

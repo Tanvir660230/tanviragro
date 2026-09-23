@@ -5,6 +5,8 @@ import { createClient, type ServerClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { computeFIFOUnitCost, getItemStock as getItemStockShared } from "@/lib/inventory-fifo";
+import { AdjustmentEngine } from "@/lib/inventory/adjustment-engine";
+import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
 
 export type InventoryFormState =
   | { error?: string; success?: boolean; warning?: string }
@@ -78,6 +80,48 @@ export async function createInventoryItem(
 
   revalidatePath("/dashboard/inventory");
   revalidateTag("accounting", { expire: 0 });
+  return { success: true };
+}
+
+/** Stock adjustment — physical count reconciliation */
+export async function adjustStock(
+  _prevState: InventoryFormState,
+  formData: FormData
+): Promise<InventoryFormState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const item_id = (formData.get("item_id") as string)?.trim();
+  const adjustedQty = parseFloat(formData.get("adjusted_qty") as string);
+  const reason = (formData.get("reason") as string) || "correction";
+  const recorded_at = (formData.get("recorded_at") as string) || new Date().toISOString();
+  const notes = (formData.get("notes") as string)?.trim() || null;
+
+  if (!item_id) return { error: "Item ID is required" };
+  if (isNaN(adjustedQty) || adjustedQty < 0) return { error: "Valid adjusted quantity is required" };
+
+  const currentStock = await CentralInventoryRepository.getItemStockOnHand(supabase, item_id);
+  const estimatedCost = await CentralInventoryRepository.getEstimatedFifoUnitCost(supabase, item_id, 1);
+
+  const adjustment = AdjustmentEngine.processAdjustment(
+    { itemId: item_id, adjustedQty, reason: reason as any, recordedAt: recorded_at, notes: notes || undefined },
+    currentStock,
+    estimatedCost
+  );
+
+  const { error } = await supabase.from("inventory_transactions").insert({
+    item_id,
+    type: adjustment.transactionType,
+    qty: adjustment.adjustmentQty,
+    unit_cost: adjustment.unitCost,
+    recorded_at,
+    notes: adjustment.notes,
+  });
+
+  if (error) return { error: "Failed to record stock adjustment" };
+
+  revalidatePath("/dashboard/inventory");
   return { success: true };
 }
 

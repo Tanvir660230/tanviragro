@@ -33,7 +33,7 @@ export function BulkCostClient() {
     setRows(prev => prev.filter(r => r.id !== id));
   };
 
-  const updateRow = (id: string, field: keyof CostRow, value: any) => {
+  const updateRow = <K extends keyof CostRow>(id: string, field: K, value: CostRow[K]) => {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
 
@@ -57,7 +57,7 @@ export function BulkCostClient() {
 
     const payload = rows.map(r => ({
       ...r,
-      amount: parseFloat(r.amount as any) || 0
+      amount: parseFloat(String(r.amount)) || 0
     }));
 
     for (const row of payload) {
@@ -142,7 +142,7 @@ export function BulkCostClient() {
                     {/* Category */}
                     <div className="space-y-1 mt-2 md:mt-0">
                       <Label className="text-xs uppercase text-muted-foreground">Category *</Label>
-                      <Select value={row.category} onValueChange={(v) => updateRow(row.id, "category", v)}>
+                      <Select value={row.category} onValueChange={(v) => updateRow(row.id, "category", v || "")}>
                         <SelectTrigger className="h-9 mt-1 bg-background">
                           <SelectValue placeholder="Select..." />
                         </SelectTrigger>
@@ -167,7 +167,7 @@ export function BulkCostClient() {
                           step="0.01"
                           required
                           value={row.amount || ""}
-                          onChange={(e) => updateRow(row.id, "amount", e.target.value)}
+                          onChange={(e) => updateRow(row.id, "amount", parseFloat(e.target.value) || 0)}
                           className="h-9 pl-7 font-medium bg-background"
                           placeholder="0.00"
                         />

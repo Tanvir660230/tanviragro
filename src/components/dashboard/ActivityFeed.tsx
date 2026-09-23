@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import type { ActivityItem, ActivityType } from "@/lib/supabase/queries/dashboard";

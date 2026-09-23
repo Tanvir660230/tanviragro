@@ -10,12 +10,23 @@ export const metadata = {
   title: "Purchase History | Tanvir Agro",
 };
 
+type PurchaseTx = {
+  id: string;
+  item_id: string;
+  qty: number;
+  unit_cost: number | null;
+  recorded_at: string;
+  notes: string | null;
+  created_at: string;
+  inventory_items: { business_id: string; name: string; unit: string } | null;
+};
+
 type MemoGroup = {
   date: string;
   supplier: string;
   itemCount: number;
   totalCost: number;
-  transactions: any[];
+  transactions: PurchaseTx[];
 };
 
 export default async function PurchaseHistoryPage() {

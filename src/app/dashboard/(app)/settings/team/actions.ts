@@ -1,7 +1,11 @@
 "use server";
 
-import { revalidatePath , revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getBusinessContext } from "@/lib/context/business-context";
+import { requirePermission } from "@/lib/auth/permissions";
+import { assertResourceOwnership } from "@/lib/auth/ownership";
+import { PERMISSIONS } from "@/constants/roles";
 import type { UserRole } from "@/types/database";
 
 async function getAdminSupabase() {
@@ -19,111 +23,100 @@ export async function inviteTeamMember(
   _prev: TeamFormState,
   formData: FormData
 ): Promise<TeamFormState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.TEAM_MANAGE);
 
-  const email = (formData.get("email") as string)?.trim().toLowerCase();
-  const role  = formData.get("role") as string;
+    const email = (formData.get("email") as string)?.trim().toLowerCase();
+    const role = formData.get("role") as string;
 
-  if (!email || !email.includes("@")) return { error: "Enter a valid email address" };
-  if (!["manager", "worker"].includes(role)) return { error: "Select a valid role" };
+    if (!email || !email.includes("@")) return { error: "Enter a valid email address" };
+    if (!["manager", "worker"].includes(role)) return { error: "Select a valid role" };
 
-  // Get business owned by the current user
-  const { data: biz } = await supabase
-    .from("businesses")
-    .select("id, name")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  if (!biz) return { error: "No business found. Set up your business first." };
-
-  // Invite via Supabase admin API
-  const admin = await getAdminSupabase();
-  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { role, business_id: biz.id },
-    redirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace("supabase.co", "vercel.app") ?? ""}/auth/callback`,
-  });
-
-  if (inviteErr) return { error: inviteErr.message };
-
-  // Add to business_users
-  if (invited.user) {
-    await supabase.from("business_users").upsert({
-      business_id: biz.id,
-      user_id: invited.user.id,
-      role: role as UserRole,
+    // Invite via Supabase admin API
+    const admin = await getAdminSupabase();
+    const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
+      data: { role, business_id: ctx.businessId },
+      redirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace("supabase.co", "vercel.app") ?? ""}/auth/callback`,
     });
-  }
 
-  revalidatePath("/dashboard/settings/team");
-  return { success: `Invitation sent to ${email}` };
+    if (inviteErr) return { error: inviteErr.message };
+
+    // Add to business_users
+    if (invited.user) {
+      await supabase.from("business_users").upsert({
+        business_id: ctx.businessId,
+        user_id: invited.user.id,
+        role: role as UserRole,
+      });
+    }
+
+    revalidatePath("/dashboard/settings/team");
+    return { success: `Invitation sent to ${email}` };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to invite team member" };
+  }
 }
 
 export async function updateMemberRole(
   memberId: string,
   role: UserRole
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.TEAM_MANAGE);
 
-  const { data: biz } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (!biz) return { error: "Business not found" };
+    const member = await assertResourceOwnership<{ id: string; user_id: string; business_id: string }>(
+      supabase,
+      "business_users",
+      memberId,
+      ctx.businessId
+    );
 
-  const { data: member } = await supabase
-    .from("business_users")
-    .select("user_id, business_id")
-    .eq("id", memberId)
-    .maybeSingle();
-  if (!member || member.business_id !== biz.id) return { error: "Unauthorized" };
+    const { error } = await supabase
+      .from("business_users")
+      .update({ role })
+      .eq("id", memberId);
 
-  const { error } = await supabase
-    .from("business_users")
-    .update({ role })
-    .eq("id", memberId);
+    if (error) return { error: "Failed to update role" };
 
-  if (error) return { error: "Failed to update role" };
+    // Also update user_metadata via admin API
+    if (member.user_id) {
+      const admin = await getAdminSupabase();
+      await admin.auth.admin.updateUserById(member.user_id, { user_metadata: { role } });
+    }
 
-  // Also update user_metadata via admin API
-  const admin = await getAdminSupabase();
-  if (member.user_id) {
-    await admin.auth.admin.updateUserById(member.user_id, { user_metadata: { role } });
+    revalidatePath("/dashboard/settings/team");
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to update member role" };
   }
-
-  revalidatePath("/dashboard/settings/team");
-  return {};
 }
 
 export async function removeMember(memberId: string): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.TEAM_MANAGE);
 
-  const { data: biz } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (!biz) return { error: "Business not found" };
+    await assertResourceOwnership(
+      supabase,
+      "business_users",
+      memberId,
+      ctx.businessId
+    );
 
-  const { data: member } = await supabase
-    .from("business_users")
-    .select("business_id")
-    .eq("id", memberId)
-    .maybeSingle();
-  if (!member || member.business_id !== biz.id) return { error: "Unauthorized" };
+    const { error } = await supabase
+      .from("business_users")
+      .delete()
+      .eq("id", memberId);
 
-  const { error } = await supabase
-    .from("business_users")
-    .delete()
-    .eq("id", memberId);
-
-  if (error) return { error: "Failed to remove member" };
-  revalidatePath("/dashboard/settings/team");
-  return {};
+    if (error) return { error: "Failed to remove member" };
+    revalidatePath("/dashboard/settings/team");
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to remove member" };
+  }
 }

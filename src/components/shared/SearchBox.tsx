@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -212,7 +212,10 @@ export function SearchBox() {
 
   // Focus input when opened
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 30);
+    if (open) {
+      const t = setTimeout(() => inputRef.current?.focus(), 30);
+      return () => clearTimeout(t);
+    }
   }, [open]);
 
   const hasResults = navItems.length > 0;
@@ -276,19 +279,20 @@ export function SearchBox() {
     <div ref={containerRef} className="relative w-full">
       {/* Trigger button */}
       <button
-        className="group w-full h-10 flex items-center gap-3 rounded-xl border border-border bg-card px-4 text-sm shadow-card hover:shadow-md hover:border-primary/25 transition-all duration-150"
+        type="button"
+        className="group w-full h-9 flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/35 hover:bg-muted/60 px-3 text-xs sm:text-sm shadow-xs hover:border-border transition-all duration-150 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setOpen(true)}
         aria-label={s.placeholder}
       >
-        <Search className="h-[18px] w-[18px] shrink-0 text-muted-foreground/50 group-hover:text-primary/60 transition-colors" />
-        <span className="flex-1 text-left text-muted-foreground/70 text-[13px]">
+        <Search className="h-4 w-4 shrink-0 text-muted-foreground/60 group-hover:text-primary transition-colors" />
+        <span className="flex-1 text-left text-muted-foreground text-xs sm:text-sm font-medium truncate">
           {s.placeholder}
         </span>
         <div className="flex items-center gap-1 shrink-0">
-          <kbd className="rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-xs leading-none text-muted-foreground/50">
+          <kbd className="rounded-md border border-border/70 bg-background/80 px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground/80 shadow-xs">
             Ctrl
           </kbd>
-          <kbd className="rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-xs leading-none text-muted-foreground/50">
+          <kbd className="rounded-md border border-border/70 bg-background/80 px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground/80 shadow-xs">
             K
           </kbd>
         </div>
@@ -296,18 +300,18 @@ export function SearchBox() {
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute top-full left-0 mt-2 w-full md:min-w-[460px] rounded-xl bg-card border border-border shadow-2xl overflow-hidden z-50">
+        <div className="absolute top-full left-0 mt-2 w-full md:min-w-[480px] rounded-2xl bg-card border border-border/80 shadow-floating overflow-hidden z-50 animate-scale-in">
           {/* Active search input */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-border/60">
-            <Search className="h-[18px] w-[18px] shrink-0 text-primary/60" />
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border/60 bg-muted/20">
+            <Search className="h-4 w-4 shrink-0 text-primary" />
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={s.input_placeholder}
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 text-foreground"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 text-foreground font-medium"
             />
-            <kbd className="rounded-lg border border-border/60 bg-muted/60 px-2 py-1 text-xs font-mono text-muted-foreground/60 leading-none">
+            <kbd className="rounded-md border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/70 leading-none">
               ESC
             </kbd>
           </div>

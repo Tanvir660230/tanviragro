@@ -1,108 +1,164 @@
-import { PageHeader } from "@/components/shared/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
-import { buttonVariants } from "@/components/ui/button";
-import { CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react";
+import { ArrowLeft, ShieldCheck, AlertTriangle } from "lucide-react";
+import { StatementReportHeader } from "@/components/finance/finance-ui";
 
-export const metadata: Metadata = { title: "Trial Balance" };
+export const metadata: Metadata = { title: "Trial Balance | Tanvir Agro Accounting" };
 
 function fmt(n: number) {
-  return n > 0 ? `৳${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "—";
+  return n > 0 ? `৳${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
 }
 
-const SECTION_LABELS: Record<string, string> = {
-  assets: "Assets",
-  liabilities: "Liabilities",
-  equity: "Equity",
-  revenue: "Revenue",
-  expenses: "Expenses",
+const SECTION_METADATA: Record<string, { label: string; badge: string; color: string }> = {
+  assets: { label: "1000 · Assets", badge: "Debit Normal", color: "text-blue-700 dark:text-blue-400 bg-blue-500/10" },
+  liabilities: { label: "2000 · Liabilities", badge: "Credit Normal", color: "text-amber-700 dark:text-amber-400 bg-amber-500/10" },
+  equity: { label: "3000 · Partner Equity", badge: "Credit Normal", color: "text-purple-700 dark:text-purple-400 bg-purple-500/10" },
+  revenue: { label: "4000 · Operating Revenue", badge: "Credit Normal", color: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10" },
+  expenses: { label: "5000-6000 · Cost & Expenses", badge: "Debit Normal", color: "text-rose-700 dark:text-rose-400 bg-rose-500/10" },
 };
 
 export default async function TrialBalancePage() {
-   
   const supabase = await createClient();
   const { trialBalance: tb, asOf } = await getAccountingData(supabase);
 
   const sections = ["assets", "liabilities", "equity", "revenue", "expenses"] as const;
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Back link */}
+      <div className="print:hidden">
+        <Link
+          href="/dashboard/accounting"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Accounting Hub
+        </Link>
+      </div>
+
+      {/* Statement Header */}
+      <StatementReportHeader
         title="Trial Balance"
-        subtitle={`As of ${new Date(asOf).toLocaleDateString("en-US", { dateStyle: "long" })}`}
-        back="/dashboard/accounting"
+        subtitle="Chart of Accounts Ledger Audit · Double-Entry Integrity"
+        asOfDate={asOf}
+        isAuditedBalanced={tb.isBalanced}
       />
 
-      {/* Status */}
-      <div className={`flex items-center gap-3 rounded-xl p-4 ring-1 ${
-        tb.isBalanced
-          ? "bg-emerald-50 dark:bg-emerald-950/30 ring-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-          : "bg-amber-50 dark:bg-amber-950/30 ring-amber-500/30 text-amber-700 dark:text-amber-400"
-      }`}>
-        {tb.isBalanced
-          ? <CheckCircle2 className="h-5 w-5 shrink-0" />
-          : <AlertCircle className="h-5 w-5 shrink-0" />}
-        <p className="text-sm font-medium">
-          {tb.isBalanced
-            ? "Books are balanced — Total Debits equal Total Credits"
-            : `Discrepancy of ৳${Math.abs(tb.totalDebit - tb.totalCredit).toLocaleString("en-IN")} detected`}
-        </p>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Total Debits</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">
+            ৳{tb.totalDebit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Assets &amp; Expense debits</p>
+        </div>
+        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.03] p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">Total Credits</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">
+            ৳{tb.totalCredit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Liabilities, Equity &amp; Revenue</p>
+        </div>
+        <div className={`rounded-2xl border p-4 shadow-sm ${
+          tb.isBalanced ? "border-emerald-500/30 bg-emerald-500/[0.05]" : "border-amber-500/30 bg-amber-500/[0.05]"
+        }`}>
+          <p className={`text-[11px] font-bold uppercase tracking-wider ${
+            tb.isBalanced ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"
+          }`}>Balance Variance</p>
+          <p className={`text-2xl font-bold font-mono tabular-nums mt-1 ${
+            tb.isBalanced ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"
+          }`}>
+            ৳{Math.abs(tb.totalDebit - tb.totalCredit).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {tb.isBalanced ? "Zero variance (balanced)" : "Audit discrepancy"}
+          </p>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl bg-card border border-border/60 shadow-card overflow-x-auto max-w-3xl">
-        <table className="w-full text-sm min-w-[400px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th className="py-3 px-4 text-left font-semibold">Account</th>
-              <th className="py-3 px-4 text-right font-semibold">Debit</th>
-              <th className="py-3 px-4 text-right font-semibold">Credit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sections.map((section) => {
-              const sectionLines = tb.lines.filter((l) => l.section === section);
-              if (sectionLines.length === 0) return null;
-              return (
-                <>
-                  <tr key={`header-${section}`} className="border-b border-border bg-muted/20">
-                    <td colSpan={3} className="py-2 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      {SECTION_LABELS[section]}
-                    </td>
-                  </tr>
-                  {sectionLines.map((line) => (
-                    <tr key={line.code} className="border-b border-border/50 hover:bg-muted/20">
-                      <td className="py-2.5 px-4">
-                        <span className="font-mono text-xs text-muted-foreground mr-2">{line.code}</span>
-                        {line.name}
+      {/* Trial Balance Data Table */}
+      <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/80 bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <th className="py-3.5 px-5 text-left font-bold">Account Name &amp; Code</th>
+                <th className="py-3.5 px-5 text-right font-bold w-44">Debit (৳)</th>
+                <th className="py-3.5 px-5 text-right font-bold w-44">Credit (৳)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {sections.map((section) => {
+                const sectionLines = tb.lines.filter((l) => l.section === section);
+                if (sectionLines.length === 0) return null;
+                const meta = SECTION_METADATA[section];
+
+                return (
+                  <FragmentWrapper key={`section-wrapper-${section}`}>
+                    <tr className="bg-muted/30 border-b border-border/70">
+                      <td colSpan={3} className="py-2.5 px-5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                            {meta?.label || section}
+                          </span>
+                          {meta?.badge && (
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.color}`}>
+                              {meta.badge}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="py-2.5 px-4 text-right tabular-nums">{fmt(line.debit)}</td>
-                      <td className="py-2.5 px-4 text-right tabular-nums">{fmt(line.credit)}</td>
                     </tr>
-                  ))}
-                </>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-foreground/20 font-bold">
-              <td className="py-3 px-4">TOTALS</td>
-              <td className="py-3 px-4 text-right tabular-nums">
-                ৳{tb.totalDebit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-              </td>
-              <td className="py-3 px-4 text-right tabular-nums">
-                ৳{tb.totalCredit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+                    {sectionLines.map((line) => (
+                      <tr key={line.code} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-3 px-5">
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-mono text-xs px-2 py-0.5 rounded bg-muted/60 text-muted-foreground font-semibold border border-border/40">
+                              {line.code}
+                            </span>
+                            <span className="text-sm font-medium text-foreground">{line.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-5 text-right font-mono tabular-nums text-sm font-medium text-foreground">
+                          {fmt(line.debit)}
+                        </td>
+                        <td className="py-3 px-5 text-right font-mono tabular-nums text-sm font-medium text-foreground">
+                          {fmt(line.credit)}
+                        </td>
+                      </tr>
+                    ))}
+                  </FragmentWrapper>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-border/80 bg-muted/30 font-bold">
+                <td className="py-4 px-5 text-sm text-foreground uppercase tracking-wider">
+                  TOTAL AUDITED BALANCE
+                </td>
+                <td className="py-4 px-5 text-right font-mono tabular-nums text-base text-foreground font-bold">
+                  ৳{tb.totalDebit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td className="py-4 px-5 text-right font-mono tabular-nums text-base text-foreground font-bold">
+                  ৳{tb.totalCredit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        * Entries auto-derived from cattle purchases, sales, cost entries, inventory transactions, partner capital, and fixed asset depreciation.
+      {/* Footnote */}
+      <p className="text-xs text-muted-foreground text-center">
+        * Auto-derived from cattle purchases, livestock sales, operational cost entries, inventory adjustments, partner equity movements, and straight-line fixed asset depreciation schedules.
       </p>
     </div>
   );
+}
+
+function FragmentWrapper({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

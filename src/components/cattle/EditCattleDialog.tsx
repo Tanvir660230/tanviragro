@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,6 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertTriangle, Loader2, Pencil, Sparkles } from "lucide-react";
 import { updateCattle, type EditCattleFormState } from "@/app/dashboard/(app)/cattle/actions";
 import { toast } from "sonner";
+import { EnterpriseAnimalWizard } from "@/components/livestock/wizard/EnterpriseAnimalWizard";
+
 
 const COMMON_BREEDS = [
   "Brahman", "Crossbred", "Frieswal", "Hariana", "Indigenous (Deshi)",
@@ -341,33 +343,57 @@ function EditForm({
 
 export function EditCattleDialog({ cattle }: { cattle: CattleInfo }) {
   const [open, setOpen] = useState(false);
-  const [formKey, setFormKey] = useState(0);
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next) setFormKey((k) => k + 1);
-  };
+  const initialData = useMemo(() => ({
+    identification: {
+      name: "",
+      tagId: cattle.tag_id,
+      electronicId: "",
+      species: "cattle" as const,
+      breed: cattle.breed || "Indigenous (Deshi)",
+      gender: cattle.gender,
+      dob: cattle.dob || "",
+      photoUrl: null,
+    },
+    categoryStage: {
+      category: "fattening" as const,
+      isQurbaniTarget: false,
+      targetWeightKg: cattle.target_weight_kg ?? null,
+      expectedDailyGainKg: cattle.expected_daily_gain_kg ?? null,
+    },
+    origin: {
+      originType: "purchase" as const,
+      purchaseDate: cattle.purchase_date,
+      purchasePrice: cattle.purchase_price,
+      initialWeightKg: cattle.initial_weight_kg,
+      vendorId: null,
+      vendorName: "",
+      birthWeightKg: null,
+      damTag: "",
+      sireTag: "",
+    },
+    notes: cattle.notes || "",
+  }), [cattle]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        className={buttonVariants({ variant: "outline", size: "sm" })}
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
         aria-label="Edit cattle"
       >
         <Pencil className="mr-1.5 h-3.5 w-3.5" />
         Edit
-      </DialogTrigger>
+      </Button>
 
-      <DialogContent className="sm:max-w-md max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Cattle #{cattle.tag_id}</DialogTitle>
-        </DialogHeader>
-        <EditForm
-          cattle={cattle}
-          formKey={formKey}
-          onSuccess={() => setOpen(false)}
-        />
-      </DialogContent>
-    </Dialog>
+      <EnterpriseAnimalWizard
+        open={open}
+        onOpenChange={setOpen}
+        existingTagIds={cattle.existingTagIds}
+        initialData={initialData}
+        editAnimalId={cattle.id}
+      />
+    </>
   );
 }

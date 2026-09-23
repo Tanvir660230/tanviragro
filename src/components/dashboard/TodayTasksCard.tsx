@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { AlertTriangle, Scale, Package, Heart, ChevronRight, CheckCircle2 } from "lucide-react";
 import { getCachedTopBarAlerts } from "@/lib/supabase/topbar-alerts";
 import { getCachedBusinessId } from "@/lib/supabase/cached";

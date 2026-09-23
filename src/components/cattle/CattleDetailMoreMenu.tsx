@@ -22,10 +22,12 @@ import {
   undoMarkAsDeceased,
 } from "@/app/dashboard/(app)/cattle/actions";
 
+import type { CattleStatus } from "@/types/database";
+
 interface Props {
   cattleId:      string;
   tagId:         string;
-  status:        "active" | "sold" | "dead" | "stolen";
+  status:        CattleStatus;
   isQuarantined: boolean;
   isQurbani:     boolean;
 }

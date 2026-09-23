@@ -85,7 +85,7 @@ export function BulkPurchaseClient({ items, lastPrices = {} }: { items: Inventor
     setRows([...rows, createEmptyRow()]);
   }
 
-  function updateRow(id: string, field: keyof RowData, value: any) {
+  function updateRow<K extends keyof RowData>(id: string, field: K, value: RowData[K]) {
     setRows(prevRows => prevRows.map(r => r.id === id ? { ...r, [field]: value } : r));
   }
 
@@ -326,7 +326,7 @@ function ItemRow({ row, idx, items, lastPrices, updateRow, removeRow, canRemove 
   idx: number;
   items: InventoryItem[];
   lastPrices: Record<string, number>;
-  updateRow: (id: string, field: keyof RowData, value: any) => void;
+  updateRow: <K extends keyof RowData>(id: string, field: K, value: RowData[K]) => void;
   removeRow: (id: string) => void;
   canRemove: boolean;
 }) {
@@ -417,7 +417,7 @@ function ItemRow({ row, idx, items, lastPrices, updateRow, removeRow, canRemove 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs uppercase">Category</Label>
-                <Select value={row.newItemCategory} onValueChange={v => updateRow(row.id, "newItemCategory", v)}>
+                <Select value={row.newItemCategory} onValueChange={v => updateRow(row.id, "newItemCategory", v || "feed")}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>)}
@@ -426,7 +426,7 @@ function ItemRow({ row, idx, items, lastPrices, updateRow, removeRow, canRemove 
               </div>
               <div className="space-y-1">
                 <Label className="text-xs uppercase">Unit</Label>
-                <Select value={row.newItemUnit} onValueChange={v => updateRow(row.id, "newItemUnit", v)}>
+                <Select value={row.newItemUnit} onValueChange={v => updateRow(row.id, "newItemUnit", v || "kg")}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {UNITS.map(c => <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>)}
@@ -614,7 +614,7 @@ function ItemRow({ row, idx, items, lastPrices, updateRow, removeRow, canRemove 
   );
 }
 
-function XIcon(props: any) {
+function XIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
   );

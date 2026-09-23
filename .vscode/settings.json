@@ -1,8 +1,11 @@
 {
-    "chat.tools.terminal.autoApprove": {
-        "/^cd /d \"d:\\\\Final Website\\\\Tanvir Agro\" ; cmd /c \"npm run dev\"$/": {
-            "approve": true,
-            "matchCommandLine": true
-        }
+  "chat.tools.terminal.autoApprove": {
+    "/^cd /d \"d:\\\\Final Website\\\\Tanvir Agro\" ; cmd /c \"npm run dev\"$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
+  },
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore"
 }

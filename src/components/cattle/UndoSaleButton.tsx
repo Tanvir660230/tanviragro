@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition, useMemo } from "react";
 import { Undo2, Loader2, AlertTriangle } from "lucide-react";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { Receipt, ShoppingCart, Stethoscope, Tag } from "lucide-react";

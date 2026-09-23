@@ -205,20 +205,20 @@ export function SmartAlertsDropdown({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className={cn(
-          "relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+          "relative flex h-9 w-9 items-center justify-center rounded-xl transition-all cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
           hasCritical
-            ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+            ? "text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
             : totalCount > 0
-            ? "text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
-            : "text-muted-foreground hover:bg-muted"
+            ? "text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
         )}
         aria-label={totalCount > 0 ? `${totalCount} alerts` : "No alerts"}
       >
-        <Bell className="h-[18px] w-[18px]" />
+        <Bell className="h-4 w-4" />
         {totalCount > 0 && (
           <span
             className={cn(
-              "absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold text-white leading-none",
+              "absolute right-1 top-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[10px] font-bold text-white leading-none shadow-xs",
               hasCritical ? "bg-rose-500" : "bg-amber-500"
             )}
           >
@@ -229,10 +229,10 @@ export function SmartAlertsDropdown({
 
       <PopoverContent
         align="end"
-        className="w-[calc(100vw-2rem)] sm:w-[360px] p-0 shadow-floating border-border/60 overflow-hidden"
+        className="w-[calc(100vw-2rem)] sm:w-[380px] p-0 rounded-2xl shadow-floating border-border/80 overflow-hidden animate-scale-in"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/30">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/20">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-muted-foreground" />
             <h3 className="font-semibold text-sm">{sa.title}</h3>
@@ -240,10 +240,10 @@ export function SmartAlertsDropdown({
           {totalCount > 0 && (
             <span
               className={cn(
-                "text-xs font-bold px-2 py-0.5 rounded-full",
+                "text-[11px] font-bold px-2 py-0.5 rounded-full",
                 hasCritical
-                  ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
-                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                  ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
               )}
             >
               {totalCount} active

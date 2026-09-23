@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -65,6 +66,58 @@ const FORECAST_MONTHS = 3;
 export function CashFlowForecast({ history }: Props) {
   const { t } = useTranslation();
 
+  const { chartData, projectedProfit, projectedProfitPositive } = useMemo(() => {
+    if (history.length < 2) {
+      return { chartData: [], projectedProfit: 0, projectedProfitPositive: true };
+    }
+
+    const revenues = history.map((h) => h.revenue);
+    const costs = history.map((h) => h.cost);
+
+    const forecastRevenues = forecastNext(revenues, FORECAST_MONTHS);
+    const forecastCosts = forecastNext(costs, FORECAST_MONTHS);
+    const forecastLabels = nextMonthLabels(FORECAST_MONTHS);
+
+    const historicalPoints = history.map((h) => ({
+      label: h.label,
+      revenue: h.revenue,
+      cost: h.cost,
+      netPL: h.revenue - h.cost,
+      isForecast: false,
+    }));
+
+    const forecastPoints = forecastLabels.map((label, i) => ({
+      label,
+      forecastRevenue: forecastRevenues[i],
+      forecastCost: forecastCosts[i],
+      forecastNetPL: forecastRevenues[i] - forecastCosts[i],
+      isForecast: true,
+    }));
+
+    const lastHist = historicalPoints[historicalPoints.length - 1];
+    const data = [
+      ...historicalPoints.map((p) => ({ ...p, forecastRevenue: undefined, forecastCost: undefined, forecastNetPL: undefined })),
+      {
+        label: forecastLabels[0],
+        revenue: lastHist.revenue,
+        cost: lastHist.cost,
+        netPL: lastHist.netPL,
+        forecastRevenue: forecastRevenues[0],
+        forecastCost: forecastCosts[0],
+        forecastNetPL: forecastRevenues[0] - forecastCosts[0],
+        isForecast: true,
+      },
+      ...forecastPoints.slice(1),
+    ];
+
+    const profit = forecastRevenues.reduce((s, r) => s + r, 0) - forecastCosts.reduce((s, c) => s + c, 0);
+    return {
+      chartData: data,
+      projectedProfit: profit,
+      projectedProfitPositive: profit >= 0,
+    };
+  }, [history]);
+
   if (history.length < 2) {
     return (
       <div className="rounded-xl bg-card p-5 border border-border/60 shadow-card">
@@ -78,52 +131,6 @@ export function CashFlowForecast({ history }: Props) {
       </div>
     );
   }
-
-  const revenues = history.map((h) => h.revenue);
-  const costs = history.map((h) => h.cost);
-
-  const forecastRevenues = forecastNext(revenues, FORECAST_MONTHS);
-  const forecastCosts = forecastNext(costs, FORECAST_MONTHS);
-  const forecastLabels = nextMonthLabels(FORECAST_MONTHS);
-
-  const historicalPoints = history.map((h) => ({
-    label: h.label,
-    revenue: h.revenue,
-    cost: h.cost,
-    netPL: h.revenue - h.cost,
-    isForecast: false,
-  }));
-
-  const forecastPoints = forecastLabels.map((label, i) => ({
-    label,
-    forecastRevenue: forecastRevenues[i],
-    forecastCost: forecastCosts[i],
-    forecastNetPL: forecastRevenues[i] - forecastCosts[i],
-    isForecast: true,
-  }));
-
-  // Bridge: the first forecast label carries both the last historical values (so the
-  // historical line visually extends to it) AND the first forecast values (so the
-  // forecast line originates there). Using forecastLabels[0] avoids the duplicate
-  // x-axis label that caused Recharts to collapse the bridge onto the last history tick.
-  const lastHist = historicalPoints[historicalPoints.length - 1];
-  const chartData = [
-    ...historicalPoints.map((p) => ({ ...p, forecastRevenue: undefined, forecastCost: undefined, forecastNetPL: undefined })),
-    {
-      label: forecastLabels[0],
-      revenue: lastHist.revenue,
-      cost: lastHist.cost,
-      netPL: lastHist.netPL,
-      forecastRevenue: forecastRevenues[0],
-      forecastCost: forecastCosts[0],
-      forecastNetPL: forecastRevenues[0] - forecastCosts[0],
-      isForecast: true,
-    },
-    ...forecastPoints.slice(1),
-  ];
-
-  const projectedProfit = forecastRevenues.reduce((s, r) => s + r, 0) - forecastCosts.reduce((s, c) => s + c, 0);
-  const projectedProfitPositive = projectedProfit >= 0;
 
   return (
     <div className="rounded-xl bg-card p-5 border border-border/60 shadow-card space-y-4">

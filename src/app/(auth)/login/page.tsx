@@ -1,8 +1,8 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { LoginForm } from "./LoginForm";
 
-export const metadata: Metadata = { title: "Login — Chowdhury Agro ERP" };
+export const metadata: Metadata = { title: "Login � Chowdhury Agro ERP" };
 
 const messages: Record<string, { text: string; type: "success" | "error" }> = {
   password_updated: { text: "Password updated successfully. Please sign in.", type: "success" },
@@ -22,7 +22,7 @@ export default async function LoginPage({
     <div className="flex min-h-svh flex-col items-center justify-center bg-mesh-light dark:bg-mesh-dark p-4">
       <div className="mb-8 flex flex-col items-center gap-2 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary shadow-lg">
-          <span className="text-2xl">🌿</span>
+          <span className="text-2xl">??</span>
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           Chowdhury Agro ERP

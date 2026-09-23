@@ -16,6 +16,7 @@ import {
   Trash2,
   ChevronRight,
   X,
+  FileText,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   addPartnerTransaction,
-  updatePartner,
   deletePartner,
   deletePartnerTransaction,
 } from "@/app/dashboard/(app)/partners/actions";
@@ -49,15 +49,8 @@ import type {
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { FileText } from "lucide-react";
+import { CapitalTimelineChart } from "@/components/partners/CapitalTimelineChart";
+import { EditPartnerProfileModal } from "@/components/partners/modals/EditPartnerProfileModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -945,7 +938,7 @@ export function PartnerProfileClient({
 
       {/* ── Edit Partner Modal ─────────────────────────────────────────── */}
       {editOpen && (
-        <EditModal
+        <EditPartnerProfileModal
           partner={p}
           totalInvested={acc.totalInvested}
           onClose={() => setEditOpen(false)}
@@ -955,273 +948,11 @@ export function PartnerProfileClient({
   );
 }
 
-// ── EditModal ─────────────────────────────────────────────────────────────────
 
-function EditModal({
-  partner: p,
-  totalInvested,
-  onClose,
-}: {
-  partner: Partner;
-  totalInvested: number;
-  onClose: () => void;
-}) {
-  const [partnerTypeField, setPartnerTypeField] = useState<PartnerType>(
-    p.partner_type ?? "capital"
-  );
-  const [shareModeField, setShareModeField] = useState<"auto" | "manual">(
-    p.share_mode ?? "auto"
-  );
-  const [bearsLossField, setBearsLossField] = useState(p.bears_loss ?? true);
-  const [state, action, pending] = useActionState(updatePartner, undefined);
 
-  useEffect(() => {
-    if (state?.success) {
-      toast.success("Partner updated");
-      onClose();
-    }
-  }, [state, onClose]);
 
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Edit Partner — {p.name}</DialogTitle>
-        </DialogHeader>
-        <form
-          action={(fd) => {
-            fd.set("partner_id", p.id);
-            fd.set("partner_type", partnerTypeField);
-            fd.set("share_mode", shareModeField);
-            action(fd);
-          }}
-          className="space-y-4"
-        >
-          <div className="space-y-1.5">
-            <Label>Name *</Label>
-            <Input name="name" required defaultValue={p.name} />
-          </div>
 
-          <div className="space-y-1.5">
-            <Label>Partner Type</Label>
-            <Select
-              value={partnerTypeField}
-              onValueChange={(v) => {
-                const type = v as PartnerType;
-                setPartnerTypeField(type);
-                if (type === "labor") setShareModeField("manual");
-                else if (type === "capital") setShareModeField("auto");
-              }}
-            >
-              <SelectTrigger>
-                <span className="truncate">
-                  {partnerTypeField === "capital" && "Capital Partner"}
-                  {partnerTypeField === "labor" && "Labor Partner"}
-                  {partnerTypeField === "hybrid" && "Capital + Labor"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="capital">Capital Partner</SelectItem>
-                <SelectItem value="labor">Labor Partner</SelectItem>
-                <SelectItem value="hybrid">Capital + Labor</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
 
-          {partnerTypeField !== "labor" && (
-            <div className="space-y-1.5">
-              <Label>Capital (৳)</Label>
-              <Input
-                name="investment_amount"
-                type="number"
-                min="0"
-                step="100"
-                defaultValue={totalInvested}
-              />
-              <p className="text-xs text-muted-foreground">
-                Use the Capital Ledger to add additional transactions.
-              </p>
-            </div>
-          )}
-
-          {partnerTypeField !== "capital" && (
-            <>
-              <div className="space-y-1.5">
-                <Label>Monthly Labor Value (৳)</Label>
-                <Input
-                  name="labor_value_monthly"
-                  type="number"
-                  min="0"
-                  step="500"
-                  defaultValue={p.labor_value_monthly ?? 0}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Cliff Period (months)</Label>
-                <Input
-                  name="cliff_months"
-                  type="number"
-                  min="0"
-                  step="1"
-                  defaultValue={p.cliff_months ?? 0}
-                />
-              </div>
-            </>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Share Mode</Label>
-            <div className="flex gap-2">
-              {(["auto", "manual"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setShareModeField(mode)}
-                  className={cn(
-                    "flex-1 rounded-lg border py-2 text-sm font-medium transition-colors",
-                    shareModeField === mode
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {mode === "auto" ? "Auto (Ratio-Based)" : "Manual %"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {shareModeField === "manual" && (
-            <div className="space-y-1.5">
-              <Label>Profit Share (%)</Label>
-              <Input
-                name="profit_share_pct"
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                defaultValue={p.profit_share_pct}
-              />
-            </div>
-          )}
-
-          {partnerTypeField !== "labor" && (
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <p className="text-sm font-medium">Bears Capital Loss</p>
-                <p className="text-xs text-muted-foreground">
-                  Participates in business losses
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                name="bears_loss"
-                value="true"
-                checked={bearsLossField}
-                onChange={(e) => setBearsLossField(e.target.checked)}
-                className="h-5 w-5 rounded border-gray-300 text-primary"
-              />
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Join Date</Label>
-            <Input name="joined_at" type="date" defaultValue={p.joined_at} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Notes</Label>
-            <Textarea
-              name="notes"
-              rows={2}
-              maxLength={500}
-              defaultValue={p.notes ?? ""}
-            />
-          </div>
-
-          {state?.error && (
-            <p className="text-sm text-destructive">{state.error}</p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── CapitalTimelineChart ──────────────────────────────────────────────────────
-
-function CapitalTimelineChart({
-  data,
-}: {
-  data: { date: string; balance: number }[];
-}) {
-  const chartData = data.map((d) => ({
-    label: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "2-digit",
-    }),
-    balance: Math.round(d.balance),
-  }));
-
-  const maxVal = Math.max(...chartData.map((d) => d.balance));
-  const isPositive = chartData[chartData.length - 1]?.balance >= 0;
-  const strokeColor = isPositive ? "#10b981" : "#ef4444";
-
-  return (
-    <ResponsiveContainer width="100%" height={160}>
-      <AreaChart
-        data={chartData}
-        margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
-      >
-        <defs>
-          <linearGradient id="capGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={strokeColor} stopOpacity={0.25} />
-            <stop offset="95%" stopColor={strokeColor} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 10, fill: "currentColor" }}
-          tickLine={false}
-          axisLine={false}
-          className="text-muted-foreground"
-        />
-        <YAxis hide domain={[0, maxVal * 1.1]} />
-        <Tooltip
-          formatter={(v) => [
-            `৳${Number(v ?? 0).toLocaleString("en-IN")}`,
-            "Balance",
-          ]}
-          contentStyle={{
-            fontSize: 12,
-            borderRadius: 8,
-            border: "1px solid hsl(var(--border))",
-            background: "hsl(var(--card))",
-            color: "hsl(var(--foreground))",
-          }}
-          labelStyle={{ fontWeight: 600, marginBottom: 2 }}
-        />
-        <Area
-          type="monotone"
-          dataKey="balance"
-          stroke={strokeColor}
-          strokeWidth={2}
-          fill="url(#capGrad)"
-          dot={{ r: 4, fill: strokeColor, strokeWidth: 0 }}
-          activeDot={{ r: 5, strokeWidth: 0 }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
 
 // ── KpiTile ───────────────────────────────────────────────────────────────────
 

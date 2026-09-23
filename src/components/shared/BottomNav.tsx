@@ -6,7 +6,7 @@ import { useState } from "react";
 import {
   Home, Beef, Package, BarChart3, MoreHorizontal,
   Users, Store, Settings, ClipboardList, FileText,
-  X, BookOpen, Landmark,
+  X, BookOpen, Landmark, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -50,6 +50,7 @@ const MORE_GROUPS: MoreGroup[] = [
   {
     label: "System",
     links: [
+      { href: "/dashboard/operations", labelKey: "operations", icon: Activity, adminOnly: true },
       { href: "/dashboard/settings", labelKey: "settings", icon: Settings, adminOnly: true },
     ],
   },
@@ -97,40 +98,42 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
 
       {/* More menu panel */}
       <div className={cn(
-        "md:hidden fixed bottom-[57px] inset-x-0 z-50 bg-sidebar border-t border-sidebar-border/50 rounded-t-2xl shadow-2xl transition-all duration-300",
+        "md:hidden fixed bottom-[58px] inset-x-0 z-50 bg-card border-t border-border/70 rounded-t-3xl shadow-floating transition-all duration-300 overflow-hidden",
         moreOpen
-          ? "opacity-100 translate-y-0 pointer-events-auto ease-[cubic-bezier(0.34,1.56,0.64,1)]"
-          : "opacity-0 translate-y-4 pointer-events-none ease-in"
+          ? "opacity-100 translate-y-0 pointer-events-auto ease-out"
+          : "opacity-0 translate-y-6 pointer-events-none ease-in"
       )}>
-        {/* Panel header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-sidebar-border/40">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t.sidebar.more}
-          </span>
-          <button
-            onClick={() => setMoreOpen(false)}
-            aria-label="Close menu"
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
+        {/* Drag handle / Panel header */}
+        <div className="flex flex-col items-center pt-2.5 pb-2 px-5 border-b border-border/50 bg-muted/20">
+          <div className="h-1 w-10 rounded-full bg-muted-foreground/30 mb-2" />
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">
+              {t.sidebar.more}
+            </span>
+            <button
+              onClick={() => setMoreOpen(false)}
+              aria-label="Close menu"
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Grouped links */}
-        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin">
           {visibleMoreGroups.map((group) => (
             <div key={group.label}>
               {/* Section label */}
               <div className="flex items-center gap-2 mb-2">
-                <div className="h-px flex-1 bg-sidebar-border/50" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/35 select-none">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/50 select-none">
                   {group.label}
                 </span>
-                <div className="h-px flex-1 bg-sidebar-border/50" />
+                <div className="h-px flex-1 bg-border/40" />
               </div>
 
               {/* Links grid */}
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 {group.links.map(({ href, labelKey, icon: Icon }) => {
                   const active = isNavActive(href, pathname, allBottomHrefs);
                   return (
@@ -139,14 +142,14 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
                       href={href}
                       onClick={() => setMoreOpen(false)}
                       className={cn(
-                        "flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-xs font-medium transition-colors",
+                        "flex flex-col items-center gap-1.5 rounded-2xl p-2.5 text-xs font-medium transition-all text-center",
                         active
-                          ? "text-primary bg-primary/10"
-                          : "text-sidebar-foreground/65 hover:text-foreground hover:bg-muted/50"
+                          ? "text-primary bg-primary/10 font-semibold shadow-xs"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                       )}
                     >
-                      <Icon className={cn("h-5 w-5", active ? "text-primary" : "")} />
-                      <span className="text-center leading-tight">
+                      <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground/70")} />
+                      <span className="leading-tight text-[11px] line-clamp-1">
                         {t.sidebar[labelKey as keyof typeof t.sidebar]}
                       </span>
                     </Link>
@@ -161,7 +164,7 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
       {/* Bottom tab bar */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar/95 backdrop-blur-md border-t border-sidebar-border/50 safe-bottom"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar/90 backdrop-blur-xl border-t border-sidebar-border/50 safe-bottom shadow-lg"
       >
         <div className="flex items-stretch">
           {navItems.map(({ href, navKey, icon: Icon }) => {
@@ -171,17 +174,17 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-xs font-medium transition-colors",
+                  "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-xs font-medium transition-all",
                   active
-                    ? "text-primary"
-                    : "text-sidebar-foreground/45 hover:text-sidebar-foreground"
+                    ? "text-sidebar-primary font-semibold"
+                    : "text-sidebar-foreground/55 hover:text-sidebar-foreground"
                 )}
               >
                 {active && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-7 rounded-b-full bg-primary" />
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2.5px] w-8 rounded-b-full bg-sidebar-primary" />
                 )}
-                <Icon className={cn("h-5 w-5 transition-transform duration-150", active && "scale-110")} />
-                <span className={cn("leading-none", active && "font-semibold")}>
+                <Icon className={cn("h-5 w-5 transition-transform duration-150", active && "scale-110 text-sidebar-primary")} />
+                <span className={cn("text-[11px] leading-none", active && "font-semibold")}>
                   {t.nav[navKey as keyof typeof t.nav]}
                 </span>
               </Link>
@@ -194,17 +197,17 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
             aria-label={moreOpen ? "Close more menu" : "Open more menu"}
             aria-expanded={moreOpen}
             className={cn(
-              "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-xs font-medium transition-colors",
+              "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-xs font-medium transition-all cursor-pointer",
               (moreOpen || moreActive)
-                ? "text-primary"
-                : "text-sidebar-foreground/45 hover:text-sidebar-foreground"
+                ? "text-sidebar-primary font-semibold"
+                : "text-sidebar-foreground/55 hover:text-sidebar-foreground"
             )}
           >
             {moreActive && !moreOpen && (
-              <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-7 rounded-b-full bg-primary" />
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2.5px] w-8 rounded-b-full bg-sidebar-primary" />
             )}
-            <MoreHorizontal className={cn("h-5 w-5 transition-transform duration-150", (moreOpen || moreActive) && "scale-110")} />
-            <span className={cn("leading-none", (moreOpen || moreActive) && "font-semibold")}>
+            <MoreHorizontal className={cn("h-5 w-5 transition-transform duration-150", (moreOpen || moreActive) && "scale-110 text-sidebar-primary")} />
+            <span className={cn("text-[11px] leading-none", (moreOpen || moreActive) && "font-semibold")}>
               {t.nav.more}
             </span>
           </button>

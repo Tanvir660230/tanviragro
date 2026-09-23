@@ -1,8 +1,8 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { buttonVariants } from "@/components/ui/button";
-import { PrintButton } from "@/components/compliance/PrintButton";
+import { PrintButton } from "@/components/ui/print-button";
 import type { Cattle, HealthEvent, Business } from "@/types/database";
 import { ArrowLeft, Shield } from "lucide-react";
 import { AutoPrint } from "@/components/ui/auto-print";

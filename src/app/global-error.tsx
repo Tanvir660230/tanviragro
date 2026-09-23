@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 export default function GlobalError({
   reset,
@@ -9,9 +9,9 @@ export default function GlobalError({
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background text-foreground font-sans text-center p-6">
-        <p className="text-4xl">🌿</p>
+        <p className="text-4xl">??</p>
         <div>
-          <p className="text-lg font-semibold">Chowdhury Agro — Critical Error</p>
+          <p className="text-lg font-semibold">Chowdhury Agro � Critical Error</p>
           <p className="mt-1 text-sm text-muted-foreground">
             The app crashed unexpectedly.
           </p>

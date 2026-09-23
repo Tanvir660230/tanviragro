@@ -89,13 +89,13 @@ export default async function EditPurchaseMemoPage({
   const ratio = totalLanded > 0 ? (totalRaw / totalLanded) : 1;
 
   const rawTxns = memoTxns.map(tx => {
-    let mode = "loose";
+    let mode: "bag" | "loose" = "loose";
     let bags = "";
     let kgPerBag = "";
     
     if (tx.notes) {
       const modeMatch = tx.notes.match(/Mode:\s*([a-zA-Z]+)/);
-      if (modeMatch && modeMatch[1]) mode = modeMatch[1];
+      if (modeMatch && modeMatch[1]) mode = modeMatch[1] === "bag" ? "bag" : "loose";
       
       const bagsMatch = tx.notes.match(/Bags:\s*([\d.]+)/);
       if (bagsMatch && bagsMatch[1]) bags = bagsMatch[1];

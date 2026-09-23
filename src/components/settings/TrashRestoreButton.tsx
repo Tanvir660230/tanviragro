@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { RotateCcw, Trash2, Loader2 } from "lucide-react";
+import { RotateCcw, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   restoreCostEntry,
@@ -32,7 +32,7 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
       else if (restoreAction === "inventory_item") result = await restoreInventoryItem(id);
       else                                      result = await restoreWeightLog(id);
       if (result.error) toast.error(result.error);
-      else { toast.success("Restored successfully"); router.refresh(); }
+      else { toast.success("Record restored successfully"); router.refresh(); }
     });
   }
 
@@ -41,18 +41,19 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
     startDelete(async () => {
       const result = await permanentlyDelete(table, id);
       if (result.error) toast.error(result.error);
-      else { toast.success("Permanently deleted"); router.refresh(); }
+      else { toast.success("Record permanently removed"); router.refresh(); }
     });
   }
 
   return (
-    <div className="flex items-center gap-1 shrink-0">
+    <div className="flex items-center gap-1.5 shrink-0">
       <Button
         variant="outline"
         size="sm"
-        className="gap-1.5 text-xs"
+        className="gap-1.5 text-xs h-8 shadow-sm"
         disabled={restoring || deleting}
         onClick={handleRestore}
+        aria-label="Restore item"
       >
         {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
         Restore
@@ -60,17 +61,19 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
       <Button
         variant="ghost"
         size="icon-sm"
-        className="text-muted-foreground hover:text-destructive"
+        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         disabled={restoring || deleting}
         onClick={() => setConfirmDelete(true)}
+        aria-label="Permanently delete item"
+        title="Permanently erase"
       >
         {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
       </Button>
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Permanently Delete"
-        description="This will erase the record forever and cannot be undone."
+        title="Permanently Delete Record"
+        description="This will erase this archived record from the database forever. This action is irreversible."
         confirmLabel="Delete Forever"
         destructive
         onConfirm={handlePermanentDelete}

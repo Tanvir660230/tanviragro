@@ -20,6 +20,9 @@ import { getCurrentBusiness } from "@/lib/supabase/get-business";
 import { buildWeightPredictions } from "@/lib/cattle-weight";
 import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { MarketPriceCard } from "@/components/finance/MarketPriceCard";
+import { EnterpriseLivestockFinancialWorkspace } from "@/components/finance/EnterpriseLivestockFinancialWorkspace";
+import { LivestockProfitabilityEngine } from "@/lib/financial";
+
 
 export const metadata: Metadata = { title: "Finance & P&L" };
 
@@ -90,6 +93,9 @@ export default async function FinancePage(props: {
     { data: recentPurchasesData },
     { data: roughagesData },
     { data: recipesData },
+    { data: periodLocksData },
+    { data: costAllocationsData },
+    { data: biologicalValuationsData },
   ] = await Promise.all([
     businessId
       ? supabase
@@ -198,7 +204,30 @@ export default async function FinancePage(props: {
           .eq("business_id", businessId)
           .not("active_from", "is", null)
       : Promise.resolve({ data: [] }),
+    businessId
+      ? (supabase as any)
+          .from("financial_period_locks")
+          .select("id, lock_name, start_date, end_date, is_locked")
+          .eq("business_id", businessId)
+      : Promise.resolve({ data: [] }),
+    businessId
+      ? (supabase as any)
+          .from("cost_allocations")
+          .select("id, allocation_batch_number, source_category, allocation_method, total_amount, recipients_count, applied_date")
+          .eq("business_id", businessId)
+          .order("applied_date", { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [] }),
+    businessId
+      ? (supabase as any)
+          .from("biological_asset_valuations")
+          .select("id, valuation_number, valuation_date, market_rate_per_kg, total_head_count, new_fair_value, unrealized_gain_loss")
+          .eq("business_id", businessId)
+          .order("valuation_date", { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [] }),
   ]);
+
 
   const entries: CostEntry[] = (costsData ?? []) as CostEntry[];
   // Assets are NOT operating costs — separate them before any P&L calculation
@@ -489,27 +518,104 @@ export default async function FinancePage(props: {
   const periodNetPLFH      = periodRevenueFH - periodOpCosts;
   const activePeriodStr    = fp ?? "this-month";
 
+  const totalAllSalesRevenue = sales.reduce((s, r) => s + Number(r.sale_price_total), 0);
+
+  const workspaceAnimalLedgers = [
+    ...activeCattleList.map((c) =>
+      LivestockProfitabilityEngine.calculateAnimalUnitEconomics({
+        cattleId: c.id,
+        businessId: businessId ?? "",
+        tagId: c.tag_id,
+        purchaseCost: Number(c.purchase_price) || 0,
+        purchaseWeightKg: Number(c.initial_weight_kg) || 200,
+        currentWeightKg: weightPredictions[c.id]?.predictedWeight ?? (Number(c.initial_weight_kg) || 250),
+        feedCost: feedCostByCattle[c.id] ?? 0,
+        medicineCost: directCostByCattle[c.id] ?? 0,
+        overheadAllocated: 0,
+        currentBiologicalValue: (weightPredictions[c.id]?.predictedWeight ?? 250) * (defaultMarketPricePerKg || 450),
+        status: "active",
+      })
+    ),
+    ...sales.map((s) =>
+      LivestockProfitabilityEngine.calculateAnimalUnitEconomics({
+        cattleId: s.cattle_id,
+        businessId: businessId ?? "",
+        tagId: s.cattle_tag,
+        purchaseCost: Number(s.purchase_price) || 0,
+        purchaseWeightKg: Number(s.initial_weight_kg) || 200,
+        finalWeightKg: s.weight_at_sale_kg ?? (Number(s.initial_weight_kg) || 250),
+        feedCost: feedCostByCattle[s.cattle_id] ?? 0,
+        medicineCost: directCostByCattle[s.cattle_id] ?? 0,
+        saleRevenue: s.sale_price_total,
+        status: "sold",
+      })
+    ),
+  ];
+
   return (
-    <div className="space-y-4">
-      {/* ── Finance Hero — unified header, period tabs, KPIs, alerts ── */}
-      <Suspense fallback={<FinanceHeroSkeleton />}>
-        <FinanceHero
-          periodRevenue={periodRevenueFH}
-          periodOperatingCosts={periodOpCosts}
-          periodNetPL={periodNetPLFH}
-          salesCount={filteredSales.length}
-          costsCount={filteredEntries.length}
-          activePeriod={activePeriodStr}
-        />
-      </Suspense>
+    <div className="space-y-6">
+      {/* ── Enterprise Livestock Financial Workspace ── */}
+      <EnterpriseLivestockFinancialWorkspace
+        businessId={businessId ?? ""}
+        businessName={bizName}
+        cashPosition={{
+          balance: totalAllSalesRevenue - (totalFixedCosts + totalVariableCosts + totalFeedCosts),
+          inflow: totalAllSalesRevenue,
+          outflow: totalFixedCosts + totalVariableCosts + totalFeedCosts,
+        }}
+        animalLedgers={workspaceAnimalLedgers}
+        recentCosts={entries.map((e) => ({
+          id: e.id,
+          category: e.category,
+          amount: Number(e.amount),
+          recordedAt: e.recorded_at,
+          type: e.type,
+          description: e.description ?? null,
+          cattleId: e.cattle_id ?? null,
+        }))}
+        recentSales={sales.map((s) => ({
+          id: s.id,
+          salePrice: s.sale_price_total,
+          soldAt: s.sold_at,
+          cattleId: s.cattle_id,
+          buyerName: s.buyer_name || undefined,
+        }))}
+
+        periodLocks={((periodLocksData ?? []) as any[]).map((p) => ({
+          id: p.id,
+          lockName: p.lock_name,
+          startDate: p.start_date,
+          endDate: p.end_date,
+          isLocked: p.is_locked,
+        }))}
+        costAllocations={((costAllocationsData ?? []) as any[]).map((a) => ({
+          id: a.id,
+          batchNumber: a.allocation_batch_number,
+          category: a.source_category,
+          method: a.allocation_method,
+          amount: Number(a.total_amount),
+          recipientsCount: Number(a.recipients_count),
+          appliedDate: a.applied_date,
+        }))}
+        biologicalValuations={((biologicalValuationsData ?? []) as any[]).map((b) => ({
+          id: b.id,
+          valuationNumber: b.valuation_number,
+          valuationDate: b.valuation_date,
+          marketRatePerKg: Number(b.market_rate_per_kg),
+          totalHeadCount: Number(b.total_head_count),
+          fairValue: Number(b.new_fair_value),
+          unrealizedGainLoss: Number(b.unrealized_gain_loss),
+        }))}
+      />
 
       {/* ── Market Price Log ── */}
       <Suspense fallback={null}>
         <MarketPriceCard />
       </Suspense>
 
-      {/* ── Finance Tabs ── */}
+      {/* ── Legacy Analytics & Statement Tabs ── */}
       <FinanceTabs
+
         salesCount={filteredSales.length}
         costsCount={filteredEntries.length}
         assetCount={assetEntries.length + fixedAssets.length}

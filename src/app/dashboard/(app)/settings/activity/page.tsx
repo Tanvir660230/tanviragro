@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ActivityTimeline, type ActivityItem } from "@/components/settings/ActivityTimeline";
 
 export const metadata: Metadata = {
-  title: "Activity Logs | Chowdhury Agro",
+  title: "Unified Audit Logs",
 };
 
 export default async function ActivityLogPage() {
@@ -177,10 +177,11 @@ export default async function ActivityLogPage() {
   activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader 
-        title="Activity Logs" 
-        subtitle="A unified timeline of all recent events and transactions on the farm."
+        title="Unified Audit & Activity Logs" 
+        subtitle="A comprehensive immutable timeline of farm events, sales transactions, health interventions, and ledger entries."
+        back="/dashboard/settings?tab=security"
       />
 
       <ActivityTimeline activities={activities} />

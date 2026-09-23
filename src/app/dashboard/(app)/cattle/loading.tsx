@@ -1,33 +1,31 @@
-function Skeleton({ className }: { className?: string }) {
-  return <div className={`animate-shimmer rounded overflow-hidden ${className ?? ""}`} />;
-}
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function CattleLoading() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-28" />
-          <Skeleton className="h-4 w-44" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <Skeleton className="h-7 w-32 rounded-lg" />
+          <Skeleton className="h-4 w-48 rounded" />
         </div>
         <div className="flex items-center gap-2">
-          <Skeleton className="h-8 w-24 rounded-lg" />
-          <Skeleton className="h-8 w-28 rounded-lg" />
-          <Skeleton className="h-8 w-24 rounded-lg" />
+          <Skeleton className="h-9 w-24 rounded-xl" />
+          <Skeleton className="h-9 w-28 rounded-xl" />
+          <Skeleton className="h-9 w-24 rounded-xl" />
         </div>
       </div>
 
-      {/* Desktop table skeleton — 10 columns now */}
-      <div className="hidden md:block rounded-xl border border-border bg-card overflow-hidden">
-        <div className="border-b border-border bg-muted/40 px-4 py-3 flex items-center gap-4">
+      {/* Desktop table skeleton */}
+      <div className="hidden md:block rounded-2xl border border-border/60 bg-card overflow-hidden shadow-card">
+        <div className="border-b border-border/50 bg-muted/20 px-5 py-3.5 flex items-center gap-4">
           {["w-16", "w-20", "w-16", "w-24", "w-16", "w-20", "w-20", "w-16", "w-16", "w-14"].map((w, i) => (
             <Skeleton key={i} className={`h-3.5 ${w} shrink-0`} />
           ))}
         </div>
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="border-b border-border last:border-0 px-4 py-3.5 flex items-center gap-4">
-            <Skeleton className="h-4 w-16 shrink-0" />
+          <div key={i} className="border-b border-border/40 last:border-0 px-5 py-4 flex items-center gap-4">
+            <Skeleton className="h-4 w-16 shrink-0 font-semibold" />
             <Skeleton className="h-4 w-20 shrink-0" />
             <Skeleton className="h-4 w-16 shrink-0" />
             <Skeleton className="h-4 w-24 shrink-0" />
@@ -36,9 +34,9 @@ export default function CattleLoading() {
             <Skeleton className="h-4 w-12 shrink-0" />
             <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
             <Skeleton className="h-5 w-14 shrink-0 rounded-full" />
-            <div className="flex gap-1 shrink-0">
-              <Skeleton className="h-7 w-7 rounded-md" />
-              <Skeleton className="h-7 w-7 rounded-md" />
+            <div className="flex gap-1.5 shrink-0">
+              <Skeleton className="h-8 w-8 rounded-lg" />
+              <Skeleton className="h-8 w-8 rounded-lg" />
             </div>
           </div>
         ))}
@@ -47,18 +45,17 @@ export default function CattleLoading() {
       {/* Mobile cards skeleton */}
       <div className="md:hidden space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-xl bg-card p-4 border border-border/60 shadow-card space-y-3">
+          <div key={i} className="rounded-2xl bg-card p-4 border border-border/60 shadow-card space-y-3">
             <div className="flex items-center justify-between">
-              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-24 rounded-md" />
               <div className="flex items-center gap-1.5">
-                <Skeleton className="h-5 w-14 rounded-full" />
-                <Skeleton className="h-7 w-7 rounded-md" />
-                <Skeleton className="h-7 w-7 rounded-md" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-8 w-8 rounded-lg" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-              {Array.from({ length: 8 }).map((_, j) => (
-                <Skeleton key={j} className="h-3.5 w-24" />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pt-2 border-t border-border/40">
+              {Array.from({ length: 6 }).map((_, j) => (
+                <Skeleton key={j} className="h-3.5 w-full" />
               ))}
             </div>
           </div>

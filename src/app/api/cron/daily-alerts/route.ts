@@ -1,24 +1,30 @@
-﻿import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendWhatsAppWithFallback } from "@/lib/notifications";
+import { authenticateApiRoute } from "@/lib/auth/api-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: NextRequest) {
+  const authResult = await authenticateApiRoute(request, {
+    allowCron: true,
+    requiredPermission: PERMISSIONS.SETTINGS_VIEW,
+  });
+
+  if ("response" in authResult) {
+    return authResult.response;
   }
+
+  const { auth } = authResult;
+  const cronBusinessId = auth.type === "user" ? auth.context.businessId : auth.businessId;
 
   const supabase = createClient(supabaseUrl, supabaseKey);
   const messages: string[] = [];
   const todayStr = new Date().toISOString().split("T")[0];
 
-  // Optional: scope queries to a specific business for multi-tenant deployments.
-  const cronBusinessId = process.env.CRON_BUSINESS_ID ?? null;
-
-  // 1. Low Stock — compute from transactions (no current_stock column)
+  // 1. Low Stock � compute from transactions (no current_stock column)
   const [{ data: allTxns }, { data: items }] = await Promise.all([
     cronBusinessId
       ? supabase.from("inventory_transactions").select("item_id, type, qty, recorded_at, inventory_items!inner(business_id)").eq("inventory_items.business_id", cronBusinessId)
@@ -55,7 +61,7 @@ export async function GET(request: Request) {
     }
   }
   if (lowStockLines.length > 0) {
-    messages.push("⚠️ *Low Stock Alert*\n" + lowStockLines.join("\n"));
+    messages.push("?? *Low Stock Alert*\n" + lowStockLines.join("\n"));
   }
 
   // 2. Expiring inventory (next 30 days)
@@ -75,7 +81,7 @@ export async function GET(request: Request) {
 
   if (expiringStock && expiringStock.length > 0) {
     messages.push(
-      "⏳ *Expiring Soon*\n" +
+      "? *Expiring Soon*\n" +
       expiringStock.map((e) => {
         const name = Array.isArray(e.inventory_items) ? e.inventory_items[0]?.name : (e.inventory_items as { name: string } | null)?.name;
         return `- ${name ?? "Unknown"}: expires ${e.expiry_date}`;
@@ -83,7 +89,7 @@ export async function GET(request: Request) {
     );
   }
 
-  // 3. Overdue/today health events — use completed_at IS NULL (not status column)
+  // 3. Overdue/today health events � use completed_at IS NULL (not status column)
   const { data: pendingEvents } = await supabase
     .from("health_events")
     .select("title, event_type, scheduled_at, cattle(tag_id)")
@@ -93,13 +99,13 @@ export async function GET(request: Request) {
 
   if (pendingEvents && pendingEvents.length > 0) {
     messages.push(
-      "🩺 *Health Events Due*\n" +
+      "?? *Health Events Due*\n" +
       (pendingEvents as { title: string; event_type: string; scheduled_at: string; cattle: { tag_id: string }[] }[]).map((e) => `- Cow #${e.cattle?.[0]?.tag_id ?? "?"}: ${e.title} (${e.scheduled_at})`).join("\n")
     );
   }
 
   if (messages.length > 0) {
-    const finalMessage = "🌾 *Chowdhury Agro Daily Report*\n\n" + messages.join("\n\n");
+    const finalMessage = "?? *Chowdhury Agro Daily Report*\n\n" + messages.join("\n\n");
     await sendWhatsAppWithFallback(finalMessage, "Chowdhury Agro Daily Report");
     return NextResponse.json({ success: true, alerted: true });
   }

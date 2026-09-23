@@ -10,16 +10,24 @@ import {
   sendWeeklyDigest,
   type SellWindowCattle,
 } from "@/lib/notifications";
+import { authenticateApiRoute } from "@/lib/auth/api-guard";
+import { PERMISSIONS } from "@/constants/roles";
 
 // Runs daily at 08:00 UTC via Netlify Scheduled Function
 // Monday runs include weekly checks: missing weight, sell window, digest
 
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await authenticateApiRoute(request, {
+    allowCron: true,
+    requiredPermission: PERMISSIONS.SETTINGS_VIEW,
+  });
+
+  if ("response" in authResult) {
+    return authResult.response;
   }
+
+  const { auth } = authResult;
+  const cronBusinessId = auth.type === "user" ? auth.context.businessId : auth.businessId;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -28,10 +36,6 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createClient(supabaseUrl, serviceKey);
-
-  // Optional: scope all inventory queries to a specific business.
-  // Set CRON_BUSINESS_ID in env vars for multi-tenant deployments.
-  const cronBusinessId = process.env.CRON_BUSINESS_ID ?? null;
 
   const now = new Date();
   const today = now.toISOString().slice(0, 10);

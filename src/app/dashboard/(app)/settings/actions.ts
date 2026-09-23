@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -52,12 +52,20 @@ export async function updateBusinessProfile(
 
   // Handle logo upload
   if (logoFile && logoFile.size > 0) {
-    const fileExt = logoFile.name.split('.').pop();
+    if (logoFile.size > 2 * 1024 * 1024) {
+      return { error: "Logo image must be under 2 MB" };
+    }
+    if (!logoFile.type.startsWith("image/")) {
+      return { error: "Logo must be a valid image file" };
+    }
+    const rawExt = (logoFile.name.split('.').pop() || "").toLowerCase();
+    const allowedExts = ["jpg", "jpeg", "png", "webp", "svg"];
+    const fileExt = allowedExts.includes(rawExt) ? rawExt : "png";
     const fileName = `${user.id}-${Date.now()}.${fileExt}`;
     
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('logos')
-      .upload(fileName, logoFile, { upsert: true });
+      .upload(fileName, logoFile, { upsert: true, contentType: logoFile.type });
 
     if (uploadError) {
       return { error: "Failed to upload logo: " + uploadError.message };
@@ -102,12 +110,20 @@ export async function updateProfile(
 
   // Handle avatar upload
   if (avatarFile && avatarFile.size > 0) {
-    const fileExt = avatarFile.name.split('.').pop();
+    if (avatarFile.size > 2 * 1024 * 1024) {
+      return { error: "Avatar image must be under 2 MB" };
+    }
+    if (!avatarFile.type.startsWith("image/")) {
+      return { error: "Avatar must be a valid image file" };
+    }
+    const rawExt = (avatarFile.name.split('.').pop() || "").toLowerCase();
+    const allowedExts = ["jpg", "jpeg", "png", "webp"];
+    const fileExt = allowedExts.includes(rawExt) ? rawExt : "png";
     const fileName = `${user.id}-${Date.now()}.${fileExt}`;
     
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(fileName, avatarFile, { upsert: true });
+      .upload(fileName, avatarFile, { upsert: true, contentType: avatarFile.type });
 
     if (uploadError) {
       return { error: "Failed to upload avatar: " + uploadError.message };

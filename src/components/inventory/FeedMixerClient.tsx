@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -68,6 +68,10 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
 
 
 
+  const totalBaseWeight = selectedRecipe
+    ? selectedRecipe.ingredients.reduce((s, i) => s + i.qty_per_batch, 0)
+    : 1;
+
   // Real-time ingredient requirements
   type IngredientStatus = {
     item_id: string;
@@ -77,11 +81,13 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
     required: number;
     stock: number;
     sufficient: boolean;
+    ratio: number;
   };
 
   const ingredientStatuses: IngredientStatus[] = selectedRecipe
     ? selectedRecipe.ingredients.map((ing) => {
         const required = parseFloat((ing.qty_per_batch * scale).toFixed(3));
+        const ratio = totalBaseWeight > 0 ? (ing.qty_per_batch / totalBaseWeight) * 100 : 0;
         return {
           item_id: ing.item_id,
           name: ing.item_name,
@@ -90,6 +96,7 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
           required,
           stock: ing.stock,
           sufficient: required <= 0 || ing.stock >= required - 0.001,
+          ratio,
         };
       })
     : [];
@@ -219,16 +226,26 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
                 )}
               >
                 <div>
-                  <p className="font-medium">{ing.name}</p>
-                  <p className="text-xs text-muted-foreground">{ing.unit}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-foreground">{ing.name}</p>
+                    <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                      {ing.ratio.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-1 w-24 rounded-full bg-muted/60 overflow-hidden mt-1.5">
+                    <div
+                      className="h-full bg-primary/70 rounded-full"
+                      style={{ width: `${Math.min(100, Math.max(5, ing.ratio))}%` }}
+                    />
+                  </div>
                 </div>
-                <span className="tabular-nums text-right text-muted-foreground">
+                <span className="tabular-nums text-right text-muted-foreground font-mono">
                   {ing.base_qty} {ing.unit}
                 </span>
-                <span className={cn("tabular-nums text-right font-medium", target > 0 && !ing.sufficient && "text-red-600 dark:text-red-400")}>
+                <span className={cn("tabular-nums text-right font-mono font-medium", target > 0 && !ing.sufficient && "text-red-600 dark:text-red-400 font-bold")}>
                   {target > 0 ? `${ing.required} ${ing.unit}` : <span className="text-xs text-muted-foreground italic">enter target</span>}
                 </span>
-                <span className="tabular-nums text-right">
+                <span className="tabular-nums text-right font-mono text-muted-foreground">
                   {ing.stock.toFixed(2)} {ing.unit}
                 </span>
                 <div className="flex justify-end">

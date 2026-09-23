@@ -1,4 +1,6 @@
-﻿// ── Notification helpers ──────────────────────────────────────────
+// ── Notification helpers ──────────────────────────────────────────
+
+import { notificationEngine } from "./notifications/engine";
 
 export interface NotificationPayload {
   title: string;
@@ -259,10 +261,10 @@ export interface WeeklyDigestStats {
 export async function sendWeeklyDigest(
   stats: WeeklyDigestStats
 ): Promise<void> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
   const statusLine = (count: number, ok: string, warn: string) =>
     count === 0 ? `✅ ${ok}` : `⚠️ ${warn}: ${count}টি`;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
   const message =
     `📊 *Chowdhury Agro — সাপ্তাহিক সারসংক্ষেপ*\n` +
     `${new Date().toLocaleDateString("bn-BD", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n\n` +
@@ -278,3 +280,7 @@ export async function sendWeeklyDigest(
 
   await sendWhatsAppWithFallback(message, "Chowdhury Agro — Weekly Digest");
 }
+
+export { notificationEngine } from "./notifications/engine";
+export type { NotificationTemplate, SendNotificationOptions } from "./notifications/engine";
+

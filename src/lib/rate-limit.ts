@@ -12,12 +12,15 @@ interface Window {
 const store = new Map<string, Window>();
 
 // Clean up stale entries every 5 minutes to prevent memory leak
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, win] of store.entries()) {
     if (now - win.windowStart > 3600_000) store.delete(key);
   }
 }, 300_000);
+if (typeof cleanupTimer.unref === "function") {
+  cleanupTimer.unref();
+}
 
 /**
  * Returns true if the request is allowed, false if rate-limited.

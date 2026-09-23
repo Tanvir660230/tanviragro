@@ -17,6 +17,8 @@ export interface LiveValuationResult {
     roi: number;
     daysInPen: number;
   }[];
+  totalEstimatedWeightKg: number;
+  averageWeightKg: number;
 }
 
 export async function getLiveHerdValuation(
@@ -29,6 +31,8 @@ export async function getLiveHerdValuation(
       totalEstimatedValue: 0,
       totalCostBasis: 0,
       unrealizedProfit: 0,
+      totalEstimatedWeightKg: 0,
+      averageWeightKg: 0,
       marketPricePerKg: 0,
       readyToSellCattle: [],
     };
@@ -115,6 +119,8 @@ export async function getLiveHerdValuation(
       totalEstimatedValue: 0,
       totalCostBasis: 0,
       unrealizedProfit: 0,
+      totalEstimatedWeightKg: 0,
+      averageWeightKg: 0,
       marketPricePerKg: 0,
       readyToSellCattle: [],
     };
@@ -168,6 +174,7 @@ export async function getLiveHerdValuation(
   // 5. Calculate Valuation & Profits
   let totalEstimatedValue = 0;
   let totalCostBasis = 0;
+  let totalEstimatedWeightKg = 0;
   const readyToSellCattle: LiveValuationResult["readyToSellCattle"] = [];
 
   for (const c of activeCattle) {
@@ -204,6 +211,7 @@ export async function getLiveHerdValuation(
 
     totalEstimatedValue += estimatedMarketValue;
     totalCostBasis += costBasis;
+    totalEstimatedWeightKg += estimatedWeight;
 
     // A cow is "ready to sell" if its ROI is decent (e.g. > 10%) or it has been held for a long time with positive profit.
     // Let's flag any active cow with >12% ROI as a candidate.
@@ -229,5 +237,7 @@ export async function getLiveHerdValuation(
     unrealizedProfit: totalEstimatedValue - totalCostBasis,
     marketPricePerKg,
     readyToSellCattle,
+    totalEstimatedWeightKg,
+    averageWeightKg: activeCattle.length > 0 ? totalEstimatedWeightKg / activeCattle.length : 0,
   };
 }

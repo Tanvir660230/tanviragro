@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { saveOpeningCash } from "@/app/dashboard/(app)/settings/actions";
 import { toast } from "sonner";
+import { Loader2, CheckCircle2, WalletCards } from "lucide-react";
 
 export function OpeningCashForm({ initialValue }: { initialValue: number }) {
   const [value, setValue] = useState(initialValue > 0 ? String(initialValue) : "");
@@ -16,28 +17,37 @@ export function OpeningCashForm({ initialValue }: { initialValue: number }) {
     startTransition(async () => {
       const res = await saveOpeningCash(amount);
       if (res.error) toast.error(res.error);
-      else toast.success("Opening cash balance saved");
+      else toast.success("Opening cash balance saved successfully");
     });
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Label htmlFor="opening_cash" className="shrink-0 text-sm">৳</Label>
-        <Input
-          id="opening_cash"
-          type="number"
-          min={0}
-          step={1000}
-          placeholder="0"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="h-8 text-sm"
-        />
-        <Button size="sm" onClick={handleSave} disabled={isPending}>
-          Save
-        </Button>
+    <div className="space-y-3 max-w-sm">
+      <div className="space-y-1.5">
+        <Label htmlFor="opening_cash" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Initial Cash Balance (BDT)
+        </Label>
+        <div className="relative flex items-center">
+          <span className="absolute left-3 font-semibold text-muted-foreground text-sm">৳</span>
+          <Input
+            id="opening_cash"
+            type="number"
+            min={0}
+            step={1000}
+            placeholder="0"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="pl-8 h-10 font-mono text-sm"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Starting balance for your cash ledger when setting up bookkeeping.
+        </p>
       </div>
+      <Button size="sm" onClick={handleSave} disabled={isPending} className="gap-1.5 shadow-sm">
+        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+        Save Cash Balance
+      </Button>
     </div>
   );
 }
