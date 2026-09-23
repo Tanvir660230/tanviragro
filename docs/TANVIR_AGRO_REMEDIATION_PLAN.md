@@ -13,11 +13,11 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 
 | Order | ID | Pri | Title | Status |
 |---|---|---|---|---|
-| 0.1 | SEC-01 | P0 | Revoke leaked Supabase PAT; purge local refs | TODO (user) |
-| 0.2 | DEPLOY-01 | P1 | Baseline the working tree in git | TODO |
-| 0.3 | DB-01 | P1 | Dump live schema/policies; baseline migration; generated types | TODO (user + Claude) |
-| 0.4 | BUG-06a | P1 | Verify Supabase platform backups/PITR | TODO (user) |
-| 0.5 | TEST-01a | P1 | Green gate: fix TS error, failing test, lint errors; commit CI | TODO |
+| 0.1 | SEC-01 | P0 | Revoke leaked Supabase PAT; purge local refs | PARTIAL: Data.txt now gitignored (8801920); revoke + ref purge need owner |
+| 0.2 | DEPLOY-01 | P1 | Baseline the working tree in git | DONE on branch chore/phase0-baseline (8801920..d539892), not pushed; live deploy state still unknown |
+| 0.3 | DB-01 | P1 | Dump live schema/policies; baseline migration; generated types | BLOCKED: production read not permitted; run docs/sql/live_security_snapshot.sql |
+| 0.4 | BUG-06a | P1 | Verify Supabase platform backups/PITR | BLOCKED: owner to check dashboard |
+| 0.5 | TEST-01a | P1 | Green gate: fix TS error, failing test, lint errors; commit CI | DONE (28bc895, 3653627): tsc 0, lint 0 errors, 356/356 tests, build passes with TS checks; CI committed but never run (not pushed) |
 | 1.1 | SEC-02 | P0 | Fix `business_users` RLS self-escalation | TODO |
 | 1.2 | SEC-03 | P0 | Enable RLS on 9 unprotected tables | TODO |
 | 1.3 | SEC-04 | P1 | Harden/drop SECURITY DEFINER functions | TODO |
@@ -55,6 +55,7 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 | 9.2 | BUG-06b | P1 | Real off-site DB backups | TODO |
 | 9.3 | DEPLOY-03 | P3 | Repo hygiene | TODO |
 | 9.4 | CLEAN-01 | P3 | Remove dead engines/components after coverage exists | TODO |
+| 9.5 | BUG-22 | P2 | Service worker never rebuilt (Serwist + Turbopack) | TODO |
 | 10 | VERIFY | — | Full regression + ledger reconciliation + security retest | TODO |
 
 ---
@@ -426,6 +427,11 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 - **Rule:** delete only after 8.1 gives coverage of the replacing path, one module per commit, with the gate green.
 
 ---
+
+### 9.5 BUG-22: The service worker is never rebuilt
+- **Evidence:** `npm run build` prints "`@serwist/next` … doesn't support Turbopack" and leaves `public/sw.js` unchanged. That file was last committed 2026-07-19 (`next.config.ts:5-9`, Next 16 builds with Turbopack by default). Production serves a stale service worker whose precache list points at chunks that no longer exist.
+- **Solution:** either build with webpack (`next build --webpack`, and check what this does to build time), or move to Serwist's Turbopack-compatible integration (read the current Serwist docs first). Stop committing `public/sw.js` if it becomes a build output.
+- **Verify:** after a build, `public/sw.js` has changed and its precache URLs exist in `.next`. In a browser: install, go offline, and reload a cached page.
 
 ## Phase 10: Final verification
 - The full gate is green in CI.

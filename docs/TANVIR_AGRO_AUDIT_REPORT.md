@@ -270,9 +270,10 @@ Netlify Scheduled Functions ──(Bearer CRON_SECRET)──> /api/backup, /api/
 | BUG-15 | P2 | Batch production is not atomic: ingredients are consumed before the output insert, and a failure loses stock. Without an output item selected, ingredient cost disappears | `inventory/recipe-actions.ts:219-260` |
 | BUG-16 | P2 | `lifecycle-actions.ts` queries `cattle_sales` with a `business_id` column; that table exists in no migration | `cattle/lifecycle-actions.ts:287-290` |
 | BUG-17 | P3 | "Go to Onboarding" links to `/onboarding`, which has no route | `app/dashboard/(app)/page.tsx:44` |
-| BUG-18 | P3 | Typecheck error: missing keys in a `Record<…>` literal (hidden by `ignoreBuildErrors`) | `components/finance/TransactionStatement.tsx:9` |
-| BUG-19 | P3 | Failing unit test (overdue vaccine and withdrawal alert count) | `src/__tests__/health-medical-engine.test.ts:150` |
+| BUG-18 | P3 | **FIXED 28bc895.** Typecheck error: missing keys in a `Record<…>` literal (hidden by `ignoreBuildErrors`) | `components/finance/TransactionStatement.tsx:9` |
+| BUG-19 | P3 | **FIXED 28bc895 (fixture dates had expired).** Failing unit test (overdue vaccine and withdrawal alert count) | `src/__tests__/health-medical-engine.test.ts:150` |
 | BUG-20 | P3 | A literal U+FFFD (`�`) character in page titles and messages | `(auth)/login/page.tsx:5`, `forgot-password/page.tsx`, `reset-password/page.tsx`, `global-error.tsx`, `api/cron/daily-alerts/route.ts` |
+| BUG-22 | P2 | Service worker never rebuilt: Serwist does not support Turbopack (the Next 16 default build), so `public/sw.js` (last committed 2026-07-19) is stale in production | `next.config.ts:5-9`, `public/sw.js` |
 | BUG-21 | P3 | Login ignores the `redirectTo` query parameter that the middleware sets | `(auth)/login/actions.ts:38` vs `middleware.ts:82` |
 
 ---
