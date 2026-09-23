@@ -40,11 +40,9 @@ function CurrencyInput({
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setText(new Intl.NumberFormat(locale, { maximumFractionDigits: maxDecimals }).format(num))
       } catch {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setText(String(num))
       }
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setText("")
     }
   }, [value, focused, locale, maxDecimals])

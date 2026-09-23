@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface VirtualListOptions {
   /**
@@ -87,9 +87,11 @@ export function useVirtualList({
   const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
   const endIndex = Math.min(itemCount, Math.ceil((scrollTop + measuredHeight) / itemHeight) + overscan);
 
-  const visibleIndices = useRef<number[]>([]);
-  visibleIndices.current = [];
-  for (let i = startIndex; i < endIndex; i++) visibleIndices.current.push(i);
+  const visibleIndices = useMemo(() => {
+    const out: number[] = [];
+    for (let i = startIndex; i < endIndex; i++) out.push(i);
+    return out;
+  }, [startIndex, endIndex]);
 
   const scrollToIndex = useCallback(
     (index: number) => {
@@ -104,7 +106,7 @@ export function useVirtualList({
   return {
     startIndex,
     endIndex,
-    visibleIndices: visibleIndices.current,
+    visibleIndices,
     totalHeight: itemCount * itemHeight,
     offsetY: startIndex * itemHeight,
     containerRef,

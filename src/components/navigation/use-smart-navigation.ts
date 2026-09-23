@@ -31,19 +31,16 @@ export function useSmartNavigation() {
       } else {
         // Default pinned items
         const defaultPinned = ["/dashboard", "/dashboard/cattle", "/dashboard/inventory"];
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPinnedHrefs(defaultPinned);
       }
 
       const savedRecents = localStorage.getItem(STORAGE_KEY_RECENTS);
       if (savedRecents) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setRecentPages(JSON.parse(savedRecents));
       }
 
       const savedGroups = localStorage.getItem(STORAGE_KEY_GROUPS);
       if (savedGroups) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCollapsedGroups(JSON.parse(savedGroups));
       }
     } catch {

@@ -32,9 +32,7 @@ export function RecordPaymentModal({ open, onOpenChange, selectedInvoice, onSucc
     if (selectedInvoice) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCounterpartyName(selectedInvoice.customerOrVendorName);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAmount(String(selectedInvoice.balanceDue));
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPaymentType(selectedInvoice.invoiceType.includes("purchase") ? "disbursement" : "receipt");
     }
   }, [selectedInvoice]);

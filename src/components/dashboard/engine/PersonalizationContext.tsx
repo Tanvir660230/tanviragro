@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useMemo, useState, useSyncExternalStore } from "react";
 import { DashboardRole, DashboardPersonalizationState } from "./widget-types";
 import { ROLE_DEFAULT_WIDGETS, MASTER_WIDGET_CATALOG } from "./default-widgets";
 
@@ -20,6 +20,20 @@ const PersonalizationContext = createContext<PersonalizationContextValue | null>
 
 const STORAGE_KEY = "tanvir_agro_dashboard_personalization_v1";
 
+// saveState() dispatches a synthetic "storage" event, so same-tab writes notify subscribers too.
+function subscribeToStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 export function DashboardPersonalizationProvider({
   initialRole = "owner",
   children,
@@ -28,39 +42,27 @@ export function DashboardPersonalizationProvider({
   children: React.ReactNode;
 }) {
   const [role, setRoleState] = useState<DashboardRole>(initialRole);
-  const [visibleWidgetIds, setVisibleWidgetIds] = useState<string[]>(ROLE_DEFAULT_WIDGETS[initialRole]);
-  const [pinnedWidgetIds, setPinnedWidgetIds] = useState<string[]>([]);
   const [isCustomizing, setIsCustomizing] = useState(false);
 
-  // Load from localStorage on mount and updates
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `${STORAGE_KEY}_${role}`) {
-        if (e.newValue) {
-          const parsed = JSON.parse(e.newValue);
-          setVisibleWidgetIds(parsed.visibleWidgetIds || []);
-          setPinnedWidgetIds(parsed.pinnedWidgetIds || []);
-        }
-      }
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-
+  // localStorage is the single source of truth; the server snapshot is null so SSR renders defaults.
+  const storageKey = `${STORAGE_KEY}_${role}`;
+  const saved = useSyncExternalStore(
+    subscribeToStorage,
+    () => readStorage(storageKey),
+    () => null
+  );
+  const parsed = useMemo<Partial<DashboardPersonalizationState> | null>(() => {
+    if (!saved) return null;
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_${role}`);
-      if (saved) {
-        const parsed: Partial<DashboardPersonalizationState> = JSON.parse(saved);
-        if (parsed.visibleWidgetIds) setVisibleWidgetIds(parsed.visibleWidgetIds);
-        if (parsed.pinnedWidgetIds) setPinnedWidgetIds(parsed.pinnedWidgetIds);
-      } else {
-        setVisibleWidgetIds(ROLE_DEFAULT_WIDGETS[role] || ROLE_DEFAULT_WIDGETS.owner);
-      }
+      return JSON.parse(saved);
     } catch {
-      // ignore
+      return null;
     }
+  }, [saved]);
 
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [role]);
+  const roleDefaults = ROLE_DEFAULT_WIDGETS[role] || ROLE_DEFAULT_WIDGETS.owner;
+  const visibleWidgetIds = parsed?.visibleWidgetIds ?? roleDefaults;
+  const pinnedWidgetIds = parsed?.pinnedWidgetIds ?? [];
 
   // Persist changes
   const saveState = (newVisible: string[], newPinned: string[]) => {
@@ -89,33 +91,27 @@ export function DashboardPersonalizationProvider({
     }
   };
 
+  // Saved settings for the new role (if any) are picked up by the store; otherwise its defaults apply.
   const setRole = (newRole: DashboardRole) => {
     setRoleState(newRole);
-    const defaults = ROLE_DEFAULT_WIDGETS[newRole] || ROLE_DEFAULT_WIDGETS.owner;
-    setVisibleWidgetIds(defaults);
   };
 
   const toggleWidgetVisibility = (id: string) => {
-    setVisibleWidgetIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
-      saveState(next, pinnedWidgetIds);
-      return next;
-    });
+    const next = visibleWidgetIds.includes(id)
+      ? visibleWidgetIds.filter((item) => item !== id)
+      : [...visibleWidgetIds, id];
+    saveState(next, pinnedWidgetIds);
   };
 
   const togglePinWidget = (id: string) => {
-    setPinnedWidgetIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
-      saveState(visibleWidgetIds, next);
-      return next;
-    });
+    const next = pinnedWidgetIds.includes(id)
+      ? pinnedWidgetIds.filter((item) => item !== id)
+      : [...pinnedWidgetIds, id];
+    saveState(visibleWidgetIds, next);
   };
 
   const resetToDefault = () => {
-    const defaults = ROLE_DEFAULT_WIDGETS[role] || ROLE_DEFAULT_WIDGETS.owner;
-    setVisibleWidgetIds(defaults);
-    setPinnedWidgetIds([]);
-    saveState(defaults, []);
+    saveState(roleDefaults, []);
   };
 
   return (

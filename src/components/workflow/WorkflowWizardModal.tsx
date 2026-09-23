@@ -37,11 +37,8 @@ export function WorkflowWizardModal({
       });
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setInstance(inst);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStep(0);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({});
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setErr(null);
     }
   }, [template, open, businessId]);

@@ -14,6 +14,8 @@ const BADGE: Record<TxnRow["category"], string> = {
   "Inventory":       "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   "Operating Cost":  "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400",
   "Asset Purchase":  "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
+  "Loan Received":   "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
+  "Loan Repayment":  "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300",
 };
 
 function fmt(n: number) {

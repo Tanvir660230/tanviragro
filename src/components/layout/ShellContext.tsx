@@ -69,10 +69,8 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved !== null) setSidebarCollapsedState(saved === "true");
       const savedFavs = localStorage.getItem("tanvir_favorites");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (savedFavs) setFavorites(JSON.parse(savedFavs));
       const savedRecent = localStorage.getItem("tanvir_recent_pages");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (savedRecent) setRecentPages(JSON.parse(savedRecent));
     } catch {
       // Ignore local storage error in private browsing

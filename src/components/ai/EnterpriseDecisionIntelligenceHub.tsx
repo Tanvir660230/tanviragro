@@ -585,7 +585,7 @@ export function EnterpriseDecisionIntelligenceHub() {
       {activeMainTab === "market" && (
         <div className="space-y-6">
           <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-foreground">Live Market Valuation and "Sell Today" Analysis</h3>
+            <h3 className="text-sm font-bold text-foreground">Live Market Valuation and &ldquo;Sell Today&rdquo; Analysis</h3>
             <p className="text-xs text-muted-foreground">Calculated using latest live weights × current applicable market rate (৳520/kg for prime beef).</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 bg-muted/40 rounded-xl space-y-1">

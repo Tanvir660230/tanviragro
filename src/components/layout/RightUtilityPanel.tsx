@@ -19,7 +19,6 @@ export function RightUtilityPanel() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (savedNote) setNoteContent(savedNote);
       const savedTasks = localStorage.getItem("tanvir_farm_tasks");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (savedTasks) setTasks(JSON.parse(savedTasks));
     } catch {}
   }, []);

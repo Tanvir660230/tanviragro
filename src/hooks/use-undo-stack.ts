@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 export interface UndoEntry<T> {
   id: string;
@@ -20,10 +20,10 @@ export interface UndoEntry<T> {
 export function useUndoStack<T>(maxDepth: number = 20) {
   const [entries, setEntries] = useState<UndoEntry<T>[]>([]);
   const [cursor, setCursor] = useState(-1);
-  const redoStack = useRef<UndoEntry<T>[]>([]);
+  const [redoStack, setRedoStack] = useState<UndoEntry<T>[]>([]);
 
   const canUndo = cursor >= 0;
-  const canRedo = redoStack.current.length > 0;
+  const canRedo = redoStack.length > 0;
 
   const push = useCallback(
     (entry: Omit<UndoEntry<T>, "id">) => {
@@ -33,7 +33,7 @@ export function useUndoStack<T>(maxDepth: number = 20) {
         return next.length > maxDepth ? next.slice(next.length - maxDepth) : next;
       });
       setCursor((c) => Math.min(c + 1, maxDepth - 1));
-      redoStack.current = [];
+      setRedoStack([]);
     },
     [cursor, maxDepth]
   );
@@ -42,22 +42,23 @@ export function useUndoStack<T>(maxDepth: number = 20) {
     if (cursor < 0) return null;
     const entry = entries[cursor];
     setCursor((c) => c - 1);
-    redoStack.current = [...redoStack.current, entry];
+    setRedoStack((prev) => [...prev, entry]);
     return entry;
   }, [cursor, entries]);
 
   const redo = useCallback((): UndoEntry<T> | null => {
-    const entry = redoStack.current.pop();
+    const entry = redoStack[redoStack.length - 1];
     if (!entry) return null;
+    setRedoStack((prev) => prev.slice(0, -1));
     setEntries((prev) => [...prev.slice(0, cursor + 1), entry]);
     setCursor((c) => c + 1);
     return entry;
-  }, [cursor]);
+  }, [cursor, redoStack]);
 
   const clear = useCallback(() => {
     setEntries([]);
     setCursor(-1);
-    redoStack.current = [];
+    setRedoStack([]);
   }, []);
 
   return { entries, cursor, push, undo, redo, clear, canUndo, canRedo, depth: entries.length };

@@ -126,7 +126,7 @@ export function EnterpriseDashboardLayout(p: EnterpriseDashboardProps) {
           </div>
           
           <div className="space-y-6">
-            <h2 className="text-sm font-semibold text-muted-foreground tracking-wide uppercase">Today's Actions</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground tracking-wide uppercase">Today&apos;s Actions</h2>
             {p.todayTasksSlot}
           </div>
       </section>

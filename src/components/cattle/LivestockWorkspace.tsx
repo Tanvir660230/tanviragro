@@ -53,6 +53,8 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }
   const [bulkWeighOpen, setBulkWeighOpen] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [batchOpsOpen, setBatchOpsOpen] = useState(false);
+  // Reference time for "unweighed in 7 days", fixed at mount so render stays pure.
+  const [mountedAtMs] = useState(() => Date.now());
   const [activeSelectedIds, setActiveSelectedIds] = useState<string[]>([]);
 
   const [activeQuickFilter, setActiveQuickFilter] = useState<
@@ -100,7 +102,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }
       case "sick":
         return cattle.filter((c) => c.is_quarantined || c.status === "quarantined");
       case "unweighed": {
-        const sevenDaysAgo = Date.now() - 7 * 86400000;
+        const sevenDaysAgo = mountedAtMs - 7 * 86400000;
         return cattle.filter(
           (c) => c.status === "active" && (!c.lastWeighedAt || new Date(c.lastWeighedAt).getTime() < sevenDaysAgo)
         );
@@ -114,7 +116,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }
       default:
         return cattle;
     }
-  }, [cattle, activeQuickFilter]);
+  }, [cattle, activeQuickFilter, mountedAtMs]);
 
   const selectedCattleList = useMemo(() => {
     const set = new Set(activeSelectedIds);

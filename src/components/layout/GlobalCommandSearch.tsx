@@ -84,7 +84,6 @@ export function GlobalCommandSearch() {
     if (isCommandOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery("");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedIdx(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }

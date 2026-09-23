@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatCard } from "@/components/ui/stat-card";
@@ -18,13 +18,42 @@ const IN_TYPES = new Set(["purchase", "adjustment_in", "transfer_in", "return", 
 const OUT_TYPES = new Set(["consumption", "adjustment_out", "transfer_out", "waste", "production_out"]);
 
 function daysAgoDays() {
-  const now = new Date();
-  const start = new Date(now.getTime() - 30 * 86400000);
-  return { now, start };
+  const nowMs = Date.now();
+  const startMs = nowMs - 30 * 86400000;
+  return { nowMs, startMs };
+}
+
+type TopConsumedRow = { name: string; category: string; qty: number; unit: string; value: number };
+
+function computeTopConsumed(
+  movements: MoveRow[],
+  portfolio: ItemStockSummary[],
+  startMs: number,
+  nowMs: number
+): TopConsumedRow[] {
+  const map = new Map<string, TopConsumedRow>();
+  const itemLookup = new Map(portfolio.map((p) => [p.itemId, p]));
+  for (const m of movements) {
+    const t = new Date(m.recorded_at).getTime();
+    if (t < startMs || t > nowMs) continue;
+    const info = itemLookup.get(m.item_id);
+    const cur = map.get(m.item_id) ?? {
+      name: info?.itemName ?? m.item_id,
+      category: info?.category ?? "other",
+      qty: 0,
+      unit: info?.unit ?? "",
+      value: 0,
+    };
+    if (m.type === "consumption") cur.qty += m.qty;
+    if ((m.type === "purchase" || m.type === "adjustment_in") && m.unit_cost != null) cur.value += m.qty * m.unit_cost;
+    map.set(m.item_id, cur);
+  }
+  return Array.from(map.values()).sort((a, b) => b.qty - a.qty).slice(0, 8);
 }
 
 export function ReportsClient({ portfolio, movements }: { portfolio: ItemStockSummary[]; movements: MoveRow[] }) {
-  const { now, start } = daysAgoDays();
+  // Stable 30-day window per mount so the memoized aggregates below don't recompute every render.
+  const [{ nowMs, startMs }] = useState(daysAgoDays);
 
   const totalValue = portfolio.reduce((s, p) => s + p.totalValuation, 0);
   const lowStock = portfolio.filter((p) => p.isLowStock);
@@ -34,47 +63,33 @@ export function ReportsClient({ portfolio, movements }: { portfolio: ItemStockSu
 const consumption30d = useMemo(() => {
     const filtered = movements.filter((m) => {
       const t = new Date(m.recorded_at).getTime();
-      return t >= start.getTime() && t <= now.getTime() && m.type === "consumption";
+      return t >= startMs && t <= nowMs && m.type === "consumption";
     });
     return filtered.reduce((s, m) => s + m.qty, 0);
-  }, [movements, start, now]);
+  }, [movements, startMs, nowMs]);
 
   const purchase30d = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity
     const filtered = movements.filter((m) => {
       const t = new Date(m.recorded_at).getTime();
-      return t >= start.getTime() && t <= now.getTime() && m.type === "purchase";
+      return t >= startMs && t <= nowMs && m.type === "purchase";
     });
     return filtered.reduce((s, m) => s + m.qty, 0);
-  }, [movements, start, now]);
+  }, [movements, startMs, nowMs]);
 
   const waste30d = useMemo(() => {
     const filtered = movements.filter((m) => {
       const t = new Date(m.recorded_at).getTime();
-      return t >= start.getTime() && t <= now.getTime() && (m.type === "waste" || m.type === "adjustment_out");
+      return t >= startMs && t <= nowMs && (m.type === "waste" || m.type === "adjustment_out");
     });
     return filtered.reduce((s, m) => s + m.qty, 0);
-  }, [movements, start, now]);
+  }, [movements, startMs, nowMs]);
 
-  const topConsumed = useMemo(() => {
-    const map = new Map<string, { name: string; category: string; qty: number; unit: string; value: number }>();
-    const itemLookup = new Map(portfolio.map((p) => [p.itemId, p]));
-    const filtered = movements.filter((m) => {
-      const t = new Date(m.recorded_at).getTime();
-      return t >= start.getTime() && t <= now.getTime();
-    });
-    for (const m of filtered) {
-      const info = itemLookup.get(m.item_id);
-      const name = info?.itemName ?? m.item_id;
-      const category = info?.category ?? "other";
-      const unit = info?.unit ?? "";
-      const cur = map.get(m.item_id) ?? { name, category, qty: 0, unit, value: 0 };
-      if (m.type === "consumption") cur.qty += m.qty;
-      if ((m.type === "purchase" || m.type === "adjustment_in") && m.unit_cost != null) cur.value += m.qty * m.unit_cost;
-      map.set(m.item_id, cur);
-    }
-    return Array.from(map.values()).sort((a, b) => b.qty - a.qty).slice(0, 8);
-  }, [movements, portfolio, start, now]);
+  // React Compiler is not enabled in this project, so this manual memo is the real one; revisit if the compiler is turned on.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const topConsumed = useMemo(
+    () => computeTopConsumed(movements, portfolio, startMs, nowMs),
+    [movements, portfolio, startMs, nowMs]
+  );
 
   const reorderNeeds = useMemo(() => {
     return portfolio

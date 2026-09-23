@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface KeyboardNavGridOptions {
   rowCount: number;
@@ -38,14 +38,19 @@ export function useKeyboardNavGrid({
   enabled = true,
   containerRef,
 }: KeyboardNavGridOptions): KeyboardNavResult {
+  // Refs give the keydown handler the latest values; state drives re-renders.
   const activeRow = useRef(0);
   const activeCol = useRef(0);
+  const [active, setActive] = useState({ row: 0, col: 0 });
   const cb = useRef({ onActiveChange, onSelect, onEnterRow, onSelectAll });
-  cb.current = { onActiveChange, onSelect, onEnterRow, onSelectAll };
+  useEffect(() => {
+    cb.current = { onActiveChange, onSelect, onEnterRow, onSelectAll };
+  }, [onActiveChange, onSelect, onEnterRow, onSelectAll]);
 
   const emit = useCallback((row: number, col: number) => {
     activeRow.current = row;
     activeCol.current = col;
+    setActive({ row, col });
     cb.current.onActiveChange?.(row, col);
   }, []);
 
@@ -66,7 +71,6 @@ export function useKeyboardNavGrid({
     const el = containerRef.current;
     if (!el || !enabled) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)) return;
@@ -127,8 +131,8 @@ export function useKeyboardNavGrid({
   }, [enabled, containerRef, move, commit, emit, rowCount]);
 
   return {
-    activeRow: activeRow.current,
-    activeCol: activeCol.current,
+    activeRow: active.row,
+    activeCol: active.col,
     move,
     commit,
   };

@@ -112,7 +112,6 @@ export function useDataGridState<T extends Record<string, any>>(options: UseData
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
 
   // Sync columns changes
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setColumnOrder((prev) => {

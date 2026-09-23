@@ -123,6 +123,14 @@ describe("Enterprise Animal Health & Medical Engine", () => {
   });
 
   describe("Intelligent Health Risk Alert Evaluation", () => {
+    // The engine reads the real clock; pin it so fixture dates stay relative to "today".
+    beforeAll(() => {
+      jest.useFakeTimers({ now: new Date("2026-09-10T06:00:00Z") });
+    });
+    afterAll(() => {
+      jest.useRealTimers();
+    });
+
     const mockCattle = {
       id: "cattle-123",
       tag_id: "TAG-901",

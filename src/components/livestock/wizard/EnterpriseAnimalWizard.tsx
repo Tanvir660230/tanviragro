@@ -125,7 +125,6 @@ export function EnterpriseAnimalWizard({
           if (parsed?.identification?.tagId) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setState(parsed);
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setHasRestoredDraft(true);
             toast.info("Restored uncommitted animal draft", {
               action: {
