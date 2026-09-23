@@ -29,6 +29,36 @@ Last updated: 2026-09-24 (Phase 0 session)
 - **The local install uses pnpm** (`node_modules/.pnpm/…`) while the tracked lockfile and CI use npm. `npm ci` in CI has not been proven to succeed, because CI has never run (the branch is not pushed).
 - **Corrected claim:** the "stale pinned list" issue suspected in `PersonalizationContext` does not occur in practice. The refactor there was for lint conformance, and tests confirm behavior is unchanged.
 
+## Confirmed against production (2026-09-24)
+Read-only probes with the **public anon key**; no data rows were read and nothing was written. A follow-up count probe using the service-role key was blocked by the permission system, and Claude did not retry it.
+
+| Finding | Live result |
+|---|---|
+| SEC-10 `profiles` readable by anyone | **CONFIRMED**: the anon key sees 2 profile rows |
+| SEC-04 `get_user_business_role` | **CONFIRMED** callable by anon (returned null for a random ID) |
+| DB-03 `get_finance_summary` | **CONFIRMED** it exists, anon can call it, and it is broken (`column it.inventory_item_id does not exist`) |
+| BUG-09 / BUG-16 / DB-01 | **CONFIRMED** missing in production: `cattle_sales`, `financial_transactions`, `orders`. Code that queries them silently gets nothing |
+| DB-01 `management_fee_rates` | Exists in production but in no migration (drift) |
+| SEC-03 the 9 tables from migration 026 | They **exist**. The anon key sees 0 rows, which is consistent with RLS being on **or** with empty tables; the SQL snapshot is still needed to tell which |
+
+## Phase 1 (this session, branch `chore/phase0-baseline`)
+- `7a58e2d`: server-side role checks on 17 pages and 83 server actions; safe redirects; invite URL fix; role validation.
+- `a391214`: Next.js 16.3.6 (critical advisory fixed); Sentry and edge-runtime deprecations cleared.
+- `1e3ffc3`: RLS hardening migration **(not applied)** plus a local test harness. On a throwaway PostgreSQL 17 with all migrations replayed:
+  - **before** the migration, a worker can set their own role to `owner` and move their membership to another business;
+  - **after** it, **19/19** checks pass;
+  - the migration is idempotent.
+- Gate after all changes: tsc 0 errors, lint 0 errors, **381/381 tests**, build passes.
+
+## New findings this session
+- **DB-11 (P1): the committed migrations cannot build a fresh database.**
+  - `003_new_features.sql` adds FKs to `vendors` before creating it.
+  - `032_enterprise_identity_organization.sql` has section 1 (`organization_units`) after the sections that reference it.
+  - No migration creates `health_events.deleted_at`, yet 57 queries filter on it.
+  - Production was built some other way (SQL editor). The harness patches these in a temp copy only; the real fix is the schema baseline (plan 0.3).
+- **Behavior change to confirm:** under the declared role matrix, `manager` has `FINANCE_VIEW` but not `ACCOUNTING_VIEW`. Managers can see Finance but are now redirected away from Accounting pages; the old middleware let them in. If managers should see Accounting, add `ACCOUNTING_VIEW` to `manager` in `src/constants/roles.ts`.
+- **Behavior change to confirm:** workers lack `HEALTH_MANAGE`, so they can no longer record vaccinations or treatments; only owner, admin, manager and veterinarian can. If field workers record vaccines, grant it to `worker`.
+
 ## Blocked: needs the owner
 These steps touch production or the owner's accounts. An automated permission rule blocked Claude's attempt to run read-only queries against the production Supabase API, and Claude did not try to work around it.
 

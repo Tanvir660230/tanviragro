@@ -18,16 +18,16 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 | 0.3 | DB-01 | P1 | Dump live schema/policies; baseline migration; generated types | BLOCKED: production read not permitted; run docs/sql/live_security_snapshot.sql |
 | 0.4 | BUG-06a | P1 | Verify Supabase platform backups/PITR | BLOCKED: owner to check dashboard |
 | 0.5 | TEST-01a | P1 | Green gate: fix TS error, failing test, lint errors; commit CI | DONE (28bc895, 3653627): tsc 0, lint 0 errors, 356/356 tests, build passes with TS checks; CI committed but never run (not pushed) |
-| 1.1 | SEC-02 | P0 | Fix `business_users` RLS self-escalation | TODO |
-| 1.2 | SEC-03 | P0 | Enable RLS on 9 unprotected tables | TODO |
-| 1.3 | SEC-04 | P1 | Harden/drop SECURITY DEFINER functions | TODO |
-| 1.4 | SEC-10 | P2 | Profiles + storage policies | TODO |
-| 1.5 | SEC-07 | P1 | Upgrade Next.js to ≥16.3.6 | TODO |
-| 1.6 | SEC-05 | P1 | Server-side page guards; stop trusting user_metadata | TODO |
-| 1.7 | SEC-08 | P1 | Fix invite redirect URL | TODO |
-| 1.8 | SEC-09 | P2 | Fix open redirect in auth callback | TODO |
-| 2.1 | SEC-06 | P1 | All server actions through `createProtectedAction` | TODO |
-| 2.2 | SEC-11 | P2 | Validate role changes | TODO |
+| 1.1 | SEC-02 | P0 | Fix `business_users` RLS self-escalation | WRITTEN + TESTED, NOT APPLIED (1e3ffc3): 19/19 local RLS checks; exploit reproduced on pre-migration schema |
+| 1.2 | SEC-03 | P0 | Enable RLS on 9 unprotected tables | WRITTEN + TESTED, NOT APPLIED (1e3ffc3) |
+| 1.3 | SEC-04 | P1 | Harden/drop SECURITY DEFINER functions | WRITTEN + TESTED, NOT APPLIED (1e3ffc3); get_finance_summary confirmed live, broken, anon-callable |
+| 1.4 | SEC-10 | P2 | Profiles + storage policies | WRITTEN + TESTED, NOT APPLIED (1e3ffc3); profiles anon-readable CONFIRMED LIVE |
+| 1.5 | SEC-07 | P1 | Upgrade Next.js to ≥16.3.6 | DONE (a391214): next 16.3.6, 0 critical in npm audit |
+| 1.6 | SEC-05 | P1 | Server-side page guards; stop trusting user_metadata | DONE (7a58e2d): 17 pages guarded; accounting DAL checks role; middleware no longer trusts user_metadata |
+| 1.7 | SEC-08 | P1 | Fix invite redirect URL | DONE (7a58e2d): uses NEXT_PUBLIC_APP_URL / Netlify URL |
+| 1.8 | SEC-09 | P2 | Fix open redirect in auth callback | DONE (7a58e2d): safeRedirectPath + tests; login honours redirectTo safely |
+| 2.1 | SEC-06 | P1 | All server actions through `createProtectedAction` | PARTIAL (7a58e2d): 83 actions guarded via actionPermissionError; move to createProtectedAction pipeline still open |
+| 2.2 | SEC-11 | P2 | Validate role changes | DONE (7a58e2d) |
 | 2.3 | ARCH-02 | P2 | Single business-context resolver | TODO |
 | 2.4 | BUG-08 | P2 | Asia/Dhaka date helper | TODO |
 | 3.1 | DB-07 | P1 | Tenant/team-member model | TODO (decision needed) |
@@ -56,6 +56,7 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 | 9.3 | DEPLOY-03 | P3 | Repo hygiene | TODO |
 | 9.4 | CLEAN-01 | P3 | Remove dead engines/components after coverage exists | TODO |
 | 9.5 | BUG-22 | P2 | Service worker never rebuilt (Serwist + Turbopack) | TODO |
+| 9.6 | DB-11 | P1 | Committed migrations cannot replay on a fresh DB (003, 032 order bugs; health_events.deleted_at never created) | TODO: fix via baseline dump (0.3); harness patches temp copies |
 | 10 | VERIFY | — | Full regression + ledger reconciliation + security retest | TODO |
 
 ---
