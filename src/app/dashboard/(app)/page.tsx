@@ -2,31 +2,11 @@ import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { getDictionary } from "@/i18n/getDictionary";
 import { cookies } from "next/headers";
 import type { Locale } from "@/i18n/getDictionary";
-import { DashboardDataService } from "@/lib/services/dashboard.service";
-import { AnalyticsAggregationService } from "@/lib/analytics/aggregation-service";
-import type { OperationalAlertItem } from "@/lib/analytics/types";
-import type { AttentionItem } from "@/components/dashboard/CommandCenterBanner";
 import Link from "next/link";
-import { DashboardHero } from "@/components/dashboard/DashboardHero";
-import { EnterpriseDashboard } from "@/components/dashboard/EnterpriseDashboard";
-import { EidCountdownCard } from "@/components/dashboard/EidCountdownCard";
-import { TodayTasksCard } from "@/components/dashboard/TodayTasksCard";
-import { FarmFeedSummaryCard } from "@/components/dashboard/FarmFeedSummaryCard";
-import { CashFlowForecastCard } from "@/components/dashboard/CashFlowForecastCard";
-import { CashBalanceCard } from "@/components/dashboard/CashBalanceCard";
+import { loadHomeModel } from "@/lib/home/home-data";
+import { HomeScreen } from "@/components/home/HomeScreen";
 
 export const revalidate = 0; // Ensures fresh data for the dashboard
-
-/** Maps the backend AlertEngine output into the CommandCenterBanner UI format */
-function toAttentionItems(alerts: OperationalAlertItem[]): AttentionItem[] {
-  return alerts.slice(0, 6).map((a) => ({
-    id: a.id,
-    type: a.severity === "high" ? "critical" : a.severity === "medium" ? "warning" : "info",
-    title: a.title,
-    subtitle: a.description,
-    href: a.actionUrl ?? "/dashboard",
-  }));
-}
 
 export default async function DashboardPage() {
   const supabase = await getServerClient();
@@ -52,43 +32,13 @@ export default async function DashboardPage() {
     );
   }
 
-  // Fetch unified dashboard payload through the centralized Dashboard Data Service
-  const dashboardData = await DashboardDataService.getUnifiedDashboardData(supabase, businessId, t);
-  const { stats, activities, valuation, insights, healthScore, monthlyPoints, trends } = dashboardData;
+  // One model for the whole home screen, from the audited sources (see lib/home/home-model.ts)
+  const model = await loadHomeModel(supabase, businessId);
+  const now = new Date();
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Asia/Dhaka" }).format(now));
+  const dateLabel = new Intl.DateTimeFormat(locale === "bn" ? "bn-BD" : "en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Dhaka",
+  }).format(now);
 
-  // Wire the AlertEngine + analytics pipeline for the Command Center banner
-  let attentionItems: AttentionItem[] | undefined;
-  try {
-    const execData = await AnalyticsAggregationService.getExecutiveDashboardData(supabase, businessId, "ceo");
-    attentionItems = toAttentionItems(execData.alerts);
-  } catch {
-    // Fall back to hiding the banner when analytics are unavailable
-    attentionItems = undefined;
-  }
-
-  return (
-    <div className="space-y-6 pb-12">
-      {/* 1. Executive Hero Header — global farm health pulse */}
-      <DashboardHero stats={stats} healthScore={healthScore} valuation={valuation} t={t} locale={locale} />
-
-      {/* 2. Enterprise Operational Command Center Experience */}
-      <EnterpriseDashboard
-        stats={stats}
-        activities={activities}
-        valuation={valuation}
-        insights={insights}
-        healthScore={healthScore}
-        monthlyPoints={monthlyPoints}
-        trends={trends}
-        attentionItems={attentionItems}
-        todayTasksSlot={<TodayTasksCard />}
-        farmFeedSummarySlot={<FarmFeedSummaryCard />}
-        cashFlowForecastSlot={<CashFlowForecastCard />}
-        eidCountdownSlot={<EidCountdownCard />}
-        cashBalanceSlot={<CashBalanceCard />}
-        t={t}
-        locale={locale}
-      />
-    </div>
-  );
+  return <HomeScreen model={model} t={t.home} hour={hour} dateLabel={dateLabel} />;
 }

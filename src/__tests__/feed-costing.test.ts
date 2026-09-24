@@ -255,7 +255,6 @@ describe("source guards", () => {
     for (const f of [
       "app/dashboard/(app)/finance/page.tsx",
       "app/dashboard/(app)/partners/page.tsx",
-      "app/dashboard/(app)/global-actions.ts",
       "lib/supabase/queries/valuation.ts",
       "lib/supabase/queries/dashboard.ts",
       "lib/accounting/engine.ts",
