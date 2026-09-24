@@ -289,7 +289,7 @@ export async function getAnimalUnifiedTimelineAction(
         .order("recorded_at", { ascending: false }),
       (supabase as any)
         .from("health_events")
-        .select("id, title, event_type, scheduled_at, completed_at, dosage, cost_bdt, notes")
+        .select("id, title, event_type, scheduled_at, completed_at, notes")   // dosage / cost_bdt do not exist: the whole query failed
         .eq("cattle_id", cattleId)
         .eq("business_id", businessId)
         .is("deleted_at", null)

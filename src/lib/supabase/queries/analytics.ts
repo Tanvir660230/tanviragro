@@ -69,9 +69,10 @@ export async function getMonthlyRevenueVsCost(
       .gte("purchase_date", sinceStr),
     supabase
       .from("inventory_transactions")
-      .select("qty, unit_cost, recorded_at, inventory_items!inner(business_id)")
+      .select("qty, unit_cost, recorded_at, movement_type, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", businessId)
-      .eq("type", "consumption")
+      // feed eaten = consumption − its audited undo; stock-count losses and purchase undos are not feed
+      .in("movement_type", ["consumption", "consumption_reversal"])
       .gte("recorded_at", sinceStr),
     supabase
       .from("cattle_treatments")
@@ -106,7 +107,8 @@ export async function getMonthlyRevenueVsCost(
   // Feed/inventory consumption costs by month
   for (const t of invRaw ?? []) {
     const key = (t.recorded_at as string).slice(0, 7);
-    if (monthMap[key]) monthMap[key].cost += Number(t.qty) * Number(t.unit_cost ?? 0);
+    const sign = (t as { movement_type?: string }).movement_type === "consumption_reversal" ? -1 : 1;
+    if (monthMap[key]) monthMap[key].cost += sign * Number(t.qty) * Number(t.unit_cost ?? 0);
   }
   // Medical costs by month
   for (const t of treatmentRaw ?? []) {

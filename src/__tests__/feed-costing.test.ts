@@ -244,7 +244,10 @@ describe("source guards", () => {
   });
 
   test("cash views count supplier purchases only", () => {
-    expect(read("lib/supabase/queries/cash.ts")).toMatch(/\.eq\("movement_type", "purchase"\)/);
+    // supplier purchases, net of audited purchase undos — never every IN row
+    expect(read("lib/supabase/queries/cash.ts")).toMatch(/\.in\("movement_type", \["purchase", "purchase_reversal"\]\)/);
+    // only enum values that exist: an unknown value ("draw") made PostgREST drop all partner capital
+    expect(read("lib/supabase/queries/cash.ts")).not.toMatch(/"draw"\]/);
     expect(read("lib/accounting/engine.ts")).not.toMatch(/Math\.max\(0, allTimePurchaseValue/);
   });
 

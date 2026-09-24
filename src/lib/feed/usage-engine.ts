@@ -59,9 +59,37 @@ export type Period = {
  * coversFrom: a herd row that covers several days (e.g. a stock-finished catch-up) — it is
  * spread from coversFrom to date by the weight of the animals present each day.
  */
-export type RecordedRow = { date: string; coversFrom?: string | null; itemId: string; itemName?: string; unit?: string; qty: number; unitCost: number | null; cattleId: string | null };
+export type RecordedRow = { date: string; coversFrom?: string | null; itemId: string; itemName?: string; unit?: string; kgPerUnit?: number | null; qty: number; unitCost: number | null; cattleId: string | null };
 
-export type AnimalFeed = { actual: number; estimated: number; actualQtyByItem: Record<string, number>; actualValueByItem: Record<string, number>; estimatedQtyByItem: Record<string, number> };
+export type AnimalFeed = {
+  actual: number; estimated: number;
+  actualQtyByItem: Record<string, number>; actualValueByItem: Record<string, number>; estimatedQtyByItem: Record<string, number>;
+  /** ACTUAL feed value per day (YYYY-MM-DD) — for costs over an exact window, e.g. a measured gain */
+  actualByDay: Record<string, number>;
+  /** ACTUAL feed kg per day, only for items in kg or with a known kg per unit (never guessed) */
+  actualKgByDay: Record<string, number>;
+};
+
+/** kg in one stock unit: 1 for kg items, the item's kg-per-unit when known, else null. */
+export function kgFactor(unit: string | undefined, kgPerUnit: number | null | undefined): number | null {
+  return (unit ?? "").trim().toLowerCase() === "kg" ? 1 : kgPerUnit ?? null;
+}
+
+/** Actual feed kg of one animal between two days (inclusive); items without a kg factor excluded. */
+export function feedKgBetween(f: AnimalFeed | undefined, from: string, to: string): number {
+  if (!f) return 0;
+  let s = 0;
+  for (const [d, v] of Object.entries(f.actualKgByDay)) if (d >= from && d <= to) s += v;
+  return s;
+}
+
+/** Actual feed value of one animal between two days (inclusive). */
+export function feedCostBetween(f: AnimalFeed | undefined, from: string, to: string): number {
+  if (!f) return 0;
+  let s = 0;
+  for (const [d, v] of Object.entries(f.actualByDay)) if (d >= from && d <= to) s += v;
+  return s;
+}
 
 export type LineResult = {
   periodId: string;
@@ -161,7 +189,7 @@ export function variance(expected: number | null, actual: number | null): { qty:
 }
 
 // ── the snapshot ────────────────────────────────────────────────────────────
-function blankAnimal(): AnimalFeed { return { actual: 0, estimated: 0, actualQtyByItem: {}, actualValueByItem: {}, estimatedQtyByItem: {} }; }
+function blankAnimal(): AnimalFeed { return { actual: 0, estimated: 0, actualQtyByItem: {}, actualValueByItem: {}, estimatedQtyByItem: {}, actualByDay: {}, actualKgByDay: {} }; }
 
 export function computeFeedSnapshot(input: {
   asOf: string;
@@ -186,13 +214,15 @@ export function computeFeedSnapshot(input: {
   const month = (d: string) => (byMonth[d.slice(0, 7)] ??= { actual: 0, estimated: 0 });
 
   // spreads qty/value of a day over the animals present, by their need
-  function spreadDay(day: string, qty: number, value: number, weights: Map<string, number>, kind: "actual" | "estimated", itemId: string) {
+  function spreadDay(day: string, qty: number, value: number, weights: Map<string, number>, kind: "actual" | "estimated", itemId: string, kgPer: number | null = null) {
     const total = [...weights.values()].reduce((s, w) => s + w, 0);
     if (total <= 0) { unallocated += value; return; }
     for (const [id, w] of weights) {
       const f = perAnimal[id];
       if (kind === "actual") {
         f.actual += value * (w / total);
+        f.actualByDay[day] = (f.actualByDay[day] ?? 0) + value * (w / total);
+        if (kgPer != null) f.actualKgByDay[day] = (f.actualKgByDay[day] ?? 0) + qty * kgPer * (w / total);
         f.actualQtyByItem[itemId] = (f.actualQtyByItem[itemId] ?? 0) + qty * (w / total);
         f.actualValueByItem[itemId] = (f.actualValueByItem[itemId] ?? 0) + value * (w / total);
       }
@@ -258,7 +288,7 @@ export function computeFeedSnapshot(input: {
       const needTotal = ruleTotal ?? dayNeeds.reduce((s, x) => s + x, 0);
       perDay.forEach((d, i) => {
         const dayShare = needTotal > 0 ? (ruleTotal != null ? (d.ruleQty ?? 0) : dayNeeds[i]) / needTotal : 1 / perDay.length;
-        spreadDay(d.day, qty * dayShare, value * dayShare, d.weights, "actual", l.itemId);
+        spreadDay(d.day, qty * dayShare, value * dayShare, d.weights, "actual", l.itemId, kgFactor(l.unit, l.kgPerUnit));
         month(d.day).actual += value * dayShare;
       });
       bucket.actualQty += qty;
@@ -290,6 +320,8 @@ export function computeFeedSnapshot(input: {
     if (r.cattleId) {
       const f = (perAnimal[r.cattleId] ??= blankAnimal());
       f.actual += value;
+      f.actualByDay[r.date] = (f.actualByDay[r.date] ?? 0) + value;
+      { const k = kgFactor(r.unit, r.kgPerUnit); if (k != null) f.actualKgByDay[r.date] = (f.actualKgByDay[r.date] ?? 0) + r.qty * k; }
       f.actualQtyByItem[r.itemId] = (f.actualQtyByItem[r.itemId] ?? 0) + r.qty;
       f.actualValueByItem[r.itemId] = (f.actualValueByItem[r.itemId] ?? 0) + value;
       month(r.date).actual += value;
@@ -305,7 +337,7 @@ export function computeFeedSnapshot(input: {
     const herdTotal = perDay.reduce((s, d) => s + d.total, 0);
     for (const d of perDay) {
       const share = herdTotal > 0 ? d.total / herdTotal : 1 / perDay.length;
-      spreadDay(d.day, r.qty * share, value * share, d.weights, "actual", r.itemId);
+      spreadDay(d.day, r.qty * share, value * share, d.weights, "actual", r.itemId, kgFactor(r.unit, r.kgPerUnit));
       month(d.day).actual += value * share;
     }
   }

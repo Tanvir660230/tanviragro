@@ -32,6 +32,7 @@ export async function getCashBalance(
     { data: fixedAssetData },
     { data: loansData },
     { data: liabilitiesData },
+    { data: treatmentsData },
   ] = await Promise.all([
     supabase
       .from("businesses")
@@ -43,7 +44,9 @@ export async function getCashBalance(
       .from("partner_transactions")
       .select("amount, type, deleted_at, partners!inner(business_id)")
       .eq("partners.business_id", businessId)
-      .in("type", ["investment", "withdrawal", "profit", "draw"])
+      // only values that exist in partner_transaction_type — an unknown value (e.g. "draw")
+      // makes PostgREST reject the whole query, which silently dropped all partner capital
+      .in("type", ["investment", "withdrawal", "profit"])
       .is("deleted_at", null),
 
     supabase
@@ -60,9 +63,9 @@ export async function getCashBalance(
 
     supabase
       .from("inventory_transactions")
-      .select("qty, unit_cost, inventory_items!inner(business_id)")
+      .select("qty, unit_cost, movement_type, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", businessId)
-      .eq("movement_type", "purchase")
+      .in("movement_type", ["purchase", "purchase_reversal"])   // an undone purchase is not cash spent
       .not("unit_cost", "is", null),
 
     supabase
@@ -95,6 +98,13 @@ export async function getCashBalance(
       .select("outstanding, settled_at")
       .eq("business_id", businessId)
       .is("deleted_at", null),
+
+    // Vet fees are recorded on the treatment (the medical forms no longer write a second
+    // cost entry for the same money) — they are cash paid, like the accounting engine counts them.
+    supabase
+      .from("cattle_treatments")
+      .select("vet_fee, additional_medical_cost, cattle!inner(business_id)")
+      .eq("cattle.business_id", businessId),
   ]);
 
   const opening = Number((bizData as { opening_cash_balance: number } | null)?.opening_cash_balance ?? 0);
@@ -104,8 +114,13 @@ export async function getCashBalance(
     partnerTransactions: (capitalTxns ?? []) as any[],
     sales: (salesData ?? []) as any[],
     cattle: (cattleData ?? []) as any[],
-    inventoryPurchases: (invPurchases ?? []) as any[],
-    operatingExpenses: (costData ?? []) as any[],
+    inventoryPurchases: ((invPurchases ?? []) as { qty: number; unit_cost: number | null; movement_type: string }[])
+      .map((r) => ({ qty: r.movement_type === "purchase_reversal" ? -Number(r.qty) : Number(r.qty), unit_cost: r.unit_cost })),
+    operatingExpenses: [
+      ...((costData ?? []) as { amount: number }[]),
+      ...((treatmentsData ?? []) as { vet_fee: number | null; additional_medical_cost: number | null }[])
+        .map((t) => ({ amount: Number(t.vet_fee ?? 0) + Number(t.additional_medical_cost ?? 0) })),
+    ],
     costEntryAssets: (assetCostData ?? []) as any[],
     fixedAssets: (fixedAssetData ?? []) as any[],
     loans: (loansData ?? []) as any[],

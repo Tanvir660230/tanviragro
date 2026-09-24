@@ -25,6 +25,7 @@ import { LivestockProfitabilityEngine } from "@/lib/financial";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
+import { loadMonthlyConsumptions } from "@/lib/inventory/consumption-stats";
 
 
 export const metadata: Metadata = { title: "Finance & P&L" };
@@ -127,7 +128,7 @@ export default async function FinancePage(props: {
           .eq("status", "active")
       : Promise.resolve({ data: [] }),
     businessId
-      ? supabase.rpc("get_monthly_consumptions", { p_business_id: businessId })
+      ? loadMonthlyConsumptions(supabase, businessId).then((data) => ({ data }))   // feed eaten, net of undos
       : Promise.resolve({ data: [] }),
     businessId
       ? supabase.rpc("get_cattle_consumptions", { p_business_id: businessId })

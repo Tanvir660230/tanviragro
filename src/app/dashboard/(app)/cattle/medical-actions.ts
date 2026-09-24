@@ -139,19 +139,8 @@ export async function administerMedicine(
     }
   }
 
-  // 3. Log vet fee + additional costs as cost_entry (non-blocking if fails)
-  const totalMedCost = vet_fee + additional_medical_cost;
-  if (totalMedCost > 0) {
-    await supabase.from("cost_entries").insert({
-      business_id: bizId,
-      cattle_id,
-      type: "variable",
-      category: "Medical/Vet Fee",
-      amount: totalMedCost,
-      recorded_at: treated_at,
-      description: `Cattle #${cattle.tag_id} — ${diagnosis || "medical treatment"}`,
-    });
-  }
+  // The vet fee lives on the treatment row only. A second "Medical/Vet Fee" cost entry for the
+  // same money was counted twice (capitalised via the treatment AND expensed / paid again).
 
   await LivestockEventBus.publish(
     "TreatmentRecorded",
@@ -164,7 +153,7 @@ export async function administerMedicine(
   revalidatePath(`/dashboard/cattle/${cattle_id}`);
   revalidatePath("/dashboard/cattle/health");
   revalidatePath("/dashboard/inventory");
-  if (totalMedCost > 0) revalidatePath("/dashboard/finance");
+  if (vet_fee + additional_medical_cost > 0) revalidatePath("/dashboard/finance");
   revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
@@ -222,14 +211,16 @@ export async function recordClinicalVisitAction(
       }
     }
 
-    for (const item of payload.prescriptions || []) {
+    for (const [i, item] of (payload.prescriptions || []).entries()) {
+      // one visit = one fee: it goes on the first prescription row only (it used to be
+      // repeated on every medicine row, multiplying the fee by the number of medicines)
       const { error: treatErr } = await supabase.from("cattle_treatments").insert({
         cattle_id: payload.cattleId,
         medicine_item_id: item.medicineItemId || null,
         dose_administered: item.dose || null,
         dose_unit: item.doseUnit || "ml",
-        vet_fee: payload.vetFeeBdt || 0,
-        additional_medical_cost: (payload.labTestFeeBdt || 0) + (payload.additionalCostBdt || 0),
+        vet_fee: i === 0 ? payload.vetFeeBdt || 0 : 0,
+        additional_medical_cost: i === 0 ? (payload.labTestFeeBdt || 0) + (payload.additionalCostBdt || 0) : 0,
         diagnosis: `${payload.primaryDiagnosis}${item.route ? ` [${item.route}]` : ""}`,
         notes: payload.recommendations || item.notes || null,
         treated_at: payload.visitDate,
@@ -263,18 +254,8 @@ export async function recordClinicalVisitAction(
       });
     }
 
+    // The fee is on the treatment row (see above); no second cost entry for the same money.
     const totalMedicalCost = (payload.vetFeeBdt || 0) + (payload.labTestFeeBdt || 0) + (payload.additionalCostBdt || 0);
-    if (totalMedicalCost > 0) {
-      await supabase.from("cost_entries").insert({
-        business_id: bizId,
-        cattle_id: payload.cattleId,
-        type: "variable",
-        category: "Medical/Vet Fee",
-        amount: totalMedicalCost,
-        recorded_at: payload.visitDate,
-        description: `Clinical Visit #${cattle.tag_id} — ${payload.primaryDiagnosis} (Dr. ${payload.veterinarianName})`,
-      });
-    }
 
     const cattleUpdates: Record<string, unknown> = {};
     if (payload.requiresQuarantine && !cattle.is_quarantined) {

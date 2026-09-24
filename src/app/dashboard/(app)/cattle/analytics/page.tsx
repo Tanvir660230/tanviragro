@@ -4,6 +4,9 @@ import { BarChart3 } from "lucide-react";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AnalyticsDashboardClient } from "@/components/cattle/AnalyticsDashboardClient";
+import { loadFeedData } from "@/lib/feed/feed-data";
+import { feedCostBetween, feedKgBetween } from "@/lib/feed/usage-engine";
+import { measuredGrowth, measuredLogs } from "@/lib/growth/baseline";
 
 export const metadata: Metadata = { title: "Cattle Analytics" };
 
@@ -73,7 +76,7 @@ async function AnalyticsSection() {
   // All active cattle
   const { data: rawCattle } = await supabase
     .from("cattle")
-    .select("id, tag_id, breed, gender, purchase_date, purchase_price, initial_weight_kg, status")
+    .select("id, tag_id, breed, gender, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, status")
     .eq("business_id", businessId)
     .eq("status", "active")
     .is("deleted_at", null)
@@ -94,79 +97,53 @@ async function AnalyticsSection() {
     );
   }
 
-  // Parallel: weight logs + feed consumption
-  const [{ data: rawLogs }, { data: rawConsumption }] = await Promise.all([
+  // Weight logs (with measured / estimated type) + the feed engine's actual allocation
+  // (the herd's feed shared by weight per day, the animal's own rows in full).
+  const [{ data: rawLogs }, feed] = await Promise.all([
     supabase
       .from("weight_logs")
-      .select("cattle_id, weight_kg, recorded_at")
+      .select("cattle_id, weight_kg, recorded_at, weight_type")
       .in("cattle_id", activeIds)
       .is("deleted_at", null)
       .order("recorded_at", { ascending: false }),
-    supabase
-      .from("inventory_transactions")
-      .select("cattle_id, qty, unit_cost, inventory_items!inner(category, deleted_at)")
-      .eq("type", "consumption")
-      .eq("inventory_items.category", "feed")
-      .is("inventory_items.deleted_at", null)
-      .in("cattle_id", activeIds),
+    loadFeedData(supabase, businessId),
   ]);
 
-  // Build lookup maps
-  const latestWeightMap: Record<string, number> = {};
-  const lastWeighedMap: Record<string, string> = {};
-  const adg14Map: Record<string, number> = {};
-  const recentLogsMap: Record<string, { weight_kg: number; recorded_at: string }[]> = {};
+  type LogRow = { cattle_id: string; weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" | null };
+  const logsBy: Record<string, LogRow[]> = {};
+  for (const log of (rawLogs ?? []) as LogRow[]) (logsBy[log.cattle_id] ??= []).push(log);
 
-  for (const log of (rawLogs ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string }[]) {
-    if (!(log.cattle_id in latestWeightMap)) {
-      latestWeightMap[log.cattle_id] = log.weight_kg;
-      lastWeighedMap[log.cattle_id] = log.recorded_at;
-    }
-    if (new Date(log.recorded_at).getTime() >= cutoff14) {
-      if (!recentLogsMap[log.cattle_id]) recentLogsMap[log.cattle_id] = [];
-      recentLogsMap[log.cattle_id].push(log);
-    }
-  }
-
-  for (const [id, logs] of Object.entries(recentLogsMap)) {
-    if (logs.length < 2) continue;
-    const sorted = logs.sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
-    const newest = sorted[0], oldest = sorted[sorted.length - 1];
-    const days = (new Date(newest.recorded_at).getTime() - new Date(oldest.recorded_at).getTime()) / 86400000;
-    if (days >= 3) adg14Map[id] = (newest.weight_kg - oldest.weight_kg) / days;
-  }
-
-  const feedKgMap: Record<string, number> = {};
-  const feedCostMap: Record<string, number> = {};
-  for (const row of (rawConsumption ?? []) as { cattle_id: string | null; qty: number; unit_cost: number | null }[]) {
-    if (!row.cattle_id) continue;
-    feedKgMap[row.cattle_id] = (feedKgMap[row.cattle_id] ?? 0) + row.qty;
-    feedCostMap[row.cattle_id] = (feedCostMap[row.cattle_id] ?? 0) + row.qty * (row.unit_cost ?? 0);
-  }
-
-  // Compute per-cattle analytics
+  // Compute per-cattle analytics — growth from MEASURED weights only (an estimate never
+  // produces an official gain), and feed over the SAME days as that gain.
   const result: AnalyticsCattle[] = cattle.map((c) => {
-    const initialWeight = c.initial_weight_kg ?? 0;
-    const currentWeight = latestWeightMap[c.id] ?? initialWeight;
-    const lastWeighedAt = lastWeighedMap[c.id] ?? null;
-    const weightGain = currentWeight - initialWeight;
+    const logs = logsBy[c.id] ?? [];
+    const measured = measuredLogs(logs);
+    const growth = measuredGrowth(c as { initial_weight_kg: number | null; initial_weight_type?: "measured" | "estimated" | "unknown" | null; purchase_date: string }, logs);
+    const initialWeight = growth?.baseline.weightKg ?? Number(c.initial_weight_kg ?? 0);
+    const currentWeight = Number(measured.at(-1)?.weight_kg ?? initialWeight);
+    const lastWeighedAt = measured.at(-1)?.recorded_at ?? null;
+    const weightGain = growth ? growth.gainKg : 0;
 
     const purchaseMs = new Date(c.purchase_date + "T00:00:00").getTime();
     const daysInPen = Math.max(0, Math.floor((todayMs - purchaseMs) / 86400000));
+    const adg = growth ? growth.adg : null;
 
-    const daysToLatestWeigh = lastWeighedAt
-      ? Math.max(1, Math.floor((new Date(lastWeighedAt).getTime() - purchaseMs) / 86400000))
-      : daysInPen;
+    // 14-day ADG from measured weighings only
+    const recent = measured.filter((l) => new Date(l.recorded_at).getTime() >= cutoff14);
+    let adg14: number | null = null;
+    if (recent.length >= 2) {
+      const oldest = recent[0], newest = recent[recent.length - 1];
+      const days = (new Date(newest.recorded_at).getTime() - new Date(oldest.recorded_at).getTime()) / 86400000;
+      if (days >= 3) adg14 = (Number(newest.weight_kg) - Number(oldest.weight_kg)) / days;
+    }
 
-    const adg =
-      lastWeighedAt !== null && daysToLatestWeigh > 0
-        ? weightGain / daysToLatestWeigh
-        : null;
-
-    const feedConsumedKg = feedKgMap[c.id] ?? 0;
-    const feedCost = feedCostMap[c.id] ?? 0;
-    const fcr = weightGain > 0 && feedConsumedKg >= 10 ? feedConsumedKg / weightGain : null;
-    const costPerKgGain = weightGain > 0 && feedCost > 0 ? feedCost / weightGain : null;
+    const f = feed.snapshot.perAnimal[c.id];
+    const feedCost = f?.actual ?? 0;
+    const windowCost = growth ? feedCostBetween(f, growth.baseline.date, growth.latestDate) : 0;
+    const windowKg = growth ? feedKgBetween(f, growth.baseline.date, growth.latestDate) : 0;
+    const feedConsumedKg = growth ? windowKg : 0;
+    const fcr = weightGain > 0 && windowKg >= 10 ? windowKg / weightGain : null;
+    const costPerKgGain = weightGain > 0 && windowCost > 0 ? windowCost / weightGain : null;
 
     return {
       id: c.id,
@@ -179,7 +156,7 @@ async function AnalyticsSection() {
       weightGain,
       lastWeighedAt,
       adg,
-      adg14: adg14Map[c.id] ?? null,
+      adg14,
       feedConsumedKg,
       feedCost,
       purchasePrice: Number(c.purchase_price ?? 0),

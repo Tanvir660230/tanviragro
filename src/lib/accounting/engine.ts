@@ -484,8 +484,9 @@ export async function getAccountingData(
   const periodLedger = summarizeInventoryLedger(periodInvTx.map((t) => ({ ...t, category: t.inventory_items?.category ?? null })));
   // Cash flow: supplier purchases only
   const invPurchases = periodLedger.cashPurchases;
-  // Herd feed eaten (recorded, not tied to one animal) is the period's feed expense.
-  const feedExpenses = periodLedger.feedExpense;
+  // Herd feed eaten (recorded, not tied to one animal) + feed-related cash costs (e.g. straw
+  // cutting) booked as cost entries — both are the period's feed expense.
+  const feedExpenses = periodLedger.feedExpense + (costBreakdown["5200"] ?? 0);
   costBreakdown["6100"] = (costBreakdown["6100"] ?? 0) + periodLedger.medicineExpense;
   // Wastage, count differences and mixing variance (may be negative = gain)
   costBreakdown["6600"] = (costBreakdown["6600"] ?? 0) + periodLedger.otherNet;
@@ -552,9 +553,14 @@ export async function getAccountingData(
     .reduce((s, t) => s + Number(t.amount), 0);
 
   // Cash paid for cattle purchased in the period only + capitalized costs paid in period
+  // Treatment fees are paid in cash too (the balance sheet already subtracts them, via
+  // allCapitalizedCattleCosts) — the statement must agree with the balance sheet.
   const cashPaidCapitalizedCosts = periodAllCostEntries
     .filter(c => c.cattle_id && c.type === "variable")
-    .reduce((s, c) => s + Number(c.amount), 0);
+    .reduce((s, c) => s + Number(c.amount), 0)
+    + treatments
+      .filter((t) => inPeriod(t.treated_at))
+      .reduce((s, t) => s + Number(t.vet_fee ?? 0) + Number(t.additional_medical_cost ?? 0), 0);
   const cashPaidCattle = cattle
     .filter((c) => inPeriod(c.purchase_date))
     .reduce((s, c) => s + Number(c.purchase_price ?? 0), 0) + cashPaidCapitalizedCosts;

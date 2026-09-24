@@ -51,9 +51,13 @@ export type InventoryLedgerSummary = {
 const IN_NON_CASH = new Set(["feed_mix_output", "adjustment_in", "return", "own_production"]);
 const MEDICINE = new Set(["medicine", "supplement"]);
 
+// Exact row value. Rounding each row to cents before adding lost/added poisha across hundreds
+// of rows (৳0.20 on the production ledger), so only the totals are rounded (see below).
 function value(t: LedgerTxInput): number {
-  return Math.round(Number(t.qty) * Number(t.unit_cost ?? 0) * 100) / 100;
+  return Number(t.qty) * Number(t.unit_cost ?? 0);
 }
+
+const cents = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
 
 export function summarizeInventoryLedger(rows: LedgerTxInput[]): InventoryLedgerSummary {
   const s: InventoryLedgerSummary = {
@@ -89,6 +93,7 @@ export function summarizeInventoryLedger(rows: LedgerTxInput[]): InventoryLedger
     }
   }
   s.inventoryValue = s.cashPurchases + s.openingBalance + s.otherIn + s.reversals - s.outTotal;
+  for (const k of Object.keys(s) as (keyof InventoryLedgerSummary)[]) s[k] = cents(s[k]);
   return s;
 }
 

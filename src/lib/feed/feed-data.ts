@@ -124,7 +124,7 @@ export async function loadFeedData(supabase: SupabaseClient<any>, businessId: st
       const unitCost = r.unit_cost == null ? null : Number(r.unit_cost);
       if (r.cattle_id && unitCost != null) directByAnimal[r.cattle_id] = (directByAnimal[r.cattle_id] ?? 0) + qty * unitCost;
       const it = itemName.get(r.item_id);
-      return { date: r.recorded_at.slice(0, 10), coversFrom: r.covers_from ? r.covers_from.slice(0, 10) : null, itemId: r.item_id, itemName: it?.name, unit: it?.unit, qty, unitCost, cattleId: r.cattle_id };
+      return { date: r.recorded_at.slice(0, 10), coversFrom: r.covers_from ? r.covers_from.slice(0, 10) : null, itemId: r.item_id, itemName: it?.name, unit: it?.unit, kgPerUnit: it?.kg_per_unit ?? null, qty, unitCost, cattleId: r.cattle_id };
     });
 
   const snapshot = computeFeedSnapshot({ asOf, periods, animals, recorded, wac });

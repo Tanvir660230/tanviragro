@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCashBalance } from "@/lib/supabase/queries/cash";
+import { loadMonthlyConsumptions } from "@/lib/inventory/consumption-stats";
 
 export interface ReportFilterOptions {
   startDate?: string;
@@ -100,7 +101,7 @@ export class ReportEngine {
         .eq("business_id", businessId)
         .is("deleted_at", null)
         .limit(500),
-      Promise.resolve(supabase.rpc("get_monthly_consumptions", { p_business_id: businessId })).catch(() => ({ data: [] })),
+      loadMonthlyConsumptions(supabase, businessId).then((data) => ({ data })).catch(() => ({ data: [] })),
       getCashBalance(supabase, businessId).catch(() => ({ balance: 0, bankBalance: 0 })),
     ]);
 

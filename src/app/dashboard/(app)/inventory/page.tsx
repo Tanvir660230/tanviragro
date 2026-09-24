@@ -22,6 +22,7 @@ import { todayDhaka } from "@/lib/dates";
 import { scaleRecipe } from "@/lib/inventory/recipe-math";
 import { estimateFeedCost, kgToItemUnits, weightedAverageUnitCost, type ItemCostInfo } from "@/lib/inventory/feed-costing";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
+import { loadInventoryStats } from "@/lib/inventory/consumption-stats";
 
 type MoveRow = { item_id: string; type: string; qty: number; unit_cost: number | null; recorded_at: string; notes: string | null };
 
@@ -66,11 +67,7 @@ export default async function InventoryPage({
           .order("name", { ascending: true })
       : Promise.resolve({ data: [] }),
     businessId
-      ? supabase
-          .rpc("get_inventory_stats", {
-            p_business_id: businessId,
-            p_30_days_ago: thirtyDaysAgoStr,
-          })
+      ? loadInventoryStats(supabase, businessId, thirtyDaysAgoStr).then((data) => ({ data }))   // eaten = consumption − undo
       : Promise.resolve({ data: [] }),
     businessId
       ? supabase

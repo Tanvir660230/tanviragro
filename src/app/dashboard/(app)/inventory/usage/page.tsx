@@ -7,6 +7,7 @@ import { requirePagePermission } from "@/lib/auth/page-guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
 import { loadFeedData } from "@/lib/feed/feed-data";
+import { feedCostBetween } from "@/lib/feed/usage-engine";
 import { measuredGrowth } from "@/lib/growth/baseline";
 import { FeedUsageClient, type UsagePageData } from "@/components/inventory/FeedUsageClient";
 
@@ -33,7 +34,8 @@ export default async function FeedUsagePage() {
       return {
         id: a.id, tag: a.tag, actual: f?.actual ?? 0, estimated: f?.estimated ?? 0,
         gainKg: growth?.gainKg ?? null,
-        costPerKgGain: growth && growth.gainKg > 0 && f ? f.actual / growth.gainKg : null,
+        // feed over the SAME days as the measured gain (not feed to today ÷ gain to the last weighing)
+        costPerKgGain: growth && growth.gainKg > 0 && f ? feedCostBetween(f, growth.baseline.date, growth.latestDate) / growth.gainKg : null,
       };
     })
     .sort((x, y) => x.tag.localeCompare(y.tag));

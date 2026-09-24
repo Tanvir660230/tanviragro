@@ -42,7 +42,7 @@ import { measuredGrowth, measuredLogs, weightTypeLabel } from "@/lib/growth/base
 import { animalFeedShares, type AnimalPresence } from "@/lib/inventory/feed-costing";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 import { loadFeedData } from "@/lib/feed/feed-data";
-import { dayList } from "@/lib/feed/usage-engine";
+import { dayList, feedCostBetween } from "@/lib/feed/usage-engine";
 
 
 type Props = { params: Promise<{ id: string }> };
@@ -677,7 +677,6 @@ async function ProfileSection({ id }: { id: string }) {
   // Marginal cost = everything spent AFTER purchase (feed, vet, transport, etc.)
   // Used for "cost per kg gained" — purchase price is excluded because it's a sunk
   // cost paid regardless of how much weight the animal gains.
-  const marginalCost = totalFeedCost + medicalCost + otherIndividualCost;
 
   const sortedLogs = [...logs].sort(
     (a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
@@ -688,6 +687,13 @@ async function ProfileSection({ id }: { id: string }) {
   // Growth between two measurements only — an estimated initial weight is never a baseline.
   const growth = measuredGrowth(c, logs);
   const weightGain = growth ? parseFloat(growth.gainKg.toFixed(2)) : 0;
+  // Cost per kg gained uses costs over the SAME days as the measured gain (baseline → last
+  // weighing); dividing costs up to today by a gain measured earlier overstated it.
+  const inGainWindow = (d: string) => !!growth && d.slice(0, 10) >= growth.baseline.date && d.slice(0, 10) <= growth.latestDate;
+  const gainWindowFeed = growth ? feedCostBetween(myFeed, growth.baseline.date, growth.latestDate) : 0;
+  const gainWindowCost = gainWindowFeed
+    + treatments.filter((t) => inGainWindow(t.treated_at)).reduce((s, t) => s + Number(t.vet_fee ?? 0) + Number(t.additional_medical_cost ?? 0), 0)
+    + individualCosts.filter((i) => inGainWindow(i.recorded_at)).reduce((s, i) => s + Number(i.amount), 0);
   const breakEvenPerKg = latestWeight > 0 ? totalCost / latestWeight : null;
 
   // All-time ADG — use days from purchase to LAST WEIGH DATE (not today).
@@ -1068,16 +1074,16 @@ async function ProfileSection({ id }: { id: string }) {
             })()}
             {weightGain > 0 && (
               <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-                {marginalCost > 0 && (
+                {gainWindowCost > 0 && (
                   <span>
                     {t.cattle_details.profile.cost_per_kg_gained}:{" "}
-                    <span className="font-semibold text-foreground">৳{(marginalCost / weightGain).toFixed(0)}/kg</span>
+                    <span className="font-semibold text-foreground">৳{(gainWindowCost / weightGain).toFixed(0)}/kg</span>
                   </span>
                 )}
-                {totalFeedCost > 0 && (
+                {gainWindowFeed > 0 && (
                   <span>
                     {t.cattle_details.profile.feed_per_kg_gain}:{" "}
-                    <span className="font-semibold text-amber-700 dark:text-amber-400">৳{(totalFeedCost / weightGain).toFixed(0)}/kg</span>
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">৳{(gainWindowFeed / weightGain).toFixed(0)}/kg</span>
                   </span>
                 )}
               </div>

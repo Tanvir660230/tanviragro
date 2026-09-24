@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getBusinessContext } from "@/lib/context/business-context";
 import { requirePermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
+import { loadHerdWeights } from "@/lib/growth/herd-weights";
+import { todayDhaka } from "@/lib/dates";
+import { daysBetweenInclusive } from "@/lib/feed/usage-engine";
 import {
   LivestockCostAllocationEngine,
   BiologicalAssetValuationEngine,
@@ -119,7 +122,7 @@ export async function runBatchCostAllocationAction(params: {
 
     let query = (supabase as any)
       .from("cattle")
-      .select("id, tag_id, farm_id, pen_id, breed, current_weight, created_at, status")
+      .select("id, tag_id, farm_id, pen_id, breed, purchase_date, initial_weight_kg, initial_weight_type, status")
       .eq("business_id", ctx.businessId)
       .eq("status", "active")
       .is("deleted_at", null);
@@ -138,15 +141,23 @@ export async function runBatchCostAllocationAction(params: {
       return { error: "No active livestock found matching target allocation scope" };
     }
 
+    // Real weights (latest measured, else purchase weight) — never a default like 250 kg —
+    // and days on feed from the PURCHASE date, not from when the record was typed in.
+    const weights = await loadHerdWeights(supabase, cattleList);
+    if (params.allocationMethod === "weight_proportional") {
+      const noWeight = cattleList.filter((c: any) => !(weights[c.id]?.kg > 0)).map((c: any) => c.tag_id);
+      if (noWeight.length) return { error: `No weight recorded for: ${noWeight.join(", ")}. Record a weight or use another method.` };
+    }
+    const today = todayDhaka();
     const candidates: AllocationCandidate[] = cattleList.map((c: any) => {
-      const daysOnFeed = Math.max(1, Math.floor((Date.now() - new Date(c.created_at).getTime()) / (1000 * 60 * 60 * 24)));
+      const daysOnFeed = Math.max(1, daysBetweenInclusive(String(c.purchase_date ?? today).slice(0, 10), today) - 1);
       return {
         cattleId: c.id,
         tagId: c.tag_id,
         farmId: c.farm_id,
         penId: c.pen_id,
         breed: c.breed,
-        currentWeightKg: Number(c.current_weight) || 250,
+        currentWeightKg: weights[c.id]?.kg ?? 0,
         daysOnFeed,
         isActive: true,
       };
@@ -215,7 +226,7 @@ export async function runBiologicalAssetRevaluationAction(params: {
 
     const { data: cattleList, error: fetchErr } = await (supabase as any)
       .from("cattle")
-      .select("id, tag_id, current_weight, purchase_price, status")
+      .select("id, tag_id, purchase_date, initial_weight_kg, initial_weight_type, purchase_price, status")
       .eq("business_id", ctx.businessId)
       .eq("status", "active")
       .is("deleted_at", null);
@@ -223,11 +234,15 @@ export async function runBiologicalAssetRevaluationAction(params: {
     if (fetchErr) return { error: fetchErr.message };
     if (!cattleList || cattleList.length === 0) return { error: "No active cattle found for revaluation" };
 
+    // Real weights and the real purchase price only — never invented defaults (250 kg / ৳50,000).
+    const weights = await loadHerdWeights(supabase, cattleList);
+    const missing = cattleList.filter((c: any) => !(weights[c.id]?.kg > 0) || c.purchase_price == null).map((c: any) => c.tag_id);
+    if (missing.length) return { error: `Weight or purchase price missing for: ${missing.join(", ")}` };
     const herdItems = cattleList.map((c: any) => ({
       cattleId: c.id,
       tagId: c.tag_id,
-      currentWeightKg: Number(c.current_weight) || 250,
-      bookValueCostBasis: Number(c.purchase_price) || 50000,
+      currentWeightKg: weights[c.id].kg,
+      bookValueCostBasis: Number(c.purchase_price),
       isActive: true,
     }));
 

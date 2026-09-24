@@ -4,6 +4,7 @@ import { AiNaturalLanguageEngine } from "@/lib/ai/nl-engine";
 import { AiAuditService } from "@/lib/ai/audit-service";
 import { PERMISSIONS } from "@/constants/roles";
 import { addDays, todayDhaka } from "@/lib/dates";
+import { loadInventoryStats } from "@/lib/inventory/consumption-stats";
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
         .select("id, name, unit, low_stock_threshold")
         .eq("business_id", businessId)
         .is("deleted_at", null),
-      supabase.rpc("get_inventory_stats", { p_business_id: businessId, p_30_days_ago: addDays(todayDhaka(), -30) }),
+      loadInventoryStats(supabase, businessId, addDays(todayDhaka(), -30)).then((data) => ({ data })),
       supabase
         .from("health_events")
         .select("id, title, scheduled_at, completed_at, cattle_id")

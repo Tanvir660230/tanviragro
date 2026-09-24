@@ -21,6 +21,8 @@ export const EXPENSE_KINDS = Object.keys(EXPENSE_KIND_ACCOUNT) as ExpenseKind[];
 /** Legacy free-text category → account (entries created before categories existed). */
 export function accountForLegacyCategory(category: string): { code: string; name: string } {
   const c = category.toLowerCase();
+  // feed-related costs paid in cash (e.g. straw cutting) are feed, not general expenses
+  if (/feed|fodder|forage|grass|straw|khor|ghash|খড়|ঘাস|খাদ্য/.test(c)) return { code: "5200", name: "Feed Expenses" };
   if (/vet|med|vacc|health|drug|dew/.test(c)) return EXPENSE_KIND_ACCOUNT.veterinary;
   if (/lab|wage|salary|worker|staff|employ/.test(c)) return EXPENSE_KIND_ACCOUNT.labor;
   if (/elect|water|gas|util|fuel|power|wifi|internet|phone|telephone/.test(c)) return EXPENSE_KIND_ACCOUNT.utility;
