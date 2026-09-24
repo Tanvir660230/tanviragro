@@ -57,7 +57,7 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 | 9.4 | CLEAN-01 | P3 | Remove dead engines/components after coverage exists | TODO |
 | 9.5 | BUG-22 | P2 | Service worker never rebuilt (Serwist + Turbopack) | TODO |
 | 9.6 | DB-11 | P1 | Committed migrations cannot replay on a fresh DB (003, 032 order bugs; health_events.deleted_at never created) | TODO: fix via baseline dump (0.3); harness patches temp copies |
-| 9.7 | BUG-23 | P1 | Queries select columns missing from migrations (110 refs / 65 sites; e.g. cattle.tag_number, health_events.status); some are silent failures, some drift | TODO: run snapshot query 10, then fix code or add migrations; tool: scripts/check-query-columns.cjs |
+| 9.7 | BUG-23 | P1 | Queries select columns missing from migrations (110 refs / 65 sites; e.g. cattle.tag_number, health_events.status); some are silent failures, some drift | TODO: run snapshot query 10, then fix code or add migrations; tool: scripts/check-query-columns.mjs |
 | 10 | VERIFY | — | Full regression + ledger reconciliation + security retest | TODO |
 
 ---

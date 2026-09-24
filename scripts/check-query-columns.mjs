@@ -4,17 +4,17 @@
  * at runtime and return no data). Scans `.from("t").select("...")` string literals in src/.
  *
  * Usage:
- *   node scripts/check-query-columns.cjs <schema_columns.txt> [srcDir=src]
+ *   node scripts/check-query-columns.mjs <schema_columns.txt> [srcDir=src]
  *
  * schema_columns.txt: one "table.column" per line, e.g. from
  *   psql -Atc "select table_name||'.'||column_name from information_schema.columns where table_schema='public'"
  * Run it against a dump of PRODUCTION's schema for authoritative results.
  * Exit code 1 when any missing column is found.
  */
-const fs = require("fs");
-const path = require("path");
+import fs from "node:fs";
+import path from "node:path";
 const [schemaFile, srcDir = "src"] = process.argv.slice(2);
-if (!schemaFile) { console.error("usage: node scripts/check-query-columns.cjs <schema_columns.txt> [srcDir]"); process.exit(2); }
+if (!schemaFile) { console.error("usage: node scripts/check-query-columns.mjs <schema_columns.txt> [srcDir]"); process.exit(2); }
 
 const cols = new Map();
 for (const line of fs.readFileSync(schemaFile, "utf8").split(/\r?\n/)) {

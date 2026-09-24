@@ -70,7 +70,7 @@ Read-only probes with the **public anon key**; no data rows were read and nothin
 Gate: tsc 0 errors, lint 0 errors, **397/397 tests** (plus 8 sale-action tests that fail on the old code), build passes.
 
 ### New finding BUG-23 (P1)
-A scan of every `.from(...).select(...)` in `src/` against the migration schema found **110 references to 27 columns that no migration creates**, across 65 query sites. Tool: `scripts/check-query-columns.cjs`.
+A scan of every `.from(...).select(...)` in `src/` against the migration schema found **110 references to 27 columns that no migration creates**, across 65 query sites. Tool: `scripts/check-query-columns.mjs`.
 - Some are **drift**: the column exists in production and the page works (likely `roughage_active_from`, `default_daily_gain_kg`, `is_discontinued`).
 - Some **don't exist anywhere**, so the query fails silently and the screen shows empty data. Likely examples: `cattle.tag_number` (the app uses `tag_id`), `cattle.name`, `cattle.current_weight_kg`, `health_events.status` (a code comment in `daily-alerts` says this column doesn't exist). Affected: the dashboard attention banner, `/api/analytics/kpis`, `/api/ai/recommendations`, custom reports, and the 7 breeding pages that select `cattle.name`.
 - **Section 10 of `docs/sql/live_security_snapshot.sql` answers this for each column.** Run it before rewriting those screens.
