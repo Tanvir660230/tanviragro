@@ -87,7 +87,7 @@ alter table public.feed_usage_period_events enable row level security;
 drop policy if exists "usage periods readable by tenant" on public.feed_usage_periods;
 create policy "usage periods readable by tenant" on public.feed_usage_periods for select using (
   business_id in (select id from public.businesses where owner_id = auth.uid()
-                  union select business_id from public.business_users where user_id = auth.uid() and is_active = true));
+                  union select business_id from public.business_users where user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true)));
 drop policy if exists "usage lines readable by tenant" on public.feed_usage_period_lines;
 create policy "usage lines readable by tenant" on public.feed_usage_period_lines for select using (
   period_id in (select id from public.feed_usage_periods));
@@ -103,7 +103,7 @@ language sql stable security definer set search_path = public as $$
   select case
     when auth.uid() is null then coalesce(auth.role(), '') = 'service_role' or session_user in ('postgres', 'supabase_admin')
     else exists (select 1 from public.businesses where id = p_business_id and owner_id = auth.uid())
-      or exists (select 1 from public.business_users where business_id = p_business_id and user_id = auth.uid() and is_active = true)
+      or exists (select 1 from public.business_users where business_id = p_business_id and user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true))
   end
 $$;
 

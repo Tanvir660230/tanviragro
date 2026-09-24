@@ -41,7 +41,7 @@ create policy "expense categories readable by tenant" on public.expense_categori
     business_id in (
       select id from public.businesses where owner_id = auth.uid()
       union
-      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+      select business_id from public.business_users where user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true)
     )
   );
 drop policy if exists "expense categories managed by tenant" on public.expense_categories;
@@ -50,7 +50,7 @@ create policy "expense categories managed by tenant" on public.expense_categorie
     business_id in (
       select id from public.businesses where owner_id = auth.uid()
       union
-      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+      select business_id from public.business_users where user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true)
     )
   );
 drop policy if exists "expense categories updated by tenant" on public.expense_categories;
@@ -59,7 +59,7 @@ create policy "expense categories updated by tenant" on public.expense_categorie
     business_id in (
       select id from public.businesses where owner_id = auth.uid()
       union
-      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+      select business_id from public.business_users where user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true)
     )
   );
 -- no delete policy: categories are disabled, never deleted
@@ -127,7 +127,7 @@ create policy "cost entry audit readable by tenant" on public.cost_entry_audit
     business_id in (
       select id from public.businesses where owner_id = auth.uid()
       union
-      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+      select business_id from public.business_users where user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true)
     )
   );
 -- written only by the trigger (security definer); no insert/update/delete policies
@@ -183,12 +183,12 @@ begin
     execute $p$create policy "expense bills readable by tenant" on storage.objects for select using (
       bucket_id = 'expense-bills' and (storage.foldername(name))[1]::uuid in (
         select id from public.businesses where owner_id = auth.uid()
-        union select business_id from public.business_users where user_id = auth.uid() and is_active = true))$p$;
+        union select business_id from public.business_users where user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true)))$p$;
     execute $p$drop policy if exists "expense bills uploaded by tenant" on storage.objects$p$;
     execute $p$create policy "expense bills uploaded by tenant" on storage.objects for insert with check (
       bucket_id = 'expense-bills' and (storage.foldername(name))[1]::uuid in (
         select id from public.businesses where owner_id = auth.uid()
-        union select business_id from public.business_users where user_id = auth.uid() and is_active = true))$p$;
+        union select business_id from public.business_users where user_id = auth.uid() and coalesce((to_jsonb(business_users) ->> 'is_active')::boolean, true)))$p$;
   end if;
 end $$;
 
