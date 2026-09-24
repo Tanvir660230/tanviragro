@@ -85,8 +85,8 @@ export class AnalyticsAggregationService {
         .is("deleted_at", null)
         .limit(200),
       supabase
-        .from("orders")
-        .select("id, total_amount, status, created_at, customer_id, order_type")
+        .from("commerce_orders")
+        .select("id, net_total_amount, status, created_at, counterparty_id, order_type")
         .eq("business_id", businessId)
         .is("deleted_at", null)
         .limit(1000),
@@ -166,7 +166,7 @@ export class AnalyticsAggregationService {
     const orders = ordersRaw ?? [];
     const commerceKpis = KpiEngine.calculateCommerceKPIs({
       totalOrders: orders.length,
-      totalGrossSalesBdt: orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0),
+      totalGrossSalesBdt: orders.reduce((sum, o) => sum + (Number(o.net_total_amount) || 0), 0),
       qurbaniBookingsCount: orders.filter((o) => o.order_type === "qurbani").length,
       pendingDeliveriesCount: orders.filter((o) => o.status === "pending").length,
     });

@@ -3,6 +3,7 @@ import { authenticateApiRoute } from "@/lib/auth/api-guard";
 import { AiNaturalLanguageEngine } from "@/lib/ai/nl-engine";
 import { AiAuditService } from "@/lib/ai/audit-service";
 import { PERMISSIONS } from "@/constants/roles";
+import { addDays, todayDhaka } from "@/lib/dates";
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -23,16 +24,71 @@ export async function POST(req: NextRequest) {
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
 
-    const [cattleRes, expenseRes, invRes, healthRes] = await Promise.all([
-      (supabase as any).from("cattle").select("id, tag_id, breed, current_weight_kg, purchase_weight_kg, status").eq("business_id", businessId),
-      (supabase as any).from("financial_transactions").select("id, amount, type, category, recorded_at").eq("business_id", businessId),
-      (supabase as any).from("inventory_items").select("id, name, current_stock, reorder_threshold, unit").eq("business_id", businessId),
-      (supabase as any).from("health_events").select("id, title, scheduled_at, cattle_id, status").eq("business_id", businessId),
+    // Load real tables/columns and map them to the field names the NL engine reads.
+    // (Previously this queried a non-existent table and columns, so every answer
+    // was computed from empty data.)
+    const [cattleRes, weightRes, expenseRes, invRes, stockRes, healthRes] = await Promise.all([
+      supabase
+        .from("cattle")
+        .select("id, tag_id, breed, status, initial_weight_kg")
+        .eq("business_id", businessId)
+        .eq("status", "active")
+        .is("deleted_at", null),
+      supabase
+        .from("weight_logs")
+        .select("cattle_id, weight_kg, recorded_at, cattle!inner(business_id)")
+        .eq("cattle.business_id", businessId)
+        .is("deleted_at", null)
+        .order("recorded_at", { ascending: false }),
+      supabase
+        .from("cost_entries")
+        .select("id, amount, type, category, recorded_at")
+        .eq("business_id", businessId)
+        .is("deleted_at", null),
+      supabase
+        .from("inventory_items")
+        .select("id, name, unit, low_stock_threshold")
+        .eq("business_id", businessId)
+        .is("deleted_at", null),
+      supabase.rpc("get_inventory_stats", { p_business_id: businessId, p_30_days_ago: addDays(todayDhaka(), -30) }),
+      supabase
+        .from("health_events")
+        .select("id, title, scheduled_at, completed_at, cattle_id")
+        .eq("business_id", businessId)
+        .is("deleted_at", null),
     ]);
+
+    const latestWeight = new Map<string, number>();
+    for (const w of (weightRes.data ?? []) as { cattle_id: string; weight_kg: number }[]) {
+      if (!latestWeight.has(w.cattle_id)) latestWeight.set(w.cattle_id, Number(w.weight_kg));
+    }
+    const cattle = ((cattleRes.data ?? []) as { id: string; tag_id: string; breed: string | null; status: string; initial_weight_kg: number | null }[])
+      .map((c) => ({
+        id: c.id,
+        tag_id: c.tag_id,
+        breed: c.breed,
+        status: c.status,
+        purchase_weight_kg: Number(c.initial_weight_kg ?? 0),
+        current_weight_kg: latestWeight.get(c.id) ?? Number(c.initial_weight_kg ?? 0),
+      }));
+
+    const stockByItem = new Map(
+      ((stockRes.data ?? []) as { item_id: string; total_stock: number }[]).map((s) => [s.item_id, Number(s.total_stock ?? 0)])
+    );
+    const inventory = ((invRes.data ?? []) as { id: string; name: string; unit: string; low_stock_threshold: number | null }[])
+      .map((i) => ({
+        name: i.name,
+        unit: i.unit,
+        current_stock: stockByItem.get(i.id) ?? 0,
+        reorder_threshold: i.low_stock_threshold ?? 10,
+      }));
+
+    const healthEvents = ((healthRes.data ?? []) as { id: string; title: string; scheduled_at: string; completed_at: string | null; cattle_id: string }[])
+      .map((e) => ({ ...e, status: e.completed_at ? "completed" : "pending" }));
 
     const result = await AiNaturalLanguageEngine.processNaturalLanguageQuery(
       { query, locale: locale || "en", userId: user.id, businessId },
-      { cattle: cattleRes.data || [], expenses: expenseRes.data || [], inventory: invRes.data || [], healthEvents: healthRes.data || [] }
+      { cattle, expenses: expenseRes.data ?? [], inventory, healthEvents }
     );
 
     const latencyMs = Date.now() - startTime;

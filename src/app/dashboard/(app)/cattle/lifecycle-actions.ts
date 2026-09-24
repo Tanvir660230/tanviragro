@@ -301,10 +301,10 @@ export async function getAnimalUnifiedTimelineAction(
         .eq("business_id", businessId)
         .order("insemination_date", { ascending: false }),
       (supabase as any)
-        .from("cattle_sales")
+        .from("sales")
         .select("id, sold_at, sale_price_total, buyer_name, weight_at_sale_kg")
         .eq("cattle_id", cattleId)
-        .eq("business_id", businessId),
+        .is("deleted_at", null), // sales has no business_id; the animal was tenant-checked above
       (supabase as any)
         .from("cattle_death_records")
         .select("id, death_date, cause_of_death, post_mortem_notes, disposal_method, estimated_casualty_loss_bdt")
