@@ -68,7 +68,7 @@ export async function loadFeedData(supabase: SupabaseClient<any>, businessId: st
       : Promise.resolve({ data: [] }),
     loadUnitCostMap(supabase, businessId),
     itemIds.length
-      ? supabase.from("inventory_transactions").select("item_id, qty, unit_cost, recorded_at, cattle_id, movement_type")
+      ? supabase.from("inventory_transactions").select("item_id, qty, unit_cost, recorded_at, covers_from, cattle_id, movement_type")
           .in("item_id", itemIds).in("movement_type", ["consumption", "consumption_reversal"]).is("period_line_id", null)
       : Promise.resolve({ data: [] }),
   ]);
@@ -118,13 +118,13 @@ export async function loadFeedData(supabase: SupabaseClient<any>, businessId: st
 
   // recorded rows outside periods (manual / legacy / animal logs); reversals negative
   const directByAnimal: Record<string, number> = {};
-  const recorded: RecordedRow[] = ((recRes.data ?? []) as { item_id: string; qty: number; unit_cost: number | null; recorded_at: string; cattle_id: string | null; movement_type: string }[])
+  const recorded: RecordedRow[] = ((recRes.data ?? []) as { item_id: string; qty: number; unit_cost: number | null; recorded_at: string; covers_from: string | null; cattle_id: string | null; movement_type: string }[])
     .map((r) => {
       const qty = r.movement_type === "consumption_reversal" ? -Number(r.qty) : Number(r.qty);
       const unitCost = r.unit_cost == null ? null : Number(r.unit_cost);
       if (r.cattle_id && unitCost != null) directByAnimal[r.cattle_id] = (directByAnimal[r.cattle_id] ?? 0) + qty * unitCost;
       const it = itemName.get(r.item_id);
-      return { date: r.recorded_at.slice(0, 10), itemId: r.item_id, itemName: it?.name, unit: it?.unit, qty, unitCost, cattleId: r.cattle_id };
+      return { date: r.recorded_at.slice(0, 10), coversFrom: r.covers_from ? r.covers_from.slice(0, 10) : null, itemId: r.item_id, itemName: it?.name, unit: it?.unit, qty, unitCost, cattleId: r.cattle_id };
     });
 
   const snapshot = computeFeedSnapshot({ asOf, periods, animals, recorded, wac });
@@ -150,7 +150,9 @@ export async function loadFeedData(supabase: SupabaseClient<any>, businessId: st
   const coveredDays = new Set<string>();
   for (const p of periods) for (const d of dayList(p.startDate, p.endDate ?? asOf)) coveredDays.add(d);
   const net = new Map<string, number>();
-  for (const r of recorded) net.set(r.date, (net.get(r.date) ?? 0) + r.qty);
+  for (const r of recorded) {
+    for (const d of r.coversFrom && r.coversFrom < r.date ? dayList(r.coversFrom, r.date) : [r.date]) net.set(d, (net.get(d) ?? 0) + r.qty);
+  }
   for (const [d, q] of net) if (q > 0.0001) coveredDays.add(d);
 
   return { asOf, snapshot, periods, animals, items: itemStatus, directByAnimal, coveredDays };

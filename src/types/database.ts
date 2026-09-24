@@ -390,6 +390,8 @@ export type InventoryTransaction = {
   movement_type: MovementType;
   idempotency_key: string | null;
   reverses_id: string | null;
+  /** herd consumption covering several days: first day covered (ends on recorded_at) */
+  covers_from: string | null;
   cost_source: CostSource;
   is_estimate: boolean;
   created_by: string | null;

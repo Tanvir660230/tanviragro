@@ -143,6 +143,25 @@ describe("recorded rows and double counting", () => {
     expect(s.perAnimal.A.actual).toBeCloseTo(300, 6);
     expect(s.totals).toMatchObject({ actual: 600, recordedMissingCost: 1 });
   });
+  test("a stock-finished catch-up covering several days is spread over them; a late arrival pays only its days", () => {
+    // 10 days, A (200 kg) all along, B (200 kg) arrives on day 6 → weight-days: days 1–5 = 1000, days 6–10 = 2000
+    const s = computeFeedSnapshot({
+      asOf: "2026-09-30", periods: [], wac: {},
+      animals: [cow("A", 200, "2026-09-01"), cow("B", 200, "2026-09-06")],
+      recorded: [{ date: "2026-09-10", coversFrom: "2026-09-01", itemId: "corn", qty: 300, unitCost: 10, cattleId: null }],
+    });
+    expect(s.perAnimal.A.actual).toBeCloseTo(1000 + 1000, 6);   // days 1–5 alone + half of days 6–10
+    expect(s.perAnimal.B.actual).toBeCloseTo(1000, 6);          // only the 5 days it was there
+    expect(s.totals.actual).toBeCloseTo(3000, 6);
+    expect(s.unallocated).toBe(0);
+    // booked on one day instead, B would wrongly carry half of everything
+    const oneDay = computeFeedSnapshot({
+      asOf: "2026-09-30", periods: [], wac: {},
+      animals: [cow("A", 200, "2026-09-01"), cow("B", 200, "2026-09-06")],
+      recorded: [{ date: "2026-09-10", itemId: "corn", qty: 300, unitCost: 10, cattleId: null }],
+    });
+    expect(oneDay.perAnimal.B.actual).toBeCloseTo(1500, 6);
+  });
   test("period + recorded never exceed what left the store (the period posts only the remainder)", () => {
     // store: 220 used in total; manual row 10 + period posting 210 (see supabase/tests U3)
     const p = closed({}, 210, 2100);

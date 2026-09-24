@@ -54,8 +54,12 @@ export type Period = {
   lines: PeriodLine[];
 };
 
-/** Consumption rows recorded outside periods (manual / legacy). qty < 0 = audited reversal. */
-export type RecordedRow = { date: string; itemId: string; itemName?: string; unit?: string; qty: number; unitCost: number | null; cattleId: string | null };
+/**
+ * Consumption rows recorded outside periods (manual / legacy). qty < 0 = audited reversal.
+ * coversFrom: a herd row that covers several days (e.g. a stock-finished catch-up) — it is
+ * spread from coversFrom to date by the weight of the animals present each day.
+ */
+export type RecordedRow = { date: string; coversFrom?: string | null; itemId: string; itemName?: string; unit?: string; qty: number; unitCost: number | null; cattleId: string | null };
 
 export type AnimalFeed = { actual: number; estimated: number; actualQtyByItem: Record<string, number>; actualValueByItem: Record<string, number>; estimatedQtyByItem: Record<string, number> };
 
@@ -280,7 +284,6 @@ export function computeFeedSnapshot(input: {
     if (r.unitCost == null) { if (r.qty > 0) recordedMissingCost++; continue; }
     const value = r.qty * r.unitCost;
     totalActual += value;
-    month(r.date).actual += value;
     const b = itemBucket({ itemId: r.itemId, itemName: r.itemName ?? r.itemId, unit: r.unit ?? "" });
     b.actualQty += r.qty;
     b.actualValue += value;
@@ -289,11 +292,22 @@ export function computeFeedSnapshot(input: {
       f.actual += value;
       f.actualQtyByItem[r.itemId] = (f.actualQtyByItem[r.itemId] ?? 0) + r.qty;
       f.actualValueByItem[r.itemId] = (f.actualValueByItem[r.itemId] ?? 0) + value;
+      month(r.date).actual += value;
       continue;
     }
-    const weights = new Map<string, number>();
-    for (const a of animals) if (isPresent(a, r.date)) weights.set(a.id, weightOn(a, r.date).kg || 1);
-    spreadDay(r.date, r.qty, value, weights, "actual", r.itemId);
+    // one day, or every day the row covers — each day's share = the herd's weight that day
+    const days = r.coversFrom && r.coversFrom < r.date ? dayList(r.coversFrom, r.date) : [r.date];
+    const perDay = days.map((day) => {
+      const weights = new Map<string, number>();
+      for (const a of animals) if (isPresent(a, day)) weights.set(a.id, weightOn(a, day).kg || 1);
+      return { day, weights, total: [...weights.values()].reduce((s, w) => s + w, 0) };
+    });
+    const herdTotal = perDay.reduce((s, d) => s + d.total, 0);
+    for (const d of perDay) {
+      const share = herdTotal > 0 ? d.total / herdTotal : 1 / perDay.length;
+      spreadDay(d.day, r.qty * share, value * share, d.weights, "actual", r.itemId);
+      month(d.day).actual += value * share;
+    }
   }
 
   return {
