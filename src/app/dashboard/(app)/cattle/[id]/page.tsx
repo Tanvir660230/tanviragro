@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { CATTLE_STATUS_STYLE } from "@/constants/cattle-status";
 import { createClient } from "@/lib/supabase/server";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
@@ -41,8 +39,11 @@ import { HealthWorkspace } from "@/components/cattle/HealthWorkspace";
 import { measuredGrowth, measuredLogs, weightTypeLabel } from "@/lib/growth/baseline";
 import { animalFeedShares, type AnimalPresence } from "@/lib/inventory/feed-costing";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
-import { loadFeedData } from "@/lib/feed/feed-data";
-import { dayList, feedCostBetween } from "@/lib/feed/usage-engine";
+import { loadHomeInputs } from "@/lib/home/home-data";
+import { buildHomeModel } from "@/lib/home/home-model";
+import { CattleProfileHero } from "@/components/cattle/CattleProfileHero";
+import { todayDhaka } from "@/lib/dates";
+import { dayList, feedCostBetween, feedKgBetween } from "@/lib/feed/usage-engine";
 
 
 type Props = { params: Promise<{ id: string }> };
@@ -63,6 +64,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 const STATUS_STYLE = CATTLE_STATUS_STYLE;
+
+/** e.g. "1 Jun 2026" in farm time */
+const fmtDay = (d: string | null | undefined) =>
+  d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
 type LogRow = Pick<WeightLog, "id" | "weight_kg" | "recorded_at" | "notes" | "girth_cm" | "length_cm" | "weight_type">;
 
@@ -398,8 +403,10 @@ async function ProfileSection({ id }: { id: string }) {
       .eq("cattle_id", id)
       .eq("business_id", businessId)
       .is("deleted_at", null)
-      // Vet/medical costs are already shown via cattle_treatments below —
-      // excluding the category here avoids double-counting the same expense.
+      // same definition as the homepage and the cattle list (lib/home/home-data.ts):
+      // expense-type direct costs; vet fees come from cattle_treatments below
+      .eq("type", "variable")
+      .eq("entry_class", "expense")
       .neq("category", "Medical/Vet Fee")
       .order("recorded_at", { ascending: true }),
     supabase
@@ -426,7 +433,7 @@ async function ProfileSection({ id }: { id: string }) {
       .not("active_from", "is", null),
     supabase
       .from("sales")
-      .select("sold_at")
+      .select("sold_at, sale_price_total")
       .eq("cattle_id", id)
       .is("deleted_at", null)
       .order("sold_at", { ascending: false })
@@ -650,7 +657,14 @@ async function ProfileSection({ id }: { id: string }) {
   const myShares = animalFeedShares(actualRows, presence, id);
   // ── THE feed engine (lib/feed/usage-engine.ts): same numbers as the Feed Usage page ──
   // Closed usage periods + recorded feeding, split per day by live weight and presence.
-  const feed = await loadFeedData(supabase, businessId);
+  // same inputs as the homepage and the cattle list, so all three show the same figures
+  const [homeInputs, { data: nextHealthData }] = await Promise.all([
+    loadHomeInputs(supabase, businessId, undefined, { money: false }),
+    supabase.from("health_events").select("title, scheduled_at").eq("cattle_id", id)
+      .is("completed_at", null).is("deleted_at", null).order("scheduled_at", { ascending: true }).limit(1).maybeSingle(),
+  ]);
+  const feed = homeInputs.feed;
+  const hm = buildHomeModel(homeInputs.input).cattle.find((x) => x.id === id) ?? null;
   const myFeed = feed.snapshot.perAnimal[id];
   const actualFeedCost = myFeed?.actual ?? 0;
   const runningFeedEstimate = myFeed?.estimated ?? 0;
@@ -691,6 +705,8 @@ async function ProfileSection({ id }: { id: string }) {
   // weighing); dividing costs up to today by a gain measured earlier overstated it.
   const inGainWindow = (d: string) => !!growth && d.slice(0, 10) >= growth.baseline.date && d.slice(0, 10) <= growth.latestDate;
   const gainWindowFeed = growth ? feedCostBetween(myFeed, growth.baseline.date, growth.latestDate) : 0;
+  // FCR uses feed actually EATEN (kg) over the measured-growth window — never the ration plan's kg
+  const actualFeedKgForGain = growth ? feedKgBetween(myFeed, growth.baseline.date, growth.latestDate) : 0;
   const gainWindowCost = gainWindowFeed
     + treatments.filter((t) => inGainWindow(t.treated_at)).reduce((s, t) => s + Number(t.vet_fee ?? 0) + Number(t.additional_medical_cost ?? 0), 0)
     + individualCosts.filter((i) => inGainWindow(i.recorded_at)).reduce((s, i) => s + Number(i.amount), 0);
@@ -730,12 +746,6 @@ async function ProfileSection({ id }: { id: string }) {
 
   const adgTier =
     adg === null ? "none" : adg >= 0.5 ? "good" : adg >= 0.3 ? "fair" : "poor";
-  const adgColor = {
-    good: "text-emerald-600 dark:text-emerald-400",
-    fair: "text-amber-600 dark:text-amber-400",
-    poor: "text-red-500 dark:text-red-400",
-    none: "text-muted-foreground",
-  }[adgTier];
   const adgLabel = {
     good: t.cattle_details.smart.performance_good,
     fair: t.cattle_details.smart.performance_fair,
@@ -748,358 +758,77 @@ async function ProfileSection({ id }: { id: string }) {
       {/* Track this cattle view for SearchBox recent history */}
       <TrackCattleView id={c.id} tagId={c.tag_id} />
 
-      {/* ── Hero ── */}
-      <div className="overflow-hidden rounded-xl bg-card border border-border shadow-card animate-fade-in-up">
-        {/* ADG performance band */}
-        <div className={cn("h-1 w-full", {
-          "bg-gradient-to-r from-emerald-300 via-emerald-500 to-emerald-300": adgTier === "good",
-          "bg-gradient-to-r from-amber-300 via-amber-500 to-amber-300": adgTier === "fair",
-          "bg-gradient-to-r from-red-300 via-red-500 to-red-300": adgTier === "poor",
-          "bg-muted/40": adgTier === "none",
-        })} />
-
-        {/* Header bar */}
-        <div className="flex items-center gap-2 sm:gap-3 border-b border-border px-3 sm:px-5 py-3 sm:py-4">
-          <Link
-            href="/dashboard/cattle"
-            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={t.cattle_details.profile.back_to_livestock}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold">#{c.tag_id}</h1>
-              <span
-                className={cn(
-                  "rounded-full px-2 sm:px-2.5 py-0.5 text-xs font-medium capitalize",
-                  STATUS_STYLE[c.status]
-                )}
-              >
-                {(t.cattle_details.dialogs as Record<string, string>)[c.status] ?? c.status}
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-              {c.gender === "male" ? "♂" : "♀"} {c.gender === "male" ? t.cattle_details.table.gender_male : t.cattle_details.table.gender_female}
-              {c.breed && ` · ${c.breed}`}
-              {daysInPen !== null && ` · ${daysInPen} ${t.cattle_details.profile.days_unit}`}
-              {adg !== null && (
-                <span className={cn("ml-1.5 font-semibold", adgColor)}>
-                  · ADG {adg.toFixed(2)} kg/d
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Undo Sale — time-limited, shown prominently */}
-            {c.status === "sold" && latestSaleData?.sold_at &&
-              nowMs - new Date(latestSaleData.sold_at).getTime() <= 7 * 86400000 && (
-              <UndoSaleButton cattleId={c.id} tagId={c.tag_id} soldAt={latestSaleData.sold_at} />
-            )}
-
-            {/* Edit — primary action, always visible */}
-            <EditCattleDialog
-              cattle={{
-                id: c.id,
-                tag_id: c.tag_id,
-                gender: c.gender,
-                breed: c.breed,
-                dob: c.dob,
-                purchase_date: c.purchase_date ?? "",
-                purchase_price: c.purchase_price ?? 0,
-                initial_weight_kg: c.initial_weight_kg ?? 0,
-                initial_weight_type: c.initial_weight_type,
-                target_weight_kg: c.target_weight_kg ?? null,
-                expected_daily_gain_kg: c.expected_daily_gain_kg ?? null,
-                notes: c.notes,
-                existingTagIds,
-                existingBreeds,
-              }}
-            />
-
-            {/* Secondary actions — collapsed in "···" menu */}
-            <CattleDetailMoreMenu
-              cattleId={c.id}
-              tagId={c.tag_id}
-              status={c.status}
-              isQuarantined={c.is_quarantined ?? false}
-              isQurbani={c.is_qurbani_marked ?? false}
-            />
-          </div>
-        </div>
-
-        {/* 3-column body */}
-        <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-
-          {/* Col 1 — Identity */}
-          <div className="p-3 sm:p-5 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.cattle_details.profile.identity}
-            </p>
-            {/* Gender + breed chips */}
-            <div className="flex flex-wrap gap-1.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize">
-                {c.gender === "male" ? "♂" : "♀"} {c.gender === "male" ? t.cattle_details.table.gender_male : t.cattle_details.table.gender_female}
-              </span>
-              {c.breed && (
-                <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-semibold">
-                  {c.breed}
-                </span>
-              )}
-            </div>
-            {/* Key dates */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{t.cattle_details.profile.purchase_date}</span>
-                <span className="font-medium tabular-nums">
-                  {new Date(c.purchase_date ?? "").toLocaleDateString("en-US", {
-                    timeZone: "Asia/Dhaka",
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-              {c.dob && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{t.cattle_details.profile.dob}</span>
-                  <span className="font-medium tabular-nums">
-                    {new Date(c.dob).toLocaleDateString("en-US", {
-                      timeZone: "Asia/Dhaka",
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{t.cattle_details.profile.days_in_pen_label}</span>
-                <span className="font-semibold tabular-nums text-foreground">
-                  {daysInPen !== null ? `${daysInPen} ${t.cattle_details.profile.days_unit}` : "—"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Col 2 — Weight */}
-          <div className="p-3 sm:p-5 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.cattle_details.profile.weight_tab}
-            </p>
-            <div>
-              <p className="text-4xl font-bold tabular-nums leading-none">
-                {latestWeight}
-                <span className="ml-1 text-lg font-normal text-muted-foreground">kg</span>
-              </p>
-              {growth ? (
-                <p
-                  className={cn(
-                    "mt-1.5 text-sm font-medium",
-                    weightGain >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"
-                  )}
-                >
-                  {weightGain >= 0 ? "+" : ""}
-                  {weightGain} kg from {growth.baseline.weightKg} kg
-                  <span className="ml-1 text-xs font-normal text-muted-foreground">
-                    ({growth.baseline.source === "initial" ? "at purchase" : `first weighing, ${growth.baseline.date}`})
-                  </span>
-                </p>
-              ) : (
-                <p className="mt-1.5 text-sm text-muted-foreground">
-                  {c.initial_weight_type === "estimated"
-                    ? "Growth is shown once the animal has been weighed twice."
-                    : t.cattle_details.profile.initial_weight_purchase}
-                </p>
-              )}
-              <p className="mt-1 text-xs text-muted-foreground">
-                Initial {c.initial_weight_kg} kg · {weightTypeLabel(c.initial_weight_type)}
-                {c.initial_weight_type === "estimated" && " — a guess, not used for growth"}
-              </p>
-            </div>
-
-            {growth && weightGain > 0 && (
-              <div>
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{growth.baseline.weightKg} kg</span>
-                  <span>
-                    {growth.latestKg} kg (+
-                    {((weightGain / growth.baseline.weightKg) * 100).toFixed(1)}%)
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-1.5 rounded-full bg-emerald-500 transition-all"
-                    style={{
-                      width: `${Math.min(
-                        (weightGain / growth.baseline.weightKg) * 300,
-                        100
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {adg !== null && (
-              <div className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm",
-                adgTier === "good" ? "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/40" :
-                adgTier === "fair" ? "bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/40" :
-                "bg-red-50 dark:bg-red-950/30 border border-red-200/70 dark:border-red-800/40"
-              )}>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t.cattle_details.weight.avg_daily_gain}</p>
-                  <p className={cn("text-lg font-bold tabular-nums leading-tight", adgColor)}>
-                    {adg.toFixed(2)} <span className="text-xs font-normal opacity-70">kg/d</span>
-                  </p>
-                </div>
-                <span className={cn(
-                  "rounded-full px-2 py-0.5 text-xs font-bold",
-                  adgTier === "good" ? "bg-emerald-600 dark:bg-emerald-500 text-white" :
-                  adgTier === "fair" ? "bg-amber-600 dark:bg-amber-500 text-white" :
-                  "bg-destructive text-destructive-foreground"
-                )}>
-                  {adgLabel}
-                </span>
-                {adg14 !== null && (
-                  <div className="border-l border-border/60 pl-2 ml-1">
-                    <p className="text-xs text-muted-foreground">{t.cattle_details.smart.adg_14_day}</p>
-                    <p className={cn("text-sm font-bold tabular-nums", adg14 >= 0.5 ? "text-emerald-600 dark:text-emerald-400" : adg14 >= 0.3 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400")}>
-                      {adg14.toFixed(2)}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-          </div>
-
-          {/* Col 3 — Financials */}
-          <div className="p-3 sm:p-5 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.cattle_details.profile.financials}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg bg-muted/40 p-2.5 border border-border/50">
-                <p className="text-xs font-medium uppercase text-muted-foreground truncate">
-                  {t.cattle_details.profile.purchase_price}
-                </p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums">
-                  {c.purchase_price != null ? `৳${Number(c.purchase_price).toLocaleString("en-IN")}` : "—"}
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted/40 p-2.5 border border-border/50">
-                <p className="text-xs font-medium uppercase text-muted-foreground truncate">
-                  {t.cattle_details.profile.feed_cost} · Actual
-                </p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums">
-                  {totalFeedCost > 0
-                    ? `৳${totalFeedCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
-                    : "No data"}
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
-                  {runningFeedEstimate > 0 && (
-                    <span className="block text-amber-700 dark:text-amber-400">
-                      + running (feeds in use, not final): ৳{runningFeedEstimate.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                    </span>
-                  )}
-                  Ration plan (reference): {allocatedFeedCost > 0
-                    ? `৳${allocatedFeedCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}${estimateRoughageCostUnknown ? " + roughage (counted per piece — see actual)" : ""}`
-                    : "—"}
-                </p>
-              </div>
-              <div className="rounded-lg bg-primary/5 p-2.5 ring-2 ring-primary/20">
-                <p className="text-xs font-medium uppercase text-muted-foreground truncate">
-                  {t.cattle_details.smart.true_total_cost}
-                </p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums text-primary">
-                  ৳{totalCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted/40 p-2.5 border border-border/50">
-                <p className="text-xs font-medium uppercase text-muted-foreground truncate">
-                  {t.cattle_details.smart.break_even}
-                </p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums">
-                  {breakEvenPerKg ? `৳${breakEvenPerKg.toFixed(0)}/kg` : "—"}
-                </p>
-              </div>
-            </div>
-            
-            {c.status === "dead" && (
-              <div className="rounded-lg bg-red-500/10 p-3 ring-2 ring-red-500/20">
-                <p className="text-xs font-bold uppercase tracking-wide text-red-600 dark:text-red-400">
-                  {t.cattle_details.profile.total_mortality_loss}
-                </p>
-                <p className="mt-0.5 text-lg font-bold tabular-nums text-red-700 dark:text-red-400">
-                  -৳{totalCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                </p>
-                <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80 leading-snug">
-                  {t.cattle_details.profile.mortality_desc}
-                </p>
-              </div>
-            )}
-
-            {/* Cost breakdown bar */}
-            {totalCost > 0 && (() => {
-              const segments = [
-                { label: t.cattle_details.smart.purchase,         amount: Number(c.purchase_price), color: "bg-blue-500" },
-                { label: t.cattle_details.smart.feed_consumption, amount: totalFeedCost,             color: "bg-amber-500" },
-                { label: t.cattle_details.smart.veterinary,       amount: medicalCost,               color: "bg-red-400" },
-                { label: t.cattle_details.health.other,           amount: otherIndividualCost,       color: "bg-slate-400" },
-              ].filter(s => s.amount > 0);
-              return (
-                <div className="space-y-1.5">
-                  <div className="flex h-2 w-full overflow-hidden rounded-full gap-px bg-muted">
-                    {segments.map((s) => (
-                      <div
-                        key={s.label}
-                        className={`h-full ${s.color} first:rounded-l-full last:rounded-r-full transition-all`}
-                        style={{ width: `${(s.amount / totalCost) * 100}%` }}
-                        title={`${s.label}: ৳${Math.round(s.amount).toLocaleString("en-IN")} (${Math.round((s.amount / totalCost) * 100)}%)`}
-                      />
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                    {segments.map((s) => (
-                      <span key={s.label} className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <span className={`inline-block h-2 w-2 rounded-full ${s.color}`} />
-                        {s.label} {Math.round((s.amount / totalCost) * 100)}%
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            {weightGain > 0 && (
-              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-                {gainWindowCost > 0 && (
-                  <span>
-                    {t.cattle_details.profile.cost_per_kg_gained}:{" "}
-                    <span className="font-semibold text-foreground">৳{(gainWindowCost / weightGain).toFixed(0)}/kg</span>
-                  </span>
-                )}
-                {gainWindowFeed > 0 && (
-                  <span>
-                    {t.cattle_details.profile.feed_per_kg_gain}:{" "}
-                    <span className="font-semibold text-amber-700 dark:text-amber-400">৳{(gainWindowFeed / weightGain).toFixed(0)}/kg</span>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {c.notes && (
-          <div className="border-t border-border px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.cattle_details.profile.notes}
-            </p>
-            <p className="mt-1.5 text-sm leading-relaxed">{c.notes}</p>
-          </div>
-        )}
-      </div>
+      <CattleProfileHero
+        tp={t.cattle_profile}
+        th={t.home}
+        id={c.id}
+        backLabel={t.cattle_details.profile.back_to_livestock}
+        tag={c.tag_id}
+        statusLabel={(t.cattle_details.dialogs as Record<string, string>)[c.status] ?? c.status}
+        statusClass={STATUS_STYLE[c.status] ?? ""}
+        subtitle={[c.gender === "male" ? t.cattle_details.table.gender_male : t.cattle_details.table.gender_female, c.breed].filter(Boolean).join(" · ")}
+        badges={{ ready: !!hm?.readyToSell, quarantined: !!c.is_quarantined, qurbani: !!c.is_qurbani_marked }}
+        actions={<>
+          {/* Undo Sale — time-limited */}
+          {c.status === "sold" && latestSaleData?.sold_at &&
+            nowMs - new Date(latestSaleData.sold_at).getTime() <= 7 * 86400000 && (
+            <UndoSaleButton cattleId={c.id} tagId={c.tag_id} soldAt={latestSaleData.sold_at} />
+          )}
+          <EditCattleDialog
+            cattle={{
+              id: c.id,
+              tag_id: c.tag_id,
+              gender: c.gender,
+              breed: c.breed,
+              dob: c.dob,
+              purchase_date: c.purchase_date ?? "",
+              purchase_price: c.purchase_price ?? 0,
+              initial_weight_kg: c.initial_weight_kg ?? 0,
+              initial_weight_type: c.initial_weight_type,
+              target_weight_kg: c.target_weight_kg ?? null,
+              expected_daily_gain_kg: c.expected_daily_gain_kg ?? null,
+              notes: c.notes,
+              existingTagIds,
+              existingBreeds,
+            }}
+          />
+          <CattleDetailMoreMenu
+            cattleId={c.id}
+            tagId={c.tag_id}
+            status={c.status}
+            isQuarantined={c.is_quarantined ?? false}
+            isQurbani={c.is_qurbani_marked ?? false}
+          />
+        </>}
+        dates={{ purchase: fmtDay(c.purchase_date), dob: c.dob ? fmtDay(c.dob) : null, daysOnFarm: daysInPen }}
+        weight={{
+          kg: hm?.weightKg ?? (latestWeight || null),
+          basis: hm?.weightBasis ?? (measured.length ? "measured" : c.initial_weight_type === "estimated" ? "estimated" : "measured"),
+          daysSinceWeighed: hm?.daysSinceWeighed ?? null,
+          initialKg: c.initial_weight_kg ?? null,
+          initialType: weightTypeLabel(c.initial_weight_type),
+          growth: growth ? { gainKg: growth.gainKg, fromKg: growth.baseline.weightKg, from: growth.baseline.date, fromPurchase: growth.baseline.source === "initial" } : null,
+        }}
+        adg={{ kg: adg, tier: adgTier, tierLabel: adgLabel, adg14, breedAvg: breedAverageAdg }}
+        target={c.target_weight_kg && (hm?.weightKg ?? latestWeight) ? { kg: Number(c.target_weight_kg), progress: ((hm?.weightKg ?? latestWeight) / Number(c.target_weight_kg)) * 100 } : null}
+        cost={{
+          total: totalCost, purchase: Number(c.purchase_price ?? 0), feed: totalFeedCost, medical: medicalCost, other: otherIndividualCost,
+          running: runningFeedEstimate, planReference: allocatedFeedCost > 0 ? allocatedFeedCost : null,
+          breakEvenPerKg: (hm?.weightKg ?? latestWeight) > 0 ? totalCost / (hm?.weightKg ?? latestWeight) : null,
+        }}
+        value={c.status === "active" && hm ? { worth: hm.valueToday, profit: hm.profitToday } : null}
+        realised={c.status === "sold"
+          ? { kind: "sold", salePrice: latestSaleData?.sale_price_total != null ? Number(latestSaleData.sale_price_total) : null, result: latestSaleData?.sale_price_total != null ? Number(latestSaleData.sale_price_total) - totalCost : -totalCost }
+          : c.status === "dead" ? { kind: "dead", salePrice: null, result: -totalCost } : null}
+        perKg={{
+          cost: weightGain > 0 && gainWindowCost > 0 ? gainWindowCost / weightGain : null,
+          feed: weightGain > 0 && gainWindowFeed > 0 ? gainWindowFeed / weightGain : null,
+        }}
+        nextHealth={c.status === "active" && nextHealthData
+          ? { title: nextHealthData.title, date: String(nextHealthData.scheduled_at).slice(0, 10), overdue: String(nextHealthData.scheduled_at).slice(0, 10) < todayDhaka() }
+          : null}
+        notes={c.notes ?? null}
+      />
 
       <CattleDetailTabs
         defaultTab={c.status === "active" ? "weight" : "overview"}
@@ -1121,7 +850,7 @@ async function ProfileSection({ id }: { id: string }) {
               initialLogs={logs}
               purchaseDate={c.purchase_date}
               initialWeight={c.initial_weight_kg}
-              totalConsumed={allocatedConcentrateKg + allocatedRoughageKg}
+              totalConsumed={actualFeedKgForGain}
             />
             <Suspense fallback={<PhotosSkeleton />}>
               <PhotosSection cattle={c} title={t.cattle_details.photos.photos} />
@@ -1155,15 +884,15 @@ async function ProfileSection({ id }: { id: string }) {
               initialLogs={logs}
               purchaseDate={c.purchase_date}
               initialWeight={c.initial_weight_kg}
-              totalConsumed={allocatedConcentrateKg + allocatedRoughageKg}
+              totalConsumed={actualFeedKgForGain}
             />
             <GrowthForecastCard
               initialWeight={c.initial_weight_kg}
               currentWeight={latestWeight}
-              estimatedWeightToday={estimatedWeightToday}
+              estimatedWeightToday={hm?.weightKg ?? estimatedWeightToday}
               purchaseDate={c.purchase_date}
               logs={logs}
-              totalConsumed={allocatedConcentrateKg + allocatedRoughageKg}
+              totalConsumed={actualFeedKgForGain}
               totalCost={totalCost}
               purchasePrice={c.purchase_price}
               breedAverageAdg={breedAverageAdg}
@@ -1192,7 +921,7 @@ async function ProfileSection({ id }: { id: string }) {
                   businessId={businessId}
                   tagId={c.tag_id}
                   latestWeightKg={latestWeight}
-                  estimatedWeightKg={estimatedWeightToday}
+                  estimatedWeightKg={hm?.weightKg ?? estimatedWeightToday}
                   totalCost={totalCost}
                   marketPricePerKg={marketPriceData?.price_per_kg}
                   breakEvenPerKg={breakEvenPerKg}

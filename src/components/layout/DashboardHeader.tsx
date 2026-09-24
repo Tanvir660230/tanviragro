@@ -115,7 +115,7 @@ export function DashboardHeader({
                 <span className="text-base leading-none">🌿</span>
               )}
             </div>
-            <span className="text-xs font-bold text-foreground truncate max-w-[120px]">
+            <span className="hidden sm:inline text-xs font-bold text-foreground truncate max-w-[120px]">
               {bizName}
             </span>
           </div>
@@ -131,16 +131,16 @@ export function DashboardHeader({
 
         {/* CENTER: Global Search Trigger Bar */}
         {showSearch && (
-          <div className="flex-1 max-w-md mx-2">
+          <div className="flex min-w-0 flex-1 justify-end sm:justify-start max-w-md mx-1 sm:mx-2">
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
               aria-label="Search and command palette (Ctrl+K)"
-              className="w-full flex items-center justify-between gap-2 h-9 px-3 rounded-xl border border-border/60 bg-muted/30 hover:bg-muted/60 text-muted-foreground hover:text-foreground text-xs font-medium transition-all shadow-2xs group focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+              className="flex w-9 sm:w-full items-center justify-center sm:justify-between gap-2 h-9 px-0 sm:px-3 rounded-xl border border-border/60 bg-muted/30 hover:bg-muted/60 text-muted-foreground hover:text-foreground text-xs font-medium transition-all shadow-2xs group focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
             >
-              <div className="flex items-center gap-2 truncate">
+              <div className="flex items-center gap-2 min-w-0">
                 <Search className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                <span className="truncate">Search cattle, feed, financials, reports...</span>
+                <span className="hidden sm:inline truncate">Search cattle, feed, financials, reports...</span>
               </div>
               <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-background border border-border/70 text-muted-foreground shrink-0 shadow-2xs">
                 ⌘K
@@ -173,7 +173,7 @@ export function DashboardHeader({
               aria-label="Toggle Farm Utility Tools (Calculator & Notes)"
               aria-pressed={utilityActive}
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-xl transition-all border cursor-pointer",
+                "hidden sm:flex h-9 w-9 items-center justify-center rounded-xl transition-all border cursor-pointer",
                 utilityActive
                   ? "bg-primary/10 border-primary/30 text-primary"
                   : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"

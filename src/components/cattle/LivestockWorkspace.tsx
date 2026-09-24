@@ -43,9 +43,11 @@ interface Props {
     overdueHealthCount: number;
     highFcrCount: number;
   };
+  /** inside the cattle board's table view: the board shows its own header, summary and filters */
+  embedded?: boolean;
 }
 
-export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }: Props) {
+export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, embedded = false }: Props) {
   const router = useRouter();
 
   const [selectedCattleForDeath, setSelectedCattleForDeath] = useState<CattleRowEnriched | null>(null);
@@ -294,7 +296,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }
         label: "Record Weight",
         icon: <Scale className="h-4 w-4" />,
         action: (row: CattleRowEnriched) => {
-          router.push(`/dashboard/cattle/${row.id}?tab=weights`);
+          router.push(`/dashboard/cattle/${row.id}?tab=weight`);
         },
       },
       {
@@ -379,6 +381,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }
 
   return (
     <div className="space-y-5">
+      {!embedded && (<>
       {/* ── 1. Page Header & Quick Controls ────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -535,6 +538,8 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }
           <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-1">Premium stock</div>
         </button>
       </div>
+
+      </>)}
 
       {/* ── 3. Enterprise Data Grid Workspace ───────────────────────────── */}
       <EnterpriseDataGrid

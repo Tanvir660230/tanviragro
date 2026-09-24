@@ -4,10 +4,21 @@ import { getAccountingData } from "@/lib/accounting/engine";
 import { capitalSummary } from "@/components/finance/CapitalSummaryCard";
 import { addDays, startOfMonth, todayDhaka } from "@/lib/dates";
 import { nextEidDate } from "@/lib/home/eid";
-import { buildHomeModel, type HomeModel } from "@/lib/home/home-model";
+import { buildHomeModel, type HomeInput, type HomeModel } from "@/lib/home/home-model";
+import type { FeedData } from "@/lib/feed/feed-data";
+
+export type HomeInputs = { input: HomeInput; feed: FeedData; directCostByCattle: Record<string, number> };
 
 /** Loads the homepage from the verified sources; money figures are omitted without accounting access. */
 export async function loadHomeModel(supabase: SupabaseClient<any>, businessId: string, today = todayDhaka()): Promise<HomeModel> {
+  return buildHomeModel((await loadHomeInputs(supabase, businessId, today)).input);
+}
+
+/**
+ * The raw inputs of the home model (also used by the cattle list so both show the same figures).
+ * money = false skips the accounting engine (cash, month's expenses) when a page does not need it.
+ */
+export async function loadHomeInputs(supabase: SupabaseClient<any>, businessId: string, today = todayDhaka(), opts: { money?: boolean } = {}): Promise<HomeInputs> {
   const [cattleRes, feed, costsRes, treatmentsRes, priceRes, healthRes] = await Promise.all([
     supabase.from("cattle")
       .select("id, tag_id, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, target_weight_kg")
@@ -15,7 +26,8 @@ export async function loadHomeModel(supabase: SupabaseClient<any>, businessId: s
     loadFeedData(supabase, businessId, today),
     supabase.from("cost_entries").select("cattle_id, amount")
       .eq("business_id", businessId).is("deleted_at", null).not("cattle_id", "is", null)
-      .eq("type", "variable").eq("entry_class", "expense"),
+      .eq("type", "variable").eq("entry_class", "expense")
+      .neq("category", "Medical/Vet Fee"),   // that money is on the treatment row (counted below)
     supabase.from("cattle_treatments").select("cattle_id, vet_fee, additional_medical_cost, cattle!inner(business_id)")
       .eq("cattle.business_id", businessId),
     supabase.from("market_prices").select("price_per_kg").eq("business_id", businessId)
@@ -41,7 +53,7 @@ export async function loadHomeModel(supabase: SupabaseClient<any>, businessId: s
   // money: the accounting engine (needs accounting permission — otherwise not shown)
   let cash: number | null = null;
   let monthOperatingExpenses: number | null = null;
-  try {
+  if (opts.money !== false) try {
     const [all, month] = await Promise.all([getAccountingData(supabase), getAccountingData(supabase, startOfMonth(today), today)]);
     cash = all.balanceSheet.cashAndBank;
     monthOperatingExpenses = capitalSummary(month).operatingExpenses;
@@ -49,7 +61,7 @@ export async function loadHomeModel(supabase: SupabaseClient<any>, businessId: s
 
   const price = (priceRes.data as { price_per_kg: number | string } | null)?.price_per_kg;
 
-  return buildHomeModel({
+  const input: HomeInput = {
     today,
     nextEid: nextEidDate(today),
     cattle: cattleRows.map((c) => ({
@@ -66,5 +78,6 @@ export async function loadHomeModel(supabase: SupabaseClient<any>, businessId: s
     monthOperatingExpenses,
     healthDue: ((healthRes.data ?? []) as { title: string; scheduled_at: string; cattle_id: string | null }[])
       .map((h) => ({ cattleTag: h.cattle_id ? tagById.get(h.cattle_id) ?? null : null, title: h.title, date: String(h.scheduled_at).slice(0, 10) })),
-  });
+  };
+  return { input, feed, directCostByCattle: direct };
 }

@@ -561,10 +561,12 @@ export function CattleForm({ existingTagIds, existingBreeds, onAddAnother, onDon
 interface Props {
   existingTagIds: string[];
   existingBreeds: string[];
+  /** open on load (deep link /dashboard/cattle?open=add) */
+  defaultOpen?: boolean;
 }
 
-export function AddCattleDialog({ existingTagIds, existingBreeds }: Props) {
-  const [open, setOpen] = useState(false);
+export function AddCattleDialog({ existingTagIds, existingBreeds, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <>

@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import { Beef } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AddCattleDialog } from "@/components/cattle/AddCattleDialog";
-import { LivestockWorkspace } from "@/components/cattle/LivestockWorkspace";
+import { CattleBoard } from "@/components/cattle/CattleBoard";
+import { loadCattleBoard } from "@/lib/cattle/board-data";
+import { todayDhaka } from "@/lib/dates";
 import type { Cattle } from "@/types/database";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
@@ -216,6 +218,9 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
     .filter((c) => c.status === "active")
     .map((c) => ({ id: c.id, tag_id: c.tag_id }));
 
+  // cards: the homepage calculation per animal (same figures on the homepage, list and profile)
+  const board = await loadCattleBoard(supabase, businessId);
+
   const allBreeds = [...new Set(cattle.map((c) => c.breed).filter(Boolean) as string[])].sort();
   const existingTagIds = cattle.map((c) => c.tag_id);
 
@@ -229,13 +234,14 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
               subtitle={t.cattle.no_cattle_yet}
               icon={Beef}
             />
-            <AddCattleDialog existingTagIds={[]} existingBreeds={[]} />
+            <AddCattleDialog existingTagIds={[]} existingBreeds={[]} defaultOpen={open === "add"} />
           </div>
           <EmptyState t={t} />
         </>
       ) : (
-        <LivestockWorkspace
-          cattle={enriched}
+        <CattleBoard
+          board={board}
+          rows={enriched}
           allBreeds={allBreeds}
           existingTagIds={existingTagIds}
           alerts={{
@@ -243,6 +249,11 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
             overdueHealthCount: overdueHealthCount ?? 0,
             highFcrCount,
           }}
+          today={todayDhaka()}
+          openWeigh={open === "bulk-weigh"}
+          openAdd={open === "add"}
+          tb={t.cattle_board}
+          th={t.home}
         />
       )}
     </>

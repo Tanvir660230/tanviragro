@@ -94,7 +94,9 @@ export function CattleDetailTabs({
 
   const TAB_ORDER = TABS.map((t) => t.id);
 
-  const tabParam = searchParams.get("tab") as CattleWorkspaceTabId | null;
+  // "weights" is an old spelling still found in saved links
+  const rawTab = searchParams.get("tab");
+  const tabParam = (rawTab === "weights" ? "weight" : rawTab) as CattleWorkspaceTabId | null;
   const active: CattleWorkspaceTabId =
     tabParam && TAB_ORDER.includes(tabParam)
       ? tabParam
