@@ -210,20 +210,17 @@ See `FEED_USAGE_HISTORY_DRY_RUN.md`: 22 periods, 601 rows.
   2. rotate the secret key that was pasted in chat;
   3. approve deleting the 184 local `refs/cline/*` checkpoint commits that contain the token (they were never pushed).
 
-## R. Build and deployment
+## R. Build and deployment — DONE (2026-09-24)
 
-- **Build:** passes. Deployment is **not done**, because production DDL needs an owner-authorised session.
-- **Owner steps, in order, in the Supabase SQL Editor, after a backup:**
-  1. `supabase/migrations/20260925090000_baseline_drift_columns.sql`
-  2. `supabase/migrations/20260925100000_feed_inventory_ledger.sql`
-  3. `supabase/migrations/20260925110000_expense_categories.sql`
-  4. `supabase/migrations/20260925120000_weight_types.sql`
-  5. `supabase/migrations/20260925130000_feed_usage_periods.sql`
-  6. Check: section 7 of `docs/sql/feed_ledger_reconciliation.sql`. All must be 0; otherwise stop.
-  7. `supabase/corrections/20260925_feed_historical_corrections.sql`
-  8. Commit and deploy the code.
-  9. Tell me, and I will verify production read-only.
-- **Rollbacks:** in `supabase/rollback/`, run in reverse order.
+| Step | Result |
+|---|---|
+| Backup | All 67 public tables (958 rows) exported and read back before any change |
+| First release attempt | Failed with `business_users.is_active` missing (production drift: migration 032 was never fully applied). One transaction, so **nothing changed**; verified. |
+| Fix | Membership check reads `is_active` only when the column exists. Re-tested on a copy made to match production exactly (applied twice, idempotent), DB tests 43/43 and 27/27. |
+| Release | `supabase/deploy/20260925_feed_release.sql` applied in one transaction. 5 migrations recorded. |
+| Production check (read-only) | Integrity checks all 0. Consumption without cost 0. Cash purchases ৳125,725.57, opening ৳3,299.40, stock ৳12,923.35 = qty × cost. 5 RPCs present. No stray rows written between release and deploy. |
+| Code | Pushed to `main` (`24aa761`). CI (lint, tests, build) green after two pre-existing CI defects were fixed: Jest config needed `ts-node`, and `next.config.ts` imported a Sentry subpath missing from the locked version (this would also have failed the Netlify build). |
+| Live site | https://caagro.netlify.app serves the new code. |
 
 ## S. Remaining limits
 
