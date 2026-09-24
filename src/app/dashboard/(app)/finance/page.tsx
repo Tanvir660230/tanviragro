@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { SellTodaySummary } from "@/components/finance/SellTodaySummary";
 import { FinanceHero, FinanceHeroSkeleton } from "@/components/finance/FinanceHero";
+import { CapitalSummaryCard } from "@/components/finance/CapitalSummaryCard";
 import { createClient } from "@/lib/supabase/server";
 import { CostList, type CostEntry, type InventoryPurchaseEntry } from "@/components/finance/CostList";
 import { AssetTabPanel, type SimpleFixedAsset } from "@/components/finance/AssetTabPanel";
@@ -165,7 +166,7 @@ export default async function FinancePage(props: {
     businessId
       ? supabase
           .from("fixed_assets")
-          .select("id, name, category, description, purchase_date, purchase_cost, salvage_value, useful_life_years, depreciation_method, declining_rate, disposed_at")
+          .select("id, name, category, description, purchase_date, purchase_cost, salvage_value, useful_life_years, depreciation_method, declining_rate, disposed_at, source_cost_entry_id")
           .eq("business_id", businessId)
           .eq("is_active", true)
           .order("purchase_date", { ascending: false })
@@ -236,14 +237,14 @@ export default async function FinancePage(props: {
   const entries: CostEntry[] = (costsData ?? []) as CostEntry[];
   // Assets are NOT operating costs — separate them before any P&L calculation
   const expenseEntries = entries.filter((e) => (e.entry_class ?? "expense") === "expense");
-  const assetEntries   = entries.filter((e) => e.entry_class === "asset");
-  const totalAssetValue = assetEntries.reduce((s, e) => s + Number(e.amount), 0);
+  const allAssetEntries = entries.filter((e) => e.entry_class === "asset");
 
   type RawFixedAsset = {
     id: string; name: string; category: string; description: string | null;
     purchase_date: string; purchase_cost: number; salvage_value: number;
     useful_life_years: number; depreciation_method: string; declining_rate: number | null;
     disposed_at: string | null;
+    source_cost_entry_id: string | null;
   };
   const fixedAssets: SimpleFixedAsset[] = ((rawFixedAssetsData ?? []) as RawFixedAsset[]).map((a) => {
     // Supabase numeric columns come back as strings — coerce before passing to arithmetic.
@@ -266,6 +267,12 @@ export default async function FinancePage(props: {
       usefulLifeYears: a.useful_life_years,
     };
   });
+  // An asset payment that has a fixed-asset record is shown (and valued, depreciated) through that
+  // record only — listing both showed the same purchase twice.
+  const linkedPaymentIds = new Set(((rawFixedAssetsData ?? []) as RawFixedAsset[]).map((a) => a.source_cost_entry_id).filter(Boolean));
+  const assetEntries = allAssetEntries.filter((e) => !linkedPaymentIds.has(e.id));
+  // asset value = fixed assets after depreciation + asset payments without a fixed-asset record
+  const totalAssetValue = fixedAssets.reduce((s, a) => s + a.bookValue, 0) + assetEntries.reduce((s, e) => s + Number(e.amount), 0);
 
   const sales: SaleRecord[] = (salesData ?? []).map(
     (r: {
@@ -514,6 +521,9 @@ export default async function FinancePage(props: {
           Utility expenses (electricity, internet, gas…) →
         </Link>
       </div>
+      <Suspense fallback={null}>
+        <CapitalSummaryCard />
+      </Suspense>
       {/* ── Enterprise Livestock Financial Workspace ── */}
       <EnterpriseLivestockFinancialWorkspace
         businessId={businessId ?? ""}

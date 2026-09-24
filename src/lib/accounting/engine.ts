@@ -103,6 +103,8 @@ export interface FixedAssetRow {
   disposedAt: string | null;
   disposalValue: number | null;
   notes: string | null;
+  /** payment record (cost entry) this asset was bought with — cash is counted there, not here */
+  sourceCostEntryId: string | null;
   accumulatedDepreciation: number;
   bookValue: number;
   monthlyDepreciation: number;
@@ -196,6 +198,7 @@ export const getCachedDbData = async (businessId: string) => {
       purchase_date: string; purchase_cost: number; salvage_value: number;
       useful_life_years: number; depreciation_method: string; declining_rate: number | null;
       is_active: boolean; disposed_at: string | null; disposal_value: number | null; notes: string | null;
+      source_cost_entry_id?: string | null;
     };
 
     return {
@@ -281,6 +284,7 @@ export async function getAccountingData(
       disposedAt: a.disposed_at,
       disposalValue: a.disposal_value != null ? Number(a.disposal_value) : null,
       notes: a.notes,
+      sourceCostEntryId: a.source_cost_entry_id ?? null,
       accumulatedDepreciation: dep.accumulated,
       bookValue: dep.bookValue,
       monthlyDepreciation: dep.monthly,
@@ -370,8 +374,15 @@ export async function getAccountingData(
           return s + Number(c.purchase_price ?? 0) + deadCap + (feedCostByCattle[c.id] ?? 0);
         }, 0)
     : deceasedCattleLoss;
+  // Asset purchases paid through a cost entry (entry_class = asset). The payment is the CASH
+  // record; when a fixed asset points at it (source_cost_entry_id) the fixed asset is the VALUE
+  // record (depreciated) — so its amount is cash once and value once, never twice.
   const allAssetCosts   = costs.filter((c) => c.entry_class === "asset");
-  const costEntryAssetTotal = allAssetCosts.reduce((s, c) => s + Number(c.amount), 0);
+  const costEntryAssetTotal = allAssetCosts.reduce((s, c) => s + Number(c.amount), 0);   // cash
+  const linkedPaymentIds = new Set(fixedAssets.map((a) => a.sourceCostEntryId).filter(Boolean) as string[]);
+  const unlinkedAssetCostValue = allAssetCosts
+    .filter((c) => !linkedPaymentIds.has(c.id))
+    .reduce((s, c) => s + Number(c.amount), 0);                                            // value without a register entry
 
   // All-time partner transactions (for equity on balance sheet)
   const allPartnerInvestments = partnerTx
@@ -388,8 +399,10 @@ export async function getAccountingData(
   const allPartnerWithdrawals = allPartnerCapitalWithdrawals + allPartnerProfitDistributions;
 
   // Fixed asset totals (all-time for balance sheet)
-  const totalFixedAssetCost = fixedAssets.reduce((s, a) => s + a.purchaseCost, 0);
+  const totalFixedAssetCost = fixedAssets.reduce((s, a) => s + a.purchaseCost, 0);                 // value (gross)
   const totalAccumDep = fixedAssets.reduce((s, a) => s + a.accumulatedDepreciation, 0);
+  // Register assets WITHOUT a payment record are paid here; linked ones were paid by their cost entry.
+  const unlinkedFixedAssetCash = fixedAssets.filter((a) => !a.sourceCostEntryId).reduce((s, a) => s + a.purchaseCost, 0);
 
   // All-time accrued interest on loans (for retained earnings and income statement).
   // For paid loans, interest stops accruing on the date the last payment was made —
@@ -441,7 +454,7 @@ export async function getAccountingData(
   const capitalizedCashOutflow = allCapitalizedCattleCosts.reduce((s, c) => s + Number(c.amount), 0);
   const allTimeNetCashFlow =
     (allTimeSalesRevenue - allCattleCost - allTimeTotalOpCosts - allTimePurchaseValue - capitalizedCashOutflow)
-    + (-(totalFixedAssetCost + costEntryAssetTotal))
+    + (-(unlinkedFixedAssetCash + costEntryAssetTotal))
     + (allPartnerInvestments - allPartnerWithdrawals)
     + allTimeFinancingCash;
 
@@ -567,7 +580,7 @@ export async function getAccountingData(
 
   // Fixed asset purchases in period (for cash flow investing section)
   const periodFixedAssetPurchases = fixedAssets
-    .filter((a) => inPeriod(a.purchaseDate))
+    .filter((a) => inPeriod(a.purchaseDate) && !a.sourceCostEntryId)   // linked ones: paid by their cost entry
     .reduce((s, a) => s + a.purchaseCost, 0);
 
   // ── INCOME STATEMENT ──────────────────────────────────────────
@@ -636,7 +649,7 @@ export async function getAccountingData(
   // ── BALANCE SHEET (always all-time) ───────────────────────────
   const cashAndBank = allTimeNetCashFlow + openingCash;
   const livestock = activeCattleCost + capitalizedActiveCosts;
-  const netFixedAssets = totalFixedAssetCost - totalAccumDep + costEntryAssetTotal;
+  const netFixedAssets = totalFixedAssetCost - totalAccumDep + unlinkedAssetCostValue;
   const totalAssets = cashAndBank + feedInventoryValue + livestock + netFixedAssets;
 
   // Partner Capital = contributed capital only (investments minus capital returns).
@@ -651,7 +664,7 @@ export async function getAccountingData(
     cashAndBank,
     feedInventory: feedInventoryValue,
     livestock,
-    fixedAssets: totalFixedAssetCost,
+    fixedAssets: totalFixedAssetCost + unlinkedAssetCostValue,   // gross cost of everything net of depreciation below
     accumulatedDepreciation: totalAccumDep,
     netFixedAssets,
     totalAssets,
@@ -771,9 +784,10 @@ export async function getAccountingData(
     cr("1100", Number(c.amount));
   }
 
-  // Fixed assets from the fixed_assets table: DR Fixed Assets, CR Cash
-  dr("1500", totalFixedAssetCost);
-  cr("1100", totalFixedAssetCost);
+  // Fixed assets from the fixed_assets table: DR Fixed Assets, CR Cash — only those without a
+  // payment record (a linked asset's payment was posted just above)
+  dr("1500", unlinkedFixedAssetCash);
+  cr("1100", unlinkedFixedAssetCash);
 
   // Depreciation (all-time accumulated): DR Depreciation Expense, CR Accumulated Depreciation
   dr("6500", totalAccumDep);

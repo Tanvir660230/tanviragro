@@ -101,11 +101,13 @@ export async function getStatementData(
       .is("deleted_at", null)
       .order("recorded_at", { ascending: true }),
 
-    // Fixed assets (added via Fixed Assets page) are cash outflows not in cost_entries
+    // Fixed assets added on the Fixed Assets page are cash outflows not in cost_entries.
+    // Assets bought with a cost entry (source_cost_entry_id) are already that entry's payment line.
     supabase
       .from("fixed_assets")
       .select("id, name, category, purchase_date, purchase_cost")
       .eq("business_id", businessId)
+      .is("source_cost_entry_id", null)
       .order("purchase_date", { ascending: true }),
 
     supabase

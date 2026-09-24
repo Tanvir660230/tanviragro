@@ -82,10 +82,12 @@ export async function getCashBalance(
       .eq("entry_class", "asset")
       .is("deleted_at", null),
 
+    // register assets paid through a cost entry (source_cost_entry_id) are already in costEntryAssets
     supabase
       .from("fixed_assets")
       .select("purchase_cost")
-      .eq("business_id", businessId),
+      .eq("business_id", businessId)
+      .is("source_cost_entry_id", null),
 
     supabase
       .from("loans")

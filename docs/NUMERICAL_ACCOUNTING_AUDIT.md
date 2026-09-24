@@ -318,10 +318,10 @@ Why the cash figure was wrong:
 | Minerals (salt) | feed ingredient | same | 0 | PASS | — |
 | Veterinary costs | ৳4,500 once | twice (expensed + capitalised; cash twice) | +4,500 | **FAIL → fixed + C14** | Medical form wrote treatment **and** cost entry; fee × medicines |
 | Rent / lease | lease recorded | none | — | MISSING DATA | Not entered |
-| Utilities | ৳1,050 (WiFi) | ৳25,520 | +24,470 misclassified | **FAIL (data)** | Machine, tools and transport entered as "utilities" |
+| Utilities | ৳2,320 | ৳25,520 | +23,200 misclassified | **FAIL → C15** (§20) | The straw cutting machine was entered as "utilities" (torch, basket, finish and DORB fare ৳1,270 remain; owner may reclass) |
 | WiFi | Utilities | Utilities | 0 | PASS | (C6) |
 | Total farm expenses | 274,457.95 | 278,958.16 | +4,500.21 | **FAIL → fixed + C14** | Vet duplicate + rounding |
-| Capital items | shed ৳103,280, equipment ৳10,410, machine ৳23,200 as assets | expensed | 136,890 | **FAIL (policy)** | Entered as expenses; owner decision |
+| Capital items | shed ৳103,280, equipment ৳10,410, machine ৳23,200 as assets | expensed | 136,890 | **FAIL → C15** (§20) | Entered as expenses; owner instruction 2026-09-24 |
 | Cash | ৳4,697.45 | −809,055.55 / 197.44 / 4,697.44 | up to −813,753 | **FAIL → fixed + C14** | Invalid enum in query; vet fee paid twice |
 | Cattle-level costing | ৳641,038.60 | same | 0 | PASS | — |
 | Cost/kg gain | window-matched, measured only | +3–4 %; −40 kg from an estimate | see §12 | **FAIL → fixed** | Window mismatch; estimates used; herd feed ignored |
@@ -385,3 +385,79 @@ Why the cash figure was wrong:
 - no invented weights.
 
 Full suite: **474 / 474**. tsc clean. Lint 0 errors. Clean production build.
+
+## 20. Capital assets: cash out ≠ operating expense ≠ asset value (owner instruction 2026-09-24)
+
+### 20.1 Model before the change
+| Record | Cash | Operating expense | Asset value | Depreciation |
+|---|---|---|---|---|
+| Cost entry `entry_class = expense` | yes | **yes** | — | — |
+| Cost entry `entry_class = asset` | yes | no | yes | **never** |
+| `fixed_assets` row (Fixed Assets page) | yes | no | yes | yes |
+
+The shed, the machine and the equipment were entered as ordinary **expenses** (the machine even under "utilities"), so the full ৳136,890 hit operating profit at once, and none of it was depreciated.
+
+### 20.2 Change (minimal; nothing deleted)
+- **Link column:** `fixed_assets.source_cost_entry_id` (migration `20260925150000`). A fixed asset can point at the payment that bought it.
+  - The **payment** (cost entry, `entry_class = asset`) is the **cash** record, counted in cash and capital expenditure.
+  - The **fixed asset** is the **value** record: cost, depreciation and book value.
+- **Rule everywhere:** a linked asset is never cash again, and a linked payment is never asset value again. Places changed:
+  - the accounting engine (cash, cash-flow statement, balance sheet, trial balance);
+  - the cash service;
+  - the financial repository;
+  - the statement export (which feeds the dashboard cash card);
+  - the Finance page asset tab and "Capital Assets" figure (now book value);
+  - the balance-sheet page depreciation table.
+- **Database guards:**
+  - linked assets can never exceed the payment;
+  - the payment must be classed as an asset;
+  - a linked payment cannot be deleted, reclassed or reduced (`check_violation`).
+- **Money summary on the Finance page**, with seven separate tiles: cash/bank, operating expenses, depreciation, operating profit, asset value, capital expenditure, total cash outflow.
+- **Correction C15** (`supabase/corrections/20260925_c15_capitalise_assets.sql`, audited, idempotent, rollback tested):
+  - the 5 payments are reclassed to `asset`, with date, amount and description unchanged; the machine's category moves from utilities to equipment;
+  - 6 fixed assets are created, each linked to its payment. The shed payment itemises a motor, so it is split into shed ৳91,580 + motor ৳11,700.
+
+| Fixed asset | Paid | Cost ৳ | Life (assumed) | Monthly dep. ৳ | Accum. to 09-24 ৳ | Book value ৳ |
+|---|---|---|---|---|---|---|
+| Cow shed | 06-01 | 91,580 | 10 y | 763.17 | 2,289.50 | 89,290.50 |
+| Water motor | 06-01 | 11,700 | 5 y | 195.00 | 585.00 | 11,115.00 |
+| Straw cutting machine | 08-06 | 23,200 | 5 y | 386.67 | 386.67 | 22,813.33 |
+| CCTV, power bank, memory card | 06-13 | 7,400 | 3 y | 205.56 | 616.67 | 6,783.33 |
+| Chain, lock, mat | 06-10 | 2,020 | 3 y | 56.11 | 168.33 | 1,851.67 |
+| Bucket and related | 06-03 | 990 | 3 y | 27.50 | 82.50 | 907.50 |
+| **Total** | | **136,890** | | **1,634.01** | **4,128.67** | **132,761.33** |
+
+Useful lives and 0 salvage are **assumptions** (noted on each asset). The owner can change them on the Fixed Assets page, and depreciation recalculates.
+
+### 20.3 Real-data result (application code on the production copy)
+| Figure | Before | After C15 | Expected |
+|---|---|---|---|
+| Cash (balance sheet = cash-flow statement = cash service) | 4,697.45 | **4,697.45** | unchanged: the purchase reduced cash once |
+| Capital expenditure | 0 | **136,890** | 103,280 + 23,200 + 10,410 |
+| Operating expenses | 274,457.95 | **137,567.95** | − 136,890 |
+| Utilities | 25,520 | **2,320** | − 23,200 |
+| General expenses | 125,015 | **11,325** | − 103,280 − 10,410 |
+| Depreciation | 0 | **4,128.67** | from the table above |
+| Total expenses (P&L) | 274,457.95 | **141,696.62** | 274,457.95 − 136,890 + 4,128.67 |
+| Asset value (net) | 0 | **132,761.33** | 136,890 − 4,128.67 |
+| Total cash outflow | 809,055.55 | **809,055.55** | = capital in 813,753 − cash 4,697.45 |
+| Cash service split (operating / assets) | 168,229.99 / 0 | **31,339.99 / 136,890** | same total, reclassified |
+| Herd cost basis / livestock / feed | 641,038.60 / 524,973.65 / 118,314.95 | unchanged | assets are farm overhead, not cattle cost |
+| Balance sheet balanced | yes | yes | |
+
+- **No double counting:** each purchase is exactly one cash outflow (its payment) and one asset value (its fixed asset), and is never an operating expense.
+- **Tests:**
+  - `src/__tests__/capital-assets.test.ts` (9 tests);
+  - full suite 483/483;
+  - DB suites 43/43 and 27/27;
+  - migration, C15, guards and rollback tested on a copy.
+
+### 20.4 Still for the owner
+- **Useful lives:** confirm them (shed 10, motor 5, machine 5, small equipment 3 years).
+- **Small items:** some items inside "equipment" are small consumables or fares (bucket, "Vara" fare, chain/lock). They were capitalised as instructed; the owner can reclass them.
+- **New asset purchases:** add them on the **Fixed Assets** page (depreciated). An "asset" cost entry without a fixed-asset record is still shown at cost, not depreciated.
+- **Production order (not done; deploy on instruction only):**
+  1. migration `20260925150000`;
+  2. C14;
+  3. C15;
+  4. then deploy the code.

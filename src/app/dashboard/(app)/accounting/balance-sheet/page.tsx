@@ -87,7 +87,13 @@ export default async function BalanceSheetPage() {
         .is("deleted_at", null)
         .order("recorded_at", { ascending: false })
     : { data: [] };
-  const assetEntries = (assetEntriesData ?? []) as AssetEntry[];
+  // Asset payments that have a fixed-asset record are depreciated there (Fixed Assets page);
+  // listing them here as well showed the same purchase twice with a different depreciation.
+  const { data: linkedData } = businessId
+    ? await supabase.from("fixed_assets").select("source_cost_entry_id").eq("business_id", businessId).not("source_cost_entry_id", "is", null)
+    : { data: [] };
+  const linkedPayments = new Set(((linkedData ?? []) as { source_cost_entry_id: string | null }[]).map((r) => r.source_cost_entry_id));
+  const assetEntries = ((assetEntriesData ?? []) as AssetEntry[]).filter((e) => !linkedPayments.has(e.id));
 
   // Liability split: current (due ≤ 1 year) vs long-term (due > 1 year)
   const oneYearLater = new Date();

@@ -68,7 +68,7 @@ export class CentralFinancialRepository {
 
           supabaseAdmin
             .from("fixed_assets")
-            .select("id, name, category, description, purchase_date, purchase_cost, salvage_value, useful_life_years, depreciation_method, declining_rate, is_active, disposed_at, disposal_value, notes")
+            .select("id, name, category, description, purchase_date, purchase_cost, salvage_value, useful_life_years, depreciation_method, declining_rate, is_active, disposed_at, disposal_value, notes, source_cost_entry_id")
             .eq("business_id", businessId),
 
           supabaseAdmin
@@ -129,7 +129,9 @@ export class CentralFinancialRepository {
       })),
       operatingExpenses: opExpenses.map((c) => ({ amount: Number(c.amount) || 0 })),
       costEntryAssets: assetCosts.map((c) => ({ amount: Number(c.amount) || 0 })),
-      fixedAssets: raw.fixedAssets.map((f) => ({ purchase_cost: Number(f.purchase_cost) || 0 })),
+      // cash: register assets without a payment record only (linked ones are in costEntryAssets)
+      fixedAssets: raw.fixedAssets.filter((f: { source_cost_entry_id?: string | null }) => !f.source_cost_entry_id)
+        .map((f) => ({ purchase_cost: Number(f.purchase_cost) || 0 })),
       loans: raw.loans.map((l: any) => ({
         principal_amount: Number(l.principal_amount) || 0,
         interest_rate_pct: Number(l.interest_rate_pct) || 0,

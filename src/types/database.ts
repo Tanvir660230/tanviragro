@@ -491,6 +491,8 @@ export type FixedAsset = {
   disposed_at: string | null;
   disposal_value: number | null;
   notes: string | null;
+  /** payment record (cost entry, entry_class = asset) — cash is counted there, value/depreciation here */
+  source_cost_entry_id: string | null;
   created_at: string;
 };
 
@@ -780,6 +782,7 @@ export type Database = {
           disposed_at?: string | null;
           disposal_value?: number | null;
           notes?: string | null;
+          source_cost_entry_id?: string | null;
           created_at?: string;
         };
         Update: Partial<FixedAsset>;
