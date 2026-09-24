@@ -32,7 +32,7 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 | 2.4 | BUG-08 | P2 | Asia/Dhaka date helper | PARTIAL (e10eb0f): lib/dates.ts + tests; 30 write-path sites, auto feed deduction and advisor use Dhaka dates; ~200 read-path sites remain |
 | 3.1 | DB-07 | P1 | Tenant/team-member model | TODO (decision needed) |
 | 3.2 | BUG-03 | P1 | Atomic, auditable sale + reversal | PARTIAL (0f31c19): no second active sale, conditional status flip + orphan cleanup, undo = soft delete + lock check; atomic RPC still pending (needs DB) |
-| 3.3 | BUG-04 | P1 | Value every consumption at insert | TODO |
+| 3.3 | BUG-04 | P1 | Value every consumption at insert | PARTIAL (3863e68): 5 zero-cost paths (manual feed x2, vaccines x2, feed waste) now store FIFO unit_cost; feed sessions still trust client-supplied cost; historical backfill + DB trigger pending |
 | 3.4 | BUG-14 | P2 | Stock guard: adjustments + locking | TODO |
 | 3.5 | BUG-15 | P2 | Atomic batch production | TODO |
 | 3.6 | BUG-11 | P2 | Weight-log delete scoping + soft delete | DONE (0f31c19): soft delete scoped to animal; 10 weight_logs reads now skip deleted rows |
