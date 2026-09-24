@@ -16,6 +16,7 @@ import type {
 } from "@/lib/livestock/types";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export interface LifecycleActionResult {
   success: boolean;
@@ -156,7 +157,7 @@ export async function executeLifecycleTransitionAction(
         await (supabase as any).from("cattle_death_records").upsert({
           business_id: businessId,
           cattle_id: cattle.id,
-          death_date: request.effectiveDate || new Date().toISOString().slice(0, 10),
+          death_date: request.effectiveDate || todayDhaka(),
           cause_of_death: request.deathDetails.causeOfDeath,
           post_mortem_notes: request.deathDetails.postMortemNotes || null,
           certified_by_vet_id: request.deathDetails.certifiedByVetId || null,

@@ -8,13 +8,14 @@ import { type FeedingSlot } from "@/lib/nutrition/nutrition-engine";
 import { type FeedActionResult } from "./feed-session-actions";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export async function quickDispenseFeedAction(
   cattleIds: string[],
   feedItemId: string,
   dispenseKgPerHead: number,
   slot: FeedingSlot = "morning",
-  recordedAt: string = new Date().toISOString().slice(0, 10),
+  recordedAt: string = todayDhaka(),
   feederName: string = "Farm Feeder"
 ): Promise<FeedActionResult> {
   const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
@@ -103,7 +104,7 @@ export async function recordFeedWasteAction(
   feedItemId: string,
   wasteKg: number,
   wasteReason: "orts_refusal" | "trough_spillage" | "spoilage" | "weather_damage",
-  recordedAt: string = new Date().toISOString().slice(0, 10),
+  recordedAt: string = todayDhaka(),
   notes?: string
 ): Promise<FeedActionResult> {
   const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);

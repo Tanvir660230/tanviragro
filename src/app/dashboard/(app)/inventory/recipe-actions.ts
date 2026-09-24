@@ -4,6 +4,7 @@ import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export type RecipeFormState = { error?: string; success?: boolean; id?: string } | undefined;
 export type ProduceBatchState = { error?: string; success?: boolean; produced?: number } | undefined;
@@ -438,7 +439,7 @@ export async function setActiveRecipe(
 
   // Then set the new one
   if (id) {
-    const from = activeFrom ?? new Date().toISOString().slice(0, 10);
+    const from = activeFrom ?? todayDhaka();
     const { error } = await supabase
       .from("feed_recipes")
       .update({ is_active: true, active_from: from, active_until: activeUntil ?? null })

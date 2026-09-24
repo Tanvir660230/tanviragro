@@ -13,6 +13,7 @@ import {
   type PaymentType,
 } from "@/lib/commerce";
 import type { CommerceActionResult } from "./order-actions";
+import { todayDhaka } from "@/lib/dates";
 
 export async function createCommerceInvoiceAction(payload: {
   orderId?: string;
@@ -39,7 +40,7 @@ export async function createCommerceInvoiceAction(payload: {
     const taxAmount = Math.round(((discounted * taxRate) / 100) * 100) / 100;
     const totalAmount = Math.round((discounted + taxAmount) * 100) / 100;
 
-    const dateStr = (payload.issueDate || new Date().toISOString().split("T")[0]).replace(/-/g, "");
+    const dateStr = (payload.issueDate || todayDhaka()).replace(/-/g, "");
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const invoiceNumber = `INV-${dateStr}-${randomSuffix}`;
 
@@ -52,7 +53,7 @@ export async function createCommerceInvoiceAction(payload: {
         invoice_type: payload.invoiceType,
         customer_or_vendor_name: payload.customerOrVendorName.trim(),
         customer_or_vendor_contact: payload.customerOrVendorContact?.trim() || null,
-        issue_date: payload.issueDate || new Date().toISOString().split("T")[0],
+        issue_date: payload.issueDate || todayDhaka(),
         due_date: payload.dueDate,
         subtotal: sub,
         tax_rate: taxRate,
@@ -103,7 +104,7 @@ export async function recordCommercePaymentAction(payload: {
       return { error: "Valid settlement amount is required" };
     }
 
-    const dateStr = (payload.paymentDate || new Date().toISOString().split("T")[0]).replace(/-/g, "");
+    const dateStr = (payload.paymentDate || todayDhaka()).replace(/-/g, "");
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const paymentNumber = `PAY-${dateStr}-${randomSuffix}`;
 
@@ -117,7 +118,7 @@ export async function recordCommercePaymentAction(payload: {
         payment_type: payload.paymentType,
         payment_method: payload.paymentMethod,
         amount: payload.amount,
-        payment_date: payload.paymentDate || new Date().toISOString().split("T")[0],
+        payment_date: payload.paymentDate || todayDhaka(),
         reference_txn_id: payload.referenceTxnId || null,
         account_code: payload.accountCode || "1010",
         received_or_paid_by: payload.receivedOrPaidBy || null,
@@ -170,7 +171,7 @@ export async function recordCommercePaymentAction(payload: {
         counterpartyName: payload.counterpartyName || "Counterparty",
         amount: payload.amount,
         accountCode: payload.accountCode,
-        date: payload.paymentDate || new Date().toISOString().split("T")[0],
+        date: payload.paymentDate || todayDhaka(),
         userId: ctx.user.id,
       });
 

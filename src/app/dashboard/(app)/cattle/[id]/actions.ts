@@ -11,6 +11,7 @@ import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { CattleDomainService } from "@/lib/services/cattle.service";
 import { LivestockEventBus } from "@/lib/livestock/events";
 import type { Cattle } from "@/types/database";
+import { todayDhaka } from "@/lib/dates";
 
 export type WeightLogFormState =
   | { error?: string; success?: boolean }
@@ -332,7 +333,7 @@ export async function logManualFeed(
       item_id: itemId,
       type: "consumption",
       qty,
-      recorded_at: new Date().toISOString().slice(0, 10),
+      recorded_at: todayDhaka(),
       cattle_id: cattleId,
       notes: "Manual Cow-Level Feed Log",
     });

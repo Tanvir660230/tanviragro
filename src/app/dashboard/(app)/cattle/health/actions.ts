@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export async function completeHealthEventHub(eventId: string): Promise<{ error?: string }> {
   const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
@@ -18,7 +19,7 @@ export async function completeHealthEventHub(eventId: string): Promise<{ error?:
 
   const { error } = await supabase
     .from("health_events")
-    .update({ completed_at: new Date().toISOString().slice(0, 10) })
+    .update({ completed_at: todayDhaka() })
     .eq("id", eventId)
     .eq("business_id", businessId);
 

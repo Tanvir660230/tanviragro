@@ -10,6 +10,7 @@ import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { FinancialEventBus } from "@/lib/financial/events";
 import { PartnerDomainService } from "@/lib/services/partner.service";
 import type { PartnerTransactionType, PartnerType } from "@/types/database";
+import { todayDhaka } from "@/lib/dates";
 
 export type PartnerFormState = { error?: string; success?: boolean } | undefined;
 
@@ -30,7 +31,7 @@ export async function createPartner(
     const profitSharePct = shareMode === "manual" && !isNaN(rawProfitShare) ? rawProfitShare : 0;
     const laborValueMonthly = parseFloat(formData.get("labor_value_monthly") as string) || null;
     const cliffMonths = parseInt(formData.get("cliff_months") as string, 10) || 0;
-    const joinedAt = (formData.get("joined_at") as string) || new Date().toISOString().slice(0, 10);
+    const joinedAt = (formData.get("joined_at") as string) || todayDhaka();
     const notes = (formData.get("notes") as string)?.trim() || null;
     const rawEntryNetpl = formData.get("entry_netpl");
     const rawEntryValuation = formData.get("entry_valuation");
@@ -224,7 +225,7 @@ export async function addPartnerTransaction(
     const partnerId = formData.get("partner_id") as string;
     const amount = parseFloat(formData.get("amount") as string);
     const type = (formData.get("type") as string === "draw" ? "withdrawal" : formData.get("type")) as PartnerTransactionType;
-    const recordedAt = (formData.get("recorded_at") as string) || new Date().toISOString().slice(0, 10);
+    const recordedAt = (formData.get("recorded_at") as string) || todayDhaka();
     const notes = (formData.get("notes") as string)?.trim() || null;
 
     const validation = PartnerDomainService.validateTransaction({

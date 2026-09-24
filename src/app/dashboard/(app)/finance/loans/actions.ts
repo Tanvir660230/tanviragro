@@ -8,6 +8,7 @@ import { assertResourceOwnership } from "@/lib/auth/ownership";
 import { PERMISSIONS } from "@/constants/roles";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
+import { todayDhaka } from "@/lib/dates";
 
 export type LoanFormState = { error?: string; success?: boolean } | undefined;
 
@@ -34,7 +35,7 @@ export async function createLoan(
     if (interestRate < 0) return { error: "সুদের হার ঋণাত্মক হতে পারে না" };
     if (interestRate > 200) return { error: "সুদের হার ২০০%-এর বেশি হতে পারে না" };
     if (!loanDate) return { error: "তারিখ দিন" };
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = todayDhaka();
     if (loanDate > todayISO) return { error: "ঋণের তারিখ ভবিষ্যতে হতে পারে না" };
 
     const lockErr = await checkFinancialLock(supabase, ctx.businessId, loanDate);

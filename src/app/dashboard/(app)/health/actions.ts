@@ -7,6 +7,7 @@ import { LivestockEventBus } from "@/lib/livestock/events";
 import type { HealthEventType } from "@/types/database";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export type HealthFormState = { error?: string; success?: boolean } | undefined;
 
@@ -96,7 +97,7 @@ export async function completeHealthEventAction(
     .maybeSingle();
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
   const { error } = await supabase
     .from("health_events")
     .update({ completed_at: today })
@@ -225,7 +226,7 @@ export async function resolveDiseaseAction(
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
   const { error } = await (supabase as any)
     .from("disease_records")
     .update({ status: "recovered", resolution_date: today, updated_at: new Date().toISOString() })

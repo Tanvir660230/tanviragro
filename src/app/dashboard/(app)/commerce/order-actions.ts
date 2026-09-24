@@ -13,6 +13,7 @@ import {
   type CounterpartyType,
   type CommerceOrderItem,
 } from "@/lib/commerce";
+import { todayDhaka } from "@/lib/dates";
 
 export interface CommerceActionResult {
   success?: boolean;
@@ -62,7 +63,7 @@ export async function createCommerceOrderAction(payload: {
     });
 
     const prefix = payload.orderType === "purchase" ? "PO" : payload.orderType === "sale" ? "SO" : "ORD";
-    const dateStr = (payload.orderDate || new Date().toISOString().split("T")[0]).replace(/-/g, "");
+    const dateStr = (payload.orderDate || todayDhaka()).replace(/-/g, "");
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const orderNumber = `${prefix}-${dateStr}-${randomSuffix}`;
 
@@ -77,7 +78,7 @@ export async function createCommerceOrderAction(payload: {
         counterparty_name: payload.counterpartyName.trim(),
         counterparty_contact: payload.counterpartyContact?.trim() || null,
         status: "approved",
-        order_date: payload.orderDate || new Date().toISOString().split("T")[0],
+        order_date: payload.orderDate || todayDhaka(),
         expected_delivery_date: payload.expectedDeliveryDate || null,
         subtotal_amount: calculated.subtotalAmount,
         tax_amount: calculated.taxAmount,
@@ -125,7 +126,7 @@ export async function createCommerceOrderAction(payload: {
         orderType: payload.orderType === "purchase" ? "purchase" : "sale",
         counterpartyName: payload.counterpartyName,
         totalAmount: calculated.netTotalAmount,
-        date: payload.orderDate || new Date().toISOString().split("T")[0],
+        date: payload.orderDate || todayDhaka(),
         userId: ctx.user.id,
       });
 

@@ -12,6 +12,7 @@ import {
   type ContractType,
 } from "@/lib/commerce";
 import type { CommerceActionResult } from "./order-actions";
+import { todayDhaka } from "@/lib/dates";
 
 export async function recordOwnershipTransferAction(payload: {
   cattleId: string;
@@ -39,7 +40,7 @@ export async function recordOwnershipTransferAction(payload: {
       return { error: "Both previous and new owner names are required" };
     }
 
-    const tDate = payload.transferDate || new Date().toISOString().split("T")[0];
+    const tDate = payload.transferDate || todayDhaka();
     const signatureHash = OwnershipEngine.generateOwnershipHash({
       cattleId: payload.cattleId,
       tagId: payload.tagId,

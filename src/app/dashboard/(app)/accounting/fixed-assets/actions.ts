@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { assertResourceOwnership } from "@/lib/auth/ownership";
 import { PERMISSIONS } from "@/constants/roles";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
+import { todayDhaka } from "@/lib/dates";
 
 export type FixedAssetFormState =
   | { success: true }
@@ -93,7 +94,7 @@ export async function disposeFixedAsset(
       .from("fixed_assets")
       .update({
         is_active: false,
-        disposed_at: new Date().toISOString().split("T")[0],
+        disposed_at: todayDhaka(),
         disposal_value: disposalValue,
       })
       .eq("id", id);

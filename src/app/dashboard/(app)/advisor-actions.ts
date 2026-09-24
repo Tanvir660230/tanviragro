@@ -3,6 +3,7 @@
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { addDays, startOfMonth, toDhakaDate } from "@/lib/dates";
 
 export type AdvisorQuestion =
   | "daily_tasks"
@@ -41,11 +42,12 @@ export async function askAdvisor(question: AdvisorQuestion): Promise<AdvisorResu
     if (!businessId) return { ok: false, error: "ফার্ম পাওয়া যায়নি" };
 
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    const in7Days = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+    // Farm-calendar (Asia/Dhaka) dates; see src/lib/dates.ts.
+    const todayStr = toDhakaDate(now);
+    const sevenDaysAgo = addDays(todayStr, -7);
+    const thirtyDaysAgo = addDays(todayStr, -30);
+    const monthStart = startOfMonth(todayStr);
+    const in7Days = addDays(todayStr, 7);
 
     // ── আজকের কাজ ────────────────────────────────────────────────────────────
     if (question === "daily_tasks") {

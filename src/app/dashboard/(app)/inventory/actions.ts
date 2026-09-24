@@ -9,6 +9,7 @@ import { AdjustmentEngine } from "@/lib/inventory/adjustment-engine";
 import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { addDays, todayDhaka } from "@/lib/dates";
 
 export type InventoryFormState =
   | { error?: string; success?: boolean; warning?: string }
@@ -644,7 +645,7 @@ export async function setActiveRoughage(id: string | null, activeUntil?: string 
   if (!bizId) return { error: "Business not found" };
 
   if (id) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
     // Activate new roughage first — ensures there is never a window with zero active roughage.
     // roughage_active_from records when this roughage started — engine won't deduct before this date.
     const { error } = await supabase
@@ -823,14 +824,13 @@ export async function runAutoFeedDeductions(): Promise<{ error?: string, execute
     .limit(1)
     .maybeSingle();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Calendar dates as YYYY-MM-DD on the farm (Asia/Dhaka) calendar. UTC dates are still
+  // "yesterday" in Dhaka before 06:00, which skipped or shifted a day of deductions (BUG-08).
+  const todayStr = todayDhaka();
 
-  let startDate = new Date(today);
+  let startDateStr: string;
   if (lastAutoTx && lastAutoTx.recorded_at) {
-    startDate = new Date(lastAutoTx.recorded_at);
-    startDate.setDate(startDate.getDate() + 1);
-    startDate.setHours(0, 0, 0, 0);
+    startDateStr = addDays(String(lastAutoTx.recorded_at).slice(0, 10), 1);
   } else {
     // Start from the earliest cattle purchase date
     const { data: earliestCattle } = await supabase
@@ -843,23 +843,16 @@ export async function runAutoFeedDeductions(): Promise<{ error?: string, execute
       .limit(1)
       .maybeSingle();
 
-    if (earliestCattle && earliestCattle.purchase_date) {
-      startDate = new Date(earliestCattle.purchase_date);
-      startDate.setHours(0, 0, 0, 0);
-    } else {
-      startDate.setDate(startDate.getDate() - 1); // fallback to yesterday
-    }
+    startDateStr = earliestCattle?.purchase_date
+      ? String(earliestCattle.purchase_date).slice(0, 10)
+      : addDays(todayStr, -1); // fallback to yesterday
   }
 
   // Never process days before the recipe's explicit start date.
   // This prevents catch-up deductions for periods before this recipe was in use.
   const recipeFrom = (activeRecipe as { active_from?: string | null } | null)?.active_from;
-  if (recipeFrom) {
-    const recipeStartDate = new Date(recipeFrom + "T00:00:00");
-    recipeStartDate.setHours(0, 0, 0, 0);
-    if (startDate < recipeStartDate) {
-      startDate = recipeStartDate;
-    }
+  if (recipeFrom && startDateStr < recipeFrom.slice(0, 10)) {
+    startDateStr = recipeFrom.slice(0, 10);
   }
 
   // Pre-fetch roughage_active_from once — passed to getFarmDailyFeedRequirement
@@ -868,8 +861,6 @@ export async function runAutoFeedDeductions(): Promise<{ error?: string, execute
 
   // Batch-fetch all dates that already have auto-deductions in the catchup range.
   // This replaces one DB query per day in the loop with a single query — O(1) instead of O(days).
-  const todayStr = today.toISOString().slice(0, 10);
-  const startDateStr = startDate.toISOString().slice(0, 10);
   const { data: existingBatch } = await supabase
     .from("inventory_transactions")
     .select("recorded_at, inventory_items!inner(business_id)")
@@ -883,8 +874,7 @@ export async function runAutoFeedDeductions(): Promise<{ error?: string, execute
 
   let executedDays = 0;
 
-  for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().slice(0, 10);
+  for (let dateStr = startDateStr; dateStr <= todayStr; dateStr = addDays(dateStr, 1)) {
 
     if (datesAlreadyDeducted.has(dateStr)) continue;
 

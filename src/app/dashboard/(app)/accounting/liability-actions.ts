@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { assertResourceOwnership } from "@/lib/auth/ownership";
 import { PERMISSIONS } from "@/constants/roles";
 import { verifyFinancialLock } from "@/lib/financial/financial-lock";
+import { todayDhaka } from "@/lib/dates";
 
 function revalidate() {
   revalidatePath("/dashboard/accounting");
@@ -33,7 +34,7 @@ export async function addLiability(input: {
     if (!Number.isFinite(input.outstanding) || input.outstanding < 0)
       return { error: "Outstanding balance must be zero or positive" };
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
     const lockError = await verifyFinancialLock(supabase, ctx.businessId, today);
     if (lockError) return { error: lockError };
 
@@ -66,7 +67,7 @@ export async function updateOutstanding(id: string, outstanding: number): Promis
 
     await assertResourceOwnership(supabase, "liabilities", id, ctx.businessId);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
     const lockError = await verifyFinancialLock(supabase, ctx.businessId, today);
     if (lockError) return { error: lockError };
 
@@ -92,7 +93,7 @@ export async function settleLiability(id: string): Promise<{ error?: string }> {
 
     await assertResourceOwnership(supabase, "liabilities", id, ctx.businessId);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
     const lockError = await verifyFinancialLock(supabase, ctx.businessId, today);
     if (lockError) return { error: lockError };
 

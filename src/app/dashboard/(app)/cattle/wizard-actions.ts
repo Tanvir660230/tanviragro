@@ -9,6 +9,7 @@ import { LivestockEventBus } from "@/lib/livestock/events";
 import type { AnimalWizardState } from "@/lib/validation/cattle-wizard";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export type WizardActionResult = {
   success?: boolean;
@@ -41,7 +42,7 @@ export async function saveEnterpriseAnimalWizardAction(
 
   const purchaseDate = payload.origin.originType === "purchase"
     ? payload.origin.purchaseDate
-    : (payload.identification.dob || new Date().toISOString().split("T")[0]);
+    : (payload.identification.dob || todayDhaka());
 
   const lockError = await checkFinancialLock(supabase, businessId, purchaseDate);
   if (lockError) return { error: lockError };

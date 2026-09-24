@@ -16,6 +16,7 @@ import {
 import type { HealthEventType } from "@/types/database";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export interface VaccinationActionResult {
   success?: boolean;
@@ -313,7 +314,7 @@ export async function recordVaccineAdverseEventAction(payload: {
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business workspace not found" };
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = todayDhaka();
 
   await supabase.from("cattle_treatments").insert({
     cattle_id: payload.cattleId,

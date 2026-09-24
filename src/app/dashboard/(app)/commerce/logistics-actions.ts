@@ -13,6 +13,7 @@ import {
   type TransferChecklist,
 } from "@/lib/commerce";
 import type { CommerceActionResult } from "./order-actions";
+import { todayDhaka } from "@/lib/dates";
 
 export async function createCommerceTransferAction(payload: {
   orderId?: string;
@@ -45,7 +46,7 @@ export async function createCommerceTransferAction(payload: {
       return { error: validation.errors[0] };
     }
 
-    const dateStr = new Date().toISOString().split("T")[0].replace(/-/g, "");
+    const dateStr = todayDhaka().replace(/-/g, "");
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const transferNumber = `TRF-${dateStr}-${randomSuffix}`;
 
@@ -83,7 +84,7 @@ export async function createCommerceTransferAction(payload: {
           transferNumber,
           amount: Number(payload.transportCost),
           routeDescription: `${payload.originName} -> ${payload.destinationName}`,
-          date: new Date().toISOString().split("T")[0],
+          date: todayDhaka(),
           userId: ctx.user.id,
         });
 
