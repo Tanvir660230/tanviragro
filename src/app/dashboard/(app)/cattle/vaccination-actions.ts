@@ -17,6 +17,7 @@ import type { HealthEventType } from "@/types/database";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
+import { computeFIFOUnitCost } from "@/lib/inventory-fifo";
 
 export interface VaccinationActionResult {
   success?: boolean;
@@ -66,11 +67,13 @@ export async function administerVaccinationAction(
 
     if (!itemErr && item) {
       const consumedQty = Math.max(0.1, payload.doseAdministeredMl);
+      const unitCost = await computeFIFOUnitCost(supabase, item.id, consumedQty);
       await supabase.from("inventory_transactions").insert({
         item_id: item.id,
         cattle_id: payload.cattleId,
         type: "consumption",
         qty: consumedQty,
+        unit_cost: unitCost ?? undefined,
         recorded_at: payload.administeredAt,
         notes: `Vaccination: ${payload.vaccineName} | Batch: ${payload.batchNumber || "N/A"} | Certifier: ${payload.administeredBy}`,
       });
@@ -214,10 +217,12 @@ export async function executeBatchVaccinationCampaignAction(payload: {
 
     if (item) {
       const totalConsumed = payload.doseAdministeredMl * payload.cattleIds.length;
+      const unitCost = await computeFIFOUnitCost(supabase, item.id, totalConsumed);
       await supabase.from("inventory_transactions").insert({
         item_id: item.id,
         type: "consumption",
         qty: totalConsumed,
+        unit_cost: unitCost ?? undefined,
         recorded_at: payload.administeredAt,
         notes: `Batch Campaign: ${payload.vaccineName} administered to ${payload.cattleIds.length} head. Batch: ${payload.batchNumber || "N/A"}`,
       });

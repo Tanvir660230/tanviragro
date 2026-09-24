@@ -9,6 +9,7 @@ import { type FeedActionResult } from "./feed-session-actions";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
+import { computeFIFOUnitCost } from "@/lib/inventory-fifo";
 
 export async function quickDispenseFeedAction(
   cattleIds: string[],
@@ -130,11 +131,13 @@ export async function recordFeedWasteAction(
 
     if (!item) return { error: "Feed item not found" };
 
+    const unitCost = await computeFIFOUnitCost(supabase, feedItemId, wasteKg);
     const { error: txnErr } = await supabase.from("inventory_transactions").insert({
       item_id: feedItemId,
       cattle_id: cattleId || undefined,
       type: "consumption",
       qty: wasteKg,
+      unit_cost: unitCost ?? undefined,
       recorded_at: recordedAt,
       notes: `[FEED WASTE / ${wasteReason.toUpperCase()}] ${notes || ""}`,
     });

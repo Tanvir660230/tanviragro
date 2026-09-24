@@ -12,6 +12,7 @@ import { CattleDomainService } from "@/lib/services/cattle.service";
 import { LivestockEventBus } from "@/lib/livestock/events";
 import type { Cattle } from "@/types/database";
 import { todayDhaka } from "@/lib/dates";
+import { computeFIFOUnitCost } from "@/lib/inventory-fifo";
 
 export type WeightLogFormState =
   | { error?: string; success?: boolean }
@@ -293,10 +294,13 @@ export async function logFeedConsumption(
     await assertResourceOwnership<Cattle>(supabase, "cattle", cattle_id, ctx.businessId);
     await assertResourceOwnership(supabase, "inventory_items", item_id, ctx.businessId);
 
+    // Value the consumption at insert (BUG-04: rows without unit_cost counted as zero cost).
+    const unitCost = await computeFIFOUnitCost(supabase, item_id, qty);
     const { error } = await supabase.from("inventory_transactions").insert({
       item_id,
       type: "consumption",
       qty,
+      unit_cost: unitCost ?? undefined,
       recorded_at,
       cattle_id,
     });
@@ -329,10 +333,12 @@ export async function logManualFeed(
     await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
     await assertResourceOwnership(supabase, "inventory_items", itemId, ctx.businessId);
 
+    const unitCost = await computeFIFOUnitCost(supabase, itemId, qty);
     const { error } = await supabase.from("inventory_transactions").insert({
       item_id: itemId,
       type: "consumption",
       qty,
+      unit_cost: unitCost ?? undefined,
       recorded_at: todayDhaka(),
       cattle_id: cattleId,
       notes: "Manual Cow-Level Feed Log",
