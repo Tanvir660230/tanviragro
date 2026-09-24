@@ -29,34 +29,35 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 | 2.1 | SEC-06 | P1 | All server actions through `createProtectedAction` | PARTIAL (7a58e2d): 83 actions guarded via actionPermissionError; move to createProtectedAction pipeline still open |
 | 2.2 | SEC-11 | P2 | Validate role changes | DONE (7a58e2d) |
 | 2.3 | ARCH-02 | P2 | Single business-context resolver | TODO |
-| 2.4 | BUG-08 | P2 | Asia/Dhaka date helper | TODO |
+| 2.4 | BUG-08 | P2 | Asia/Dhaka date helper | PARTIAL (e10eb0f): lib/dates.ts + tests; 30 write-path sites, auto feed deduction and advisor use Dhaka dates; ~200 read-path sites remain |
 | 3.1 | DB-07 | P1 | Tenant/team-member model | TODO (decision needed) |
-| 3.2 | BUG-03 | P1 | Atomic, auditable sale + reversal | TODO |
+| 3.2 | BUG-03 | P1 | Atomic, auditable sale + reversal | PARTIAL (0f31c19): no second active sale, conditional status flip + orphan cleanup, undo = soft delete + lock check; atomic RPC still pending (needs DB) |
 | 3.3 | BUG-04 | P1 | Value every consumption at insert | TODO |
 | 3.4 | BUG-14 | P2 | Stock guard: adjustments + locking | TODO |
 | 3.5 | BUG-15 | P2 | Atomic batch production | TODO |
-| 3.6 | BUG-11 | P2 | Weight-log delete scoping + soft delete | TODO |
+| 3.6 | BUG-11 | P2 | Weight-log delete scoping + soft delete | DONE (0f31c19): soft delete scoped to animal; 10 weight_logs reads now skip deleted rows |
 | 3.7 | DB-03/DB-10/DB-02 | P2 | Drop broken/unused DB objects | TODO |
-| 3.8 | BUG-16/BUG-09 | P2 | Remove references to non-existent tables | TODO |
+| 3.8 | BUG-16/BUG-09 | P2 | Remove references to non-existent tables | PARTIAL (d06272e): cattle_sales/financial_transactions/orders fixed; column-level issues tracked as BUG-23 |
 | 4.1 | API-01 | P2 | zod input validation + uniform error envelope | TODO |
 | 4.2 | SEC-12/13/14 | P2 | Rate limiting, cron tenant scoping, error leakage | TODO |
 | 4.3 | BUG-10 | P2 | AI automation proposals: persist or remove | TODO |
 | 5.1 | BUG-01 | P1 | SQL aggregation RPCs (no JS sums over capped rows) | TODO |
 | 5.2 | BUG-02/ARCH-01 | P1 | Single financial read model; estimates separated | TODO |
-| 5.3 | BUG-05 | P1 | Remove/repair 30-day accounting cache | TODO |
-| 5.4 | BUG-07/BUG-12 | P2 | Dashboard count + cash asymmetry | TODO |
+| 5.3 | BUG-05 | P1 | Remove/repair 30-day accounting cache | PARTIAL (0f31c19): TTL 30d -> 60s; wizard + deleteCattle revalidate tag; service-role removal waits on 5.1 |
+| 5.4 | BUG-07/BUG-12 | P2 | Dashboard count + cash asymmetry | PARTIAL (0f31c19): BUG-07 count fixed; BUG-12 cash asymmetry open |
 | 5.5 | BUG-13 | P2 | Auth cookie httpOnly override | TODO |
-| 6.1 | UX-01 | P2 | Branding cleanup ("Chowdhury Agro") | TODO |
+| 6.1 | UX-01 | P2 | Branding cleanup ("Chowdhury Agro") | DONE (bfd776c) except signup-trigger default name (migration, with 3.1) and email sender domain (needs owner) |
 | 6.2 | UX-02 | P2 | IA consolidation plan (no code until approved) | TODO |
-| 6.3 | UX-03 | P3 | Dead links, redirectTo, confirm dialogs, a11y, U+FFFD | TODO |
+| 6.3 | UX-03 | P3 | Dead links, redirectTo, confirm dialogs, a11y, U+FFFD | PARTIAL (bfd776c, 7a58e2d): dead onboarding link, U+FFFD, redirectTo done; confirm dialogs / a11y open |
 | 7.1 | PERF-01 | P2 | Pagination + dashboard query consolidation | TODO |
 | 8.1 | TEST-01b | P1 | Golden financial tests, RLS tests, Playwright smoke | TODO |
 | 9.1 | DEPLOY-02 | P2 | Migration pipeline, single package manager, Node version | TODO |
-| 9.2 | BUG-06b | P1 | Real off-site DB backups | TODO |
+| 9.2 | BUG-06b | P1 | Real off-site DB backups | PARTIAL (0f31c19): manual backup includes sales again; real off-site DB backup still open |
 | 9.3 | DEPLOY-03 | P3 | Repo hygiene | TODO |
 | 9.4 | CLEAN-01 | P3 | Remove dead engines/components after coverage exists | TODO |
 | 9.5 | BUG-22 | P2 | Service worker never rebuilt (Serwist + Turbopack) | TODO |
 | 9.6 | DB-11 | P1 | Committed migrations cannot replay on a fresh DB (003, 032 order bugs; health_events.deleted_at never created) | TODO: fix via baseline dump (0.3); harness patches temp copies |
+| 9.7 | BUG-23 | P1 | Queries select columns missing from migrations (110 refs / 65 sites; e.g. cattle.tag_number, health_events.status); some are silent failures, some drift | TODO: run snapshot query 10, then fix code or add migrations; tool: scripts/check-query-columns.cjs |
 | 10 | VERIFY | — | Full regression + ledger reconciliation + security retest | TODO |
 
 ---

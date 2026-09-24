@@ -59,6 +59,22 @@ Read-only probes with the **public anon key**; no data rows were read and nothin
 - **Behavior change to confirm:** under the declared role matrix, `manager` has `FINANCE_VIEW` but not `ACCOUNTING_VIEW`. Managers can see Finance but are now redirected away from Accounting pages; the old middleware let them in. If managers should see Accounting, add `ACCOUNTING_VIEW` to `manager` in `src/constants/roles.ts`.
 - **Behavior change to confirm:** workers lack `HEALTH_MANAGE`, so they can no longer record vaccinations or treatments; only owner, admin, manager and veterinarian can. If field workers record vaccines, grant it to `worker`.
 
+## Phase 2–3 progress (continued session)
+| Commit | What changed |
+|---|---|
+| `0f31c19` | Safer sale and undo-sale (no double sale, orphan cleanup, soft-delete undo, lock check). Soft-deleted weight logs, now hidden everywhere. Accounting cache 30 days → 60 s. Dashboard cattle count. Four queries that always failed silently: commerce sales, manual-backup sales, **products-page stock**, **top-bar low-stock alert** |
+| `e10eb0f` | Bangladesh-time (Asia/Dhaka) dates in all write paths, the automatic feed deduction, and the advisor |
+| `bfd776c` | "Tanvir Agro" branding everywhere; link fallbacks point at tanviragro.com; corrupted characters removed; dead onboarding link fixed |
+| `d06272e` | Stopped querying the 3 tables missing in production (animal timeline sales, AI query, analytics orders) |
+
+Gate: tsc 0 errors, lint 0 errors, **397/397 tests** (plus 8 sale-action tests that fail on the old code), build passes.
+
+### New finding BUG-23 (P1)
+A scan of every `.from(...).select(...)` in `src/` against the migration schema found **110 references to 27 columns that no migration creates**, across 65 query sites. Tool: `scripts/check-query-columns.cjs`.
+- Some are **drift**: the column exists in production and the page works (likely `roughage_active_from`, `default_daily_gain_kg`, `is_discontinued`).
+- Some **don't exist anywhere**, so the query fails silently and the screen shows empty data. Likely examples: `cattle.tag_number` (the app uses `tag_id`), `cattle.name`, `cattle.current_weight_kg`, `health_events.status` (a code comment in `daily-alerts` says this column doesn't exist). Affected: the dashboard attention banner, `/api/analytics/kpis`, `/api/ai/recommendations`, custom reports, and the 7 breeding pages that select `cattle.name`.
+- **Section 10 of `docs/sql/live_security_snapshot.sql` answers this for each column.** Run it before rewriting those screens.
+
 ## Blocked: needs the owner
 These steps touch production or the owner's accounts. An automated permission rule blocked Claude's attempt to run read-only queries against the production Supabase API, and Claude did not try to work around it.
 

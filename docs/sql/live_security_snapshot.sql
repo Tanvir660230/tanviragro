@@ -68,3 +68,42 @@ from unnest(array['management_fee_rates','cattle_sales','financial_transactions'
                   'document_attachments','livestock_audit_logs','animal_breeds','animal_categories']) as name;
 
 -- 9. PostgREST row cap actually in effect: check Supabase Dashboard → Settings → API → "Max rows" (not queryable here).
+
+-- 10. Columns the app queries that NO migration creates (BUG-23 / DB-01).
+--     exists_in_db = true  -> schema drift: add a migration that captures it.
+--     exists_in_db = false -> the query using it fails silently; the code must change.
+--     (List generated 2026-09-24 by scanning .from(...).select(...) literals in src/.)
+select v.table_name, v.column_name,
+       exists (select 1 from information_schema.columns c
+               where c.table_schema = 'public' and c.table_name = v.table_name
+                 and c.column_name = v.column_name) as exists_in_db
+from (values
+  ('businesses', 'default_daily_gain_kg'),
+  ('businesses', 'financial_locked_until'),
+  ('cattle', 'current_weight'),
+  ('cattle', 'current_weight_kg'),
+  ('cattle', 'days_on_feed'),
+  ('cattle', 'name'),
+  ('cattle', 'purchase_weight_kg'),
+  ('cattle', 'tag_number'),
+  ('cattle', 'weight'),
+  ('feed_recipes', 'active_from'),
+  ('feed_recipes', 'active_until'),
+  ('feed_recipes', 'deleted_at'),
+  ('financial_locks', 'lock_date'),
+  ('health_events', 'cost_bdt'),
+  ('health_events', 'dosage'),
+  ('health_events', 'status'),
+  ('health_events', 'withdrawal_days'),
+  ('inventory_items', 'current_stock'),
+  ('inventory_items', 'is_discontinued'),
+  ('inventory_items', 'reorder_threshold'),
+  ('inventory_items', 'roughage_active_from'),
+  ('inventory_items', 'roughage_active_until'),
+  ('inventory_items', 'roughage_type'),
+  ('inventory_items', 'unit_cost'),
+  ('loan_payments', 'payment_date'),
+  ('partner_transactions', 'deleted_at'),
+  ('sales', 'buyer_phone')
+) as v(table_name, column_name)
+order by exists_in_db, v.table_name, v.column_name;
