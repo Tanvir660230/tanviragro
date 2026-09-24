@@ -44,7 +44,7 @@ async function fetchTopBarAlerts(
     supabase.from("health_events").select("id, title, scheduled_at, cattle_id").eq("business_id", bizId).lt("scheduled_at", todayISO).is("completed_at", null).is("deleted_at", null).limit(50),
     supabase.from("health_events").select("id, title, scheduled_at, cattle_id").eq("business_id", bizId).gte("scheduled_at", todayISO).lte("scheduled_at", in7DaysISO).is("completed_at", null).is("deleted_at", null).limit(50),
     supabase.from("inventory_items").select("id, name, unit, low_stock_threshold").eq("business_id", bizId).not("low_stock_threshold", "is", null).is("deleted_at", null),
-    supabase.from("inventory_transactions").select("item_id, type, qty").eq("inventory_items.business_id", bizId).limit(5000),
+    supabase.from("inventory_transactions").select("item_id, type, qty, inventory_items!inner(business_id)").eq("inventory_items.business_id", bizId).limit(5000),
     supabase.from("loans").select("id, lender_name, principal_amount, due_date").eq("business_id", bizId).eq("status", "active").is("deleted_at", null).not("due_date", "is", null).lte("due_date", in30DaysISO).limit(20),
     supabase.from("cattle").select("id, tag_id, insurance_expiry").eq("business_id", bizId).eq("status", "active").not("insurance_expiry", "is", null).lte("insurance_expiry", in30DaysISO).limit(50),
     supabase.from("cattle").select("id, tag_id").eq("business_id", bizId).eq("status", "active").lte("purchase_date", sevenDaysAgoISO).limit(500),
@@ -63,7 +63,7 @@ async function fetchTopBarAlerts(
   const oldCattleIds = (oldCattleRaw ?? []).map((c: { id: string }) => c.id);
   let unweighedCattleIds: string[] = oldCattleIds;
   if (oldCattleIds.length > 0) {
-    const { data: recentWeightRaw } = await supabase.from("weight_logs").select("cattle_id").in("cattle_id", oldCattleIds).gte("recorded_at", sevenDaysAgoISO).limit(1000);
+    const { data: recentWeightRaw } = await supabase.from("weight_logs").select("cattle_id").is("deleted_at", null).in("cattle_id", oldCattleIds).gte("recorded_at", sevenDaysAgoISO).limit(1000);
     const weighedIds = new Set((recentWeightRaw ?? []).map((r: { cattle_id: string }) => r.cattle_id));
     unweighedCattleIds = oldCattleIds.filter(id => !weighedIds.has(id));
   }

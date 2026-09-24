@@ -84,6 +84,7 @@ async function GrowthSection() {
   const { data: weightRows } = await supabase
     .from("weight_logs")
     .select("id, cattle_id, recorded_at, weight_kg, heart_girth_cm, withers_height_cm, body_length_cm, bcs, weighing_method, notes")
+    .is("deleted_at", null)
     .in("cattle_id", cattleIds)
     .order("recorded_at", { ascending: true });
 

@@ -62,6 +62,7 @@ export async function recordGrowthWeightAction(
     const { data: prevLog } = await supabase
       .from("weight_logs")
       .select("weight_kg, recorded_at")
+      .is("deleted_at", null)
       .eq("cattle_id", cattleId)
       .lte("recorded_at", recordedAt)
       .order("recorded_at", { ascending: false })

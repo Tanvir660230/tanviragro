@@ -51,7 +51,7 @@ export async function getDashboardStats(
   }
 
   const [
-    { data: activeCountData },
+    { count: activeCattleCount },
     { data: salesData },
     { data: bizData },
     { data: rpcFeedData },
@@ -184,7 +184,7 @@ export async function getDashboardStats(
   }
 
   return {
-    totalCattle: activeCountData?.length ?? 0, // Fallback since count is in activeCountData array if we use destructuring
+    totalCattle: activeCattleCount ?? 0,
     totalInvestment: totalSoldCostBasis, // Alias totalInvestment to Realized Cost Basis for the dashboard hero
     totalSales,
     netProfitLoss: totalSales - totalSoldCostBasis,

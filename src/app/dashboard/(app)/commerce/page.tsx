@@ -50,10 +50,13 @@ export default async function CommercePage() {
     .select("id, tag_id, status, purchase_price, purchase_date")
     .eq("business_id", businessId);
 
+  // The cattle!inner embed is required for the cattle.business_id filter (without it
+  // PostgREST rejects the query and salesData was always null).
   const { data: salesData } = await (supabase as any)
     .from("sales")
-    .select("cattle_id, sale_price_total, sold_at")
-    .eq("cattle.business_id", businessId);
+    .select("cattle_id, sale_price_total, sold_at, cattle!inner(business_id)")
+    .eq("cattle.business_id", businessId)
+    .is("deleted_at", null);
 
   const availableCattle = (cattleData || [])
     .filter((c: any) => c.status === "active")

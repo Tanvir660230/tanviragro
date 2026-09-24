@@ -332,6 +332,7 @@ export async function deleteCattle(id: string): Promise<{ error?: string }> {
 
   revalidatePath("/dashboard/cattle");
   revalidatePath("/dashboard");
+  revalidateTag("accounting", { expire: 0 });
   return {};
 }
 

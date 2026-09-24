@@ -241,6 +241,7 @@ export async function getPortfolioHealthScore(
     supabase
       .from("weight_logs")
       .select("cattle_id, weight_kg, recorded_at")
+      .is("deleted_at", null)
       .in("cattle_id", activeIds)
       .gte("recorded_at", oneYearAgoStr)
       .order("recorded_at", { ascending: false })
@@ -391,6 +392,7 @@ export async function getSmartInsights(
         ? supabase
             .from("weight_logs")
             .select("cattle_id, recorded_at")
+            .is("deleted_at", null)
             .in("cattle_id", activeIds)
             .gte("recorded_at", sevenDaysAgo.toISOString())
             .limit(500)

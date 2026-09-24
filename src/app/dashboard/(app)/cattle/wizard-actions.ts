@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { buildProtocolEvents } from "@/lib/healthProtocol";
@@ -86,6 +86,7 @@ export async function saveEnterpriseAnimalWizardAction(
     revalidatePath(`/dashboard/cattle/${editAnimalId}`);
     revalidatePath("/dashboard/cattle");
     revalidatePath("/dashboard");
+    revalidateTag("accounting", { expire: 0 });
     return { success: true, cattleId: editAnimalId };
   }
 
@@ -164,6 +165,7 @@ export async function saveEnterpriseAnimalWizardAction(
   revalidatePath("/dashboard/cattle/pens");
   revalidatePath("/dashboard/finance");
   revalidatePath("/dashboard");
+  revalidateTag("accounting", { expire: 0 });
 
   return { success: true, cattleId: newCattle.id };
 }

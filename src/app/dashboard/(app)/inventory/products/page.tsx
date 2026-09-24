@@ -23,7 +23,7 @@ export default async function ProductsPage() {
       .order("name", { ascending: true }),
     supabase
       .from("inventory_transactions")
-      .select("item_id, type, qty, unit_cost, recorded_at")
+      .select("item_id, type, qty, unit_cost, recorded_at, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", businessId)
       .order("recorded_at", { ascending: false })
       .limit(5000),

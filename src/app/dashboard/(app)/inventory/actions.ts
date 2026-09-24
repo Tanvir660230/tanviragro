@@ -557,6 +557,7 @@ export async function getFarmDailyFeedRequirement(
   const { data: weightLogs } = await supabase
     .from("weight_logs")
     .select("cattle_id, weight_kg, recorded_at")
+    .is("deleted_at", null)
     .in("cattle_id", cattleIds)
     .lt("recorded_at", nextDayStr)   // < start of next day (UTC) = ≤ end of target day
     .order("recorded_at", { ascending: false });

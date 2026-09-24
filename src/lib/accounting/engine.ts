@@ -156,7 +156,8 @@ export const computeDepreciation = calculateDepreciation;
 
 // ── Cached Database Fetch ─────────────────────────────────────────
 // Extracts all heavy Supabase queries into a single unstable_cache block.
-// This executes 1 time and is cached infinitely until revalidateTag('accounting') is called.
+// Cached per business; revalidateTag('accounting') clears it immediately, and the 60s TTL bounds
+// staleness for any write path that forgets to call it (BUG-05).
 export const getCachedDbData = async (businessId: string) => {
   const fetcher = unstable_cache(
     async () => {
@@ -224,7 +225,7 @@ export const getCachedDbData = async (businessId: string) => {
     };
   },
   [`accounting-db-${businessId}`],
-  { tags: ['accounting', `accounting-${businessId}`], revalidate: 3600 * 24 * 30 } // 30 days, revalidated via tag
+  { tags: ['accounting', `accounting-${businessId}`], revalidate: 60 }
   );
   return fetcher();
 };

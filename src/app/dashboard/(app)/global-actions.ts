@@ -61,6 +61,7 @@ export async function getGlobalFormData() {
     supabase
       .from("weight_logs")
       .select("cattle_id, weight_kg, recorded_at")
+      .is("deleted_at", null)
       .in("cattle_id", (await supabase.from("cattle").select("id").eq("business_id", biz.id).eq("status", "active")).data?.map(c => c.id) || [])
       .order("recorded_at", { ascending: false }),
     supabase

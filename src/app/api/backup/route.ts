@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       { data: transactions },
     ] = await Promise.all([
       userSupabase.from("cattle").select("*").eq("business_id", bizId).order("created_at", { ascending: false }),
-      userSupabase.from("sales").select("*").eq("cattle.business_id", bizId).order("sold_at", { ascending: false }),
+      userSupabase.from("sales").select("*, cattle!inner(business_id)").eq("cattle.business_id", bizId).order("sold_at", { ascending: false }),
       userSupabase.from("cost_entries").select("*").eq("business_id", bizId).order("recorded_at", { ascending: false }),
       userSupabase.from("weight_logs").select("*").in("cattle_id", (await userSupabase.from("cattle").select("id").eq("business_id", bizId)).data?.map(c => c.id) ?? []).order("recorded_at", { ascending: false }),
       userSupabase.from("inventory_items").select("*").eq("business_id", bizId),

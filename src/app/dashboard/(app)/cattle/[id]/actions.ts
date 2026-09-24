@@ -101,22 +101,45 @@ export async function recordSale(
     const lockErr = await checkFinancialLock(supabase, ctx.businessId, sold_at);
     if (lockErr) return { error: lockErr };
 
-    const { error: saleError } = await supabase.from("sales").insert({
-      cattle_id,
-      sold_at,
-      sale_price_total,
-      weight_at_sale_kg,
-      buyer_name,
-    });
+    const { count: activeSales } = await supabase
+      .from("sales")
+      .select("id", { count: "exact", head: true })
+      .eq("cattle_id", cattle_id)
+      .is("deleted_at", null);
+    if ((activeSales ?? 0) > 0) return { error: "This animal already has a recorded sale." };
 
-    if (saleError) return { error: "Failed to record sale. Please try again." };
+    const { data: sale, error: saleError } = await supabase
+      .from("sales")
+      .insert({
+        cattle_id,
+        sold_at,
+        sale_price_total,
+        weight_at_sale_kg,
+        buyer_name,
+      })
+      .select("id")
+      .single();
 
-    const { error: updateError } = await supabase
+    if (saleError || !sale) return { error: "Failed to record sale. Please try again." };
+
+    // Conditional update: only one concurrent sale can flip active -> sold.
+    // If we lose (0 rows) or the update fails, remove our sale row so no orphan remains.
+    // (Full atomicity comes with the sell_cattle RPC, plan task 3.2.)
+    const { data: flipped, error: updateError } = await supabase
       .from("cattle")
       .update({ status: "sold" })
-      .eq("id", cattle_id);
+      .eq("id", cattle_id)
+      .eq("status", "active")
+      .select("id");
 
-    if (updateError) return { error: "Sale saved, but status update failed." };
+    if (updateError || !flipped?.length) {
+      await supabase.from("sales").delete().eq("id", sale.id);
+      return {
+        error: updateError
+          ? "Failed to record sale. Please try again."
+          : "This animal is no longer active (it may have just been sold).",
+      };
+    }
 
     await LivestockEventBus.publish(
       "CattleSold",
@@ -145,13 +168,39 @@ export async function revertSale(
     const ctx = await getBusinessContext(supabase);
     requirePermission(ctx, PERMISSIONS.CATTLE_SELL);
 
-    await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
+    const cattleRow = await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
+    if (cattleRow.status !== "sold") return { error: "This animal is not marked as sold." };
 
-    const { error: delError } = await supabase.from("sales").delete().eq("cattle_id", cattleId);
-    if (delError) return { error: "Failed to delete sale record" };
+    const { data: sale } = await supabase
+      .from("sales")
+      .select("id, sold_at")
+      .eq("cattle_id", cattleId)
+      .is("deleted_at", null)
+      .order("sold_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!sale) return { error: "No active sale found for this animal." };
 
-    const { error: upError } = await supabase.from("cattle").update({ status: "active" }).eq("id", cattleId);
-    if (upError) return { error: "Failed to reset cattle status" };
+    // A sale inside a locked accounting period cannot be undone.
+    const lockErr = await checkFinancialLock(supabase, ctx.businessId, sale.sold_at);
+    if (lockErr) return { error: lockErr };
+
+    // Soft delete keeps the audit trail (was: hard delete of every sale row for the animal).
+    const { error: delError } = await supabase
+      .from("sales")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", sale.id);
+    if (delError) return { error: "Failed to undo the sale record" };
+
+    const { error: upError } = await supabase
+      .from("cattle")
+      .update({ status: "active" })
+      .eq("id", cattleId)
+      .eq("status", "sold");
+    if (upError) {
+      await supabase.from("sales").update({ deleted_at: null }).eq("id", sale.id);
+      return { error: "Failed to reset cattle status" };
+    }
 
     revalidatePath(`/dashboard/cattle/${cattleId}`);
     revalidatePath("/dashboard/cattle");
@@ -175,8 +224,16 @@ export async function deleteWeightLog(
 
     await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
 
-    const { error } = await supabase.from("weight_logs").delete().eq("id", logId);
+    // Soft delete (restorable from Trash), scoped to the animal whose ownership was checked.
+    const { data: deleted, error } = await supabase
+      .from("weight_logs")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", logId)
+      .eq("cattle_id", cattleId)
+      .is("deleted_at", null)
+      .select("id");
     if (error) return { error: "Failed to delete weight log" };
+    if (!deleted?.length) return { error: "Weight log not found" };
 
     revalidatePath(`/dashboard/cattle/${cattleId}`);
     revalidatePath("/dashboard/cattle");

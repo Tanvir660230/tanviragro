@@ -119,6 +119,7 @@ export default async function PartnersPage() {
       ? supabase
           .from("weight_logs")
           .select("cattle_id, weight_kg, recorded_at, cattle!inner(business_id, status)")
+          .is("deleted_at", null)
           .eq("cattle.business_id", businessId)
           .eq("cattle.status", "active")
           .order("recorded_at", { ascending: false })
