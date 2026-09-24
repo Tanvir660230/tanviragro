@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Historical data corrections — batch 20260925-feed-corrections
--- Sources: docs/PRODUCTION_FEED_RECONCILIATION.md (C1–C8) and the owner's answers of
+-- Sources: the production feed reconciliation of 2026-09-24 (C1–C8; in git history) and the owner's answers of
 -- 2026-09-24 (C3, C6, C9, C11, C12). Requires migrations 20260925100000,
 -- 20260925110000 and 20260925120000.
 -- Rollback: supabase/rollback/20260925_feed_historical_corrections_down.sql

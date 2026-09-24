@@ -25,7 +25,6 @@ There are two different "todays".
 - **Costs:**
   - Latest-price costing and piece × kg costing overstated animal feed cost by ≈ ৳63,000.
   - Accounting also capitalised a formula estimate on top of the expensed feed.
-- Full evidence: `PRODUCTION_FEED_RECONCILIATION.md`.
 
 **Uncommitted fix (branch `chore/phase0-baseline`)**
 - The automatic engine is removed.
@@ -200,7 +199,7 @@ Every total is reported in three parts, which are **never added into one unlabel
   - The total barely moves: ৳108,423.60 today vs ৳108,683.96 proposed (+৳260.35, a revaluation from legacy FIFO row costs to one average per period).
   - True-Up amounts (৳22,041) move from "losses" to "feed expense".
   - Animal allocation becomes weight-based (already true in the app for all feed).
-- **Before any rewrite:** the dry-run report (`docs/FEED_USAGE_HISTORY_DRY_RUN.md`) shows the current data, the proposed interpretation, the new totals, the differences and the affected rows.
+- **Done (C13, owner-approved 2026-09-24):** each True-Up loss was cancelled and re-booked as herd feed covering the days since the previous count. See `FEED_USAGE_FINAL_REPORT.md` §P.
 - **Approval required:** nothing historical is rewritten without the owner's approval.
 
 ## 6. Invariants (checked automatically)

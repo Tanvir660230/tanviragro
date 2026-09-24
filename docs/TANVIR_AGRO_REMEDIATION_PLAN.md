@@ -423,7 +423,7 @@ Source: `docs/TANVIR_AGRO_AUDIT_REPORT.md` (audit of 2026-09-24). Finding IDs ma
 ### 9.3 DEPLOY-03: Repo hygiene
 - Remove `dev.log`, `lint-report.txt`, `temp.txt`, `tsconfig.tsbuildinfo` (already ignored) and `supabase/.temp/` from tracking (`git rm --cached`).
 - Fix `.vscode/settings.json` (it auto-approves a command for `d:\Final Website\Tanvir Agro`).
-- Move the prior AI reports (`PRODUCT_AUDIT.md`, `MASTER_UX_BLUEPRINT.md`, `PHASE_0_IMPLEMENTATION_REPORT.md`, `DATA_GOVERNANCE.md`, `src/components/data-grid/IMPLEMENTATION-REPORT.md`) into `docs/archive/` with a note that they are not authoritative.
+- **Done 2026-09-24 (removed; still in git history):** Move the prior AI reports (`PRODUCT_AUDIT.md`, `MASTER_UX_BLUEPRINT.md`, `PHASE_0_IMPLEMENTATION_REPORT.md`, `DATA_GOVERNANCE.md`, `src/components/data-grid/IMPLEMENTATION-REPORT.md`) into `docs/archive/` with a note that they are not authoritative.
 
 ### 9.4 CLEAN-01: Dead code
 - **Candidates** (no production consumer found; re-verify first): `lib/financial/ledger.ts`, `lib/governance/engine.ts`, `lib/governance/reconciliation-engine.ts`, `lib/growth/growth-engine.ts`, `lib/inventory/batch-engine.ts`, `lib/inventory/reservation-engine.ts`, `lib/integrations/integration-platform.ts`, `lib/imageCompression.ts`, `lib/tokens.ts`, `lib/workflows/*` vs `lib/workflow-engine/*` (keep one). Also the duplicate components `ErrorBoundary` (`components/shared` vs `components/ui`), `PageHeader` (`components/shared` vs `components/layout`), `StatCard`, `PrintButton` ×3, `CurrencyInput`, `FormField` and `ActivityTimeline`.

@@ -1,7 +1,6 @@
 -- ============================================================================
 -- Feed ledger reconciliation — AFTER migration 20260925100000 (movement_type aware).
 -- READ-ONLY: SELECT statements only. Safe to run in the Supabase SQL Editor.
--- For the pre-migration schema use docs/sql/feed_reconciliation.sql.
 -- Covers every business the caller can read (production has one business with feed data).
 -- ============================================================================
 

@@ -1,13 +1,11 @@
 # Tanvir Agro — Feed Inventory & Feed Costing: Final Report
 
 - **Date:** 2026-09-24
-- **Branch:** `chore/phase0-baseline`. **Everything is uncommitted.** Nothing was committed, pushed or deployed.
-- **Production:** read-only. No production row or schema was changed by this work.
+- **Status:** released to production and deployed on 2026-09-24 (§R). `main` = live code.
 - **Companion documents:**
   - `FEED_USAGE_ARCHITECTURE.md` (design);
   - `FEED_SYSTEM_ARCHITECTURE.md` (ledger reference);
-  - `FEED_USAGE_HISTORY_DRY_RUN.md` (history);
-  - `FEED_COSTING_IMPLEMENTATION_REPORT.md` (the first phase).
+  - `FEED_COSTING_IMPLEMENTATION_REPORT.md` (the first phase: corrections C1–C12, the 2026-09-24 incident).
 
 ---
 
@@ -166,49 +164,49 @@ A further defect was found during this work: the "weighted average" was **cumula
   - stock equals the closing count.
 - **Engine:** with 5 cattle, allocation follows weight and covers every day of 01–08 Sep, with no unrecorded days. The whole cost is allocated.
 
-## O. Reconciliation (production copy with everything applied)
+## O. Reconciliation (production, after the release and C13)
 
 | Measure | Value |
 |---|---:|
 | Integrity checks (null meaning, qty ≤ 0, direction, duplicate keys, unbalanced recipes) | all 0 |
 | Cash purchases | ৳125,725.57 |
 | Opening stock (not cash) | ৳3,299.40 |
-| Herd feed expense | ৳94,023.68 |
+| Herd feed expense | ৳116,064.95 (৳94,023.68 recorded + ৳22,041.27 stock-finished remainders, C13) |
 | Feed logged per animal | ৳36.66 |
-| Stock-count losses (history, not yet restated) | ৳22,041.27 |
+| Stock-count losses | ৳0 (the ৳22,041.27 booked as loss was feed eaten, P) |
 | Stock on hand | ৳12,923.35 = qty × cost |
 
-Per-animal actual feed cost (weight-based):
+Per-animal actual feed cost (weight-based, by the days each animal was on the farm):
 
-| Animal | ৳ |
-|---|---:|
-| C001 | 20,184 |
-| C002 | 22,305 |
-| C003 | 22,211 |
-| C004 | 14,797 |
-| C005 | 7,104 |
-| C006 | 7,459 |
-| **Total** | **94,060** (unallocated 0) |
+| Animal | Before C13 ৳ | After C13 ৳ |
+|---|---:|---:|
+| C001 | 20,184 | 24,761 |
+| C002 | 22,305 | 27,364 |
+| C003 | 22,211 | 27,374 |
+| C004 | 14,797 | 18,242 |
+| C005 (arrived 07-31) | 7,104 | 8,956 |
+| C006 (arrived 07-31) | 7,459 | 9,404 |
+| **Total** | **94,060** | **116,102** (unallocated 0) |
 
-## P. History (dry run, not applied)
+## P. History: stock-finished remainders are feed (C13, applied)
 
-See `FEED_USAGE_HISTORY_DRY_RUN.md`: 22 periods, 601 rows.
-- **Totals:** current ৳108,423.60 vs proposed ৳108,683.96 (+৳260.35).
-- **Reclassification:** the ৳22,041 now shown as "loss" is feed that was eaten.
-- **Two data facts, reported and not fixed:**
-  - the old recipe engine took ingredients the store did not have (about 5 kg per ingredient);
-  - purchases dated on a True-Up day.
-- **Approval:** history is not re-stated without the owner's approval.
+- **Owner decision (2026-09-24):** marking an item finished means the cattle ate it.
+- **Before:** the old app booked each remainder as a loss (22 "True-Up" rows, ৳22,041.27, General Expenses).
+- **Correction C13** (`supabase/corrections/20260925_c13_trueup_is_feed.sql`, rollback in `supabase/rollback/`), per True-Up row:
+  - an `adjustment_in` of the same qty and cost that points at it → the loss is cancelled;
+  - a herd `consumption` of the same qty and cost covering the days since that item's previous count (`covers_from`, migration `20260925140000`).
+- **Allocation:** the engine spreads such a row over the days it covers by the weight of the animals present, so C005/C006 (arrived 07-31) carry nothing for June–July.
+- **Result:** loss ৳22,041.27 → ৳0; feed ৳94,023.68 → ৳116,064.95; stock and stock value unchanged. Nothing edited or deleted; idempotent; rollback tested.
+- **Data facts, reported and not fixed:** the old recipe engine took ingredients the store did not have (about 5 kg per ingredient).
 
 ## Q. Security
 
 - **Tracked files, branches, remote:** no secret in any tracked file, branch or `origin/main`.
 - **Client bundle** (`.next/static`, 198 files): 0 matches for the service-role key, the VAPID private key, the cron secret, the Gemini key or the text `service_role`. The single `sb_secret_` match is supabase-js's own prefix check, not a key.
-- **Credentials used:** `Data.txt` was not used. No key was printed or written to the repo.
+- **Credentials:** the old `Data.txt` token was already revoked (401) and the file is deleted. The release used a new owner token, stored DPAPI-encrypted outside the project for 24 h and deleted after use; it was never printed or written to the repo.
 - **Owner action needed:**
-  1. revoke the personal access token in `Data.txt`;
-  2. rotate the secret key that was pasted in chat;
-  3. approve deleting the 184 local `refs/cline/*` checkpoint commits that contain the token (they were never pushed).
+  1. revoke the `claude-release` token at supabase.com → Account → Access Tokens;
+  2. rotate the secret key that was pasted in chat (then update Netlify and `.env.local`).
 
 ## R. Build and deployment — DONE (2026-09-24)
 
@@ -217,15 +215,14 @@ See `FEED_USAGE_HISTORY_DRY_RUN.md`: 22 periods, 601 rows.
 | Backup | All 67 public tables (958 rows) exported and read back before any change |
 | First release attempt | Failed with `business_users.is_active` missing (production drift: migration 032 was never fully applied). One transaction, so **nothing changed**; verified. |
 | Fix | Membership check reads `is_active` only when the column exists. Re-tested on a copy made to match production exactly (applied twice, idempotent), DB tests 43/43 and 27/27. |
-| Release | `supabase/deploy/20260925_feed_release.sql` applied in one transaction. 5 migrations recorded. |
+| Release | Migrations 090000–130000 and corrections C1–C12 applied in one transaction (the generated bundle was removed afterwards; the migration files are the source). Then migration 140000 and correction C13. |
 | Production check (read-only) | Integrity checks all 0. Consumption without cost 0. Cash purchases ৳125,725.57, opening ৳3,299.40, stock ৳12,923.35 = qty × cost. 5 RPCs present. No stray rows written between release and deploy. |
 | Code | Pushed to `main` (`24aa761`). CI (lint, tests, build) green after two pre-existing CI defects were fixed: Jest config needed `ts-node`, and `next.config.ts` imported a Sentry subpath missing from the locked version (this would also have failed the Netlify build). |
 | Live site | https://caagro.netlify.app serves the new code. |
 
 ## S. Remaining limits
 
-- **History restatement:** waits for owner approval (P).
-- **Unused queries:** some pages still run purchase queries they no longer use (no effect on numbers). `Animal360Hero` and `Financial360Panel` are unused.
+- **Unused queries:** some pages still run purchase queries they no longer use (no effect on numbers).
 - **Wizard placeholder weight:** the cattle wizard stores a 1 kg placeholder when no weight is entered.
 - **Offline weight logs:** they are saved as "measured".
 - **Nutrients:** values on Feed & Nutrition are typical reference values.

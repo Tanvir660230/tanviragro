@@ -3,7 +3,7 @@
 - **Date:** 2026-09-24
 - **Branch:** `chore/phase0-baseline`. All changes are **uncommitted**.
 - **Production:** read-only access only. **No production data or schema was changed by this work.** One incident is described in §8: 30 rows were written by the *old* code through a local dev server.
-- **Design reference:** `docs/FEED_SYSTEM_ARCHITECTURE.md`. Earlier analysis: `docs/PRODUCTION_FEED_RECONCILIATION.md`.
+- **Design reference:** `docs/FEED_SYSTEM_ARCHITECTURE.md`.
 - **Superseded in part by `docs/FEED_USAGE_FINAL_REPORT.md`** (usage periods, moving-average costing, weight-based allocation, reversal-based purchase edits). Where the two differ, the final report is current.
 
 ---

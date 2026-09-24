@@ -142,9 +142,9 @@ Both UIs (Produce Batch dialog, Feed Mixer) call the RPC through `src/lib/invent
 | Allocation, running estimate, forecast (pure) | `src/lib/feed/usage-engine.ts`, loader `src/lib/feed/feed-data.ts` |
 | Current unit cost (single source) | view `v_inventory_unit_cost`, `src/lib/inventory/unit-cost.ts` |
 | Historical corrections | `supabase/corrections/20260925_feed_historical_corrections.sql` |
-| History as usage periods (dry run, not applied) | `docs/sql/feed_usage_history_dry_run.sql`, `docs/FEED_USAGE_HISTORY_DRY_RUN.md` |
+| Stock-finished remainders re-booked as feed (C13) | `supabase/migrations/20260925140000_consumption_covers_from.sql`, `supabase/corrections/20260925_c13_trueup_is_feed.sql` |
 | Rollbacks | `supabase/rollback/*` |
 | DB tests | `supabase/tests/feed_ledger.sql`, `feed_ledger_concurrency.sh`, `feed_ledger_rollback.sh` |
 | Costing rules (pure) | `src/lib/inventory/feed-costing.ts`, `recipe-math.ts`, `src/lib/accounting/inventory-ledger.ts` |
 | App tests | `src/__tests__/feed-costing.test.ts`, `src/__tests__/farm-records.test.ts` |
-| Reconciliation (read-only SQL) | `docs/sql/feed_reconciliation.sql` (before migration), `docs/sql/feed_ledger_reconciliation.sql` (after) |
+| Reconciliation (read-only SQL) | `docs/sql/feed_ledger_reconciliation.sql` |
