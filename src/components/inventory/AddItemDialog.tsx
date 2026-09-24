@@ -26,6 +26,8 @@ import {
   type InventoryFormState,
 } from "@/app/dashboard/(app)/inventory/actions";
 import { toast } from "sonner";
+import { KgPerUnitField, ZeroPriceConfirm } from "./ledger-fields";
+import { todayDhaka } from "@/lib/dates";
 
 const CATEGORIES = [
   { value: "feed", label: "Feed" },
@@ -68,6 +70,7 @@ function AddItemForm({
   const [qty, setQty] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [totalPrice, setTotalPrice] = useState("");
+  const [stockSource, setStockSource] = useState<"opening_balance" | "purchase" | "own_production">("opening_balance");
 
   const [state, formAction, isPending] = useActionState<
     InventoryFormState,
@@ -165,6 +168,8 @@ function AddItemForm({
         </div>
       </div>
 
+      <KgPerUnitField unit={unit} idPrefix="add" />
+
       <div className="space-y-1.5">
         <Label htmlFor="inv_name">Item Name *</Label>
         <Input
@@ -212,6 +217,37 @@ function AddItemForm({
           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">Smart Calc</span>
         </div>
 
+        <input type="hidden" name="stock_source" value={stockSource} />
+        <div className="space-y-1.5">
+          <Label>This stock is</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setStockSource("opening_balance")}
+              className={`rounded-lg border px-3 py-2 text-left text-xs ${stockSource === "opening_balance" ? "border-primary bg-primary/5" : "border-border"}`}
+            >
+              <span className="block font-semibold">Already on the farm</span>
+              <span className="text-muted-foreground">Opening balance — not a cash payment now</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStockSource("purchase")}
+              className={`rounded-lg border px-3 py-2 text-left text-xs ${stockSource === "purchase" ? "border-primary bg-primary/5" : "border-border"}`}
+            >
+              <span className="block font-semibold">Bought now</span>
+              <span className="text-muted-foreground">Purchase — reduces cash</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStockSource("own_production")}
+              className={`rounded-lg border px-3 py-2 text-left text-xs ${stockSource === "own_production" ? "border-primary bg-primary/5" : "border-border"}`}
+            >
+              <span className="block font-semibold">Harvested from own land</span>
+              <span className="text-muted-foreground">e.g. grass — ৳0; land rent is an expense</span>
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="initial_qty">Quantity Added</Label>
@@ -233,7 +269,7 @@ function AddItemForm({
               id="purchase_date"
               name="purchase_date"
               type="date"
-              max={new Date().toISOString().slice(0, 10)}
+              max={todayDhaka()}
               defaultValue={new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })}
             />
           </div>
@@ -268,6 +304,7 @@ function AddItemForm({
             />
           </div>
         </div>
+        <ZeroPriceConfirm unitCost={unitCost} idPrefix="add" />
       </div>
 
       {state?.error && (

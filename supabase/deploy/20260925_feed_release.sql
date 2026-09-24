@@ -1,0 +1,1399 @@
+-- ============================================================================
+-- TANVIR AGRO — feed release, ONE transaction (generated from the files below; do not edit by hand)
+-- Supabase Dashboard → SQL Editor → paste all → Run.
+-- If anything fails, NOTHING is changed (the whole release rolls back).
+-- Order: 5 migrations → integrity check (aborts on any non-zero) → historical corrections → summary.
+-- ============================================================================
+begin;
+
+-- ===================== supabase/migrations/20260925090000_baseline_drift_columns.sql =====================
+-- ============================================================================
+-- Baseline: columns that exist in PRODUCTION but were never captured in a migration
+-- (DB-01 / BUG-23). Observed in the 2026-09-24 read-only production snapshot.
+-- On production this is a no-op (IF NOT EXISTS). On a fresh database it makes the
+-- schema match production so later migrations can be tested faithfully.
+-- ============================================================================
+
+alter table public.businesses
+  add column if not exists default_daily_gain_kg numeric;
+
+alter table public.feed_recipes
+  add column if not exists active_from  date,
+  add column if not exists active_until date,
+  add column if not exists deleted_at   timestamptz;
+
+alter table public.inventory_items
+  add column if not exists roughage_active_from  date,
+  add column if not exists roughage_active_until date,
+  add column if not exists is_discontinued       boolean not null default false;
+
+-- sales.deleted_at / reverted_reason are used by the app and by revert_cattle_sale (20260618);
+-- production has 0 sales rows so they could not be observed. No-op if present.
+alter table public.sales
+  add column if not exists deleted_at      timestamptz,
+  add column if not exists reverted_reason text;
+
+-- health_events.deleted_at is used by ~57 queries and exists in production (DB-11).
+alter table public.health_events
+  add column if not exists deleted_at timestamptz;
+
+
+-- ===================== supabase/migrations/20260925100000_feed_inventory_ledger.sql =====================
+-- ============================================================================
+-- Feed inventory ledger: one source of truth for stock quantity and cost.
+-- Design: docs/FEED_SYSTEM_ARCHITECTURE.md. Rollback: supabase/rollback/20260925100000_feed_inventory_ledger_down.sql
+--
+-- Additive only: no column dropped, no row deleted, no existing quantity/cost changed.
+-- Existing rows get a movement_type classification (derived from type + notes) and
+-- a cost_source label; every non-trivial classification is written to the audit table.
+-- Idempotent: safe to re-run.
+-- ============================================================================
+-- (begin; removed: one transaction for the whole release)
+
+-- ── 1. Movement meaning, idempotency, cost provenance ────────────────────────────
+alter table public.inventory_transactions
+  add column if not exists movement_type   text,
+  add column if not exists idempotency_key text,
+  add column if not exists reverses_id     uuid references public.inventory_transactions(id),
+  add column if not exists cost_source     text,
+  add column if not exists is_estimate     boolean not null default false,
+  add column if not exists created_by      uuid,
+  -- set only on rows posted by a feed usage period (FK added by 20260925130000)
+  add column if not exists period_line_id  uuid;
+
+-- Precision (money must not be cut to 2 decimals mid-calculation): qty numeric(10,2) and
+-- unit_cost numeric(12,2) stored ৳3000/128 pieces as ৳23.44 instead of ৳23.4375. Widening the
+-- scale changes no existing value. Totals are rounded to 2 decimals only when presented/posted.
+do $$
+begin
+  if (select numeric_scale from information_schema.columns
+      where table_schema = 'public' and table_name = 'inventory_transactions' and column_name = 'unit_cost') < 6 then
+    drop view if exists public.v_inventory_balance;   -- recreated below
+    alter table public.inventory_transactions
+      alter column qty type numeric(14,4),
+      alter column unit_cost type numeric(14,6);
+  end if;
+end $$;
+
+comment on column public.inventory_transactions.type is
+  'Direction only: purchase = stock IN, consumption = stock OUT. Meaning lives in movement_type.';
+comment on column public.inventory_transactions.movement_type is
+  'purchase | opening_balance | own_production | feed_mix_output | adjustment_in | return | consumption_reversal (IN); consumption | feed_mix_input | wastage | adjustment_out | purchase_reversal (OUT). purchase_reversal = audited undo of a purchase row entered by mistake (reverses_id, same cost). own_production = harvested from own/leased land (not cash); consumption_reversal = audited undo of a consumption row (reverses_id).';
+comment on column public.inventory_transactions.is_estimate is
+  'true = quantity was generated by a formula (legacy auto-deduction), not recorded from physical feeding';
+
+-- ── 2. Audit table for classifications and corrections ───────────────────────────
+create table if not exists public.inventory_ledger_audit (
+  id               uuid primary key default gen_random_uuid(),
+  transaction_id   uuid references public.inventory_transactions(id),
+  action           text not null check (action in ('classify','fill_missing_cost','insert_correction','rollback')),
+  correction_batch text not null,
+  field            text,
+  old_value        text,
+  new_value        text,
+  reason           text not null,
+  evidence         text,
+  created_at       timestamptz not null default now(),
+  created_by       uuid
+);
+create index if not exists idx_inventory_ledger_audit_tx on public.inventory_ledger_audit(transaction_id);
+alter table public.inventory_ledger_audit enable row level security;
+drop policy if exists "ledger audit readable by tenant" on public.inventory_ledger_audit;
+create policy "ledger audit readable by tenant" on public.inventory_ledger_audit
+  for select using (
+    transaction_id in (
+      select t.id from public.inventory_transactions t
+      join public.inventory_items i on i.id = t.item_id
+      where i.business_id in (
+        select id from public.businesses where owner_id = auth.uid()
+        union
+        select business_id from public.business_users where user_id = auth.uid()
+      )
+    )
+  );
+-- No insert/update/delete policies: only migrations / service role write the audit trail.
+
+-- ── 3. Backfill classification of existing rows (only where not yet classified) ──
+with classified as (
+  select t.id,
+    case
+      when t.type = 'purchase' and n.notes ilike 'Initial stock%'          then 'opening_balance'
+      when t.type = 'purchase' and n.notes ilike 'Mixed feed produced%'    then 'feed_mix_output'
+      when t.type = 'purchase' and n.notes ilike 'True-Up%'                then 'adjustment_in'
+      when t.type = 'purchase' and n.notes ilike 'Stock Adjustment%'       then 'adjustment_in'
+      when t.type = 'purchase'                                             then 'purchase'
+      when n.notes ilike 'Feed mix%' or n.notes ilike 'Batch production%'  then 'feed_mix_input'
+      when n.notes ilike '[FEED WASTE%'                                    then 'wastage'
+      when n.notes ilike 'True-Up%' or n.notes ilike 'Stock Adjustment%'   then 'adjustment_out'
+      else 'consumption'
+    end as mt,
+    (n.notes ilike 'Auto-Feed Deduction%' or n.notes ilike 'Daily batch deduction%') as est
+  from public.inventory_transactions t
+  cross join lateral (select coalesce(t.notes, '') as notes) n
+  where t.movement_type is null
+),
+upd as (
+  update public.inventory_transactions t
+  set movement_type = c.mt, is_estimate = c.est
+  from classified c where c.id = t.id
+  returning t.id, t.movement_type, t.is_estimate, t.notes
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason, evidence)
+select id, 'classify', '20260925-ledger-backfill', 'movement_type', null, movement_type,
+       case when movement_type = 'opening_balance' then 'Opening stock is not a cash purchase (P-08 / C2)'
+            when is_estimate then 'Legacy formula-generated deduction, flagged as estimate (P-01)'
+            else 'Reclassified from type + notes' end,
+       left(coalesce(notes, ''), 120)
+from upd
+where movement_type not in ('purchase', 'consumption') or is_estimate;
+
+-- cost provenance for existing rows (labels only; values untouched)
+update public.inventory_transactions set cost_source =
+  case
+    when unit_cost is null                          then 'missing'
+    when type = 'purchase' and unit_cost = 0        then 'zero_unconfirmed'
+    when type = 'purchase'                          then 'invoice'
+    else 'legacy'
+  end
+where cost_source is null;
+
+-- ── 4. Constraints (NOT VALID first, then validate: existing data was checked clean) ──
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'inventory_tx_movement_type_chk') then
+    alter table public.inventory_transactions add constraint inventory_tx_movement_type_chk
+      check (movement_type in ('purchase','opening_balance','own_production','feed_mix_output','adjustment_in','return','consumption_reversal',
+                               'consumption','feed_mix_input','wastage','adjustment_out','purchase_reversal')) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'inventory_tx_direction_chk') then
+    alter table public.inventory_transactions add constraint inventory_tx_direction_chk
+      check ((type = 'purchase') = (movement_type in ('purchase','opening_balance','own_production','feed_mix_output','adjustment_in','return','consumption_reversal'))) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'inventory_tx_cost_source_chk') then
+    alter table public.inventory_transactions add constraint inventory_tx_cost_source_chk
+      check (cost_source in ('invoice','wac','mix_inputs','zero_confirmed','zero_unconfirmed','missing','manual','legacy','correction')) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'inventory_tx_qty_positive_chk') then
+    alter table public.inventory_transactions add constraint inventory_tx_qty_positive_chk check (qty > 0) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'inventory_tx_unit_cost_nonneg_chk') then
+    alter table public.inventory_transactions add constraint inventory_tx_unit_cost_nonneg_chk check (unit_cost is null or unit_cost >= 0) not valid;
+  end if;
+end $$;
+alter table public.inventory_transactions validate constraint inventory_tx_movement_type_chk;
+alter table public.inventory_transactions validate constraint inventory_tx_direction_chk;
+alter table public.inventory_transactions validate constraint inventory_tx_cost_source_chk;
+alter table public.inventory_transactions validate constraint inventory_tx_qty_positive_chk;
+alter table public.inventory_transactions validate constraint inventory_tx_unit_cost_nonneg_chk;
+alter table public.inventory_transactions alter column movement_type set not null;
+alter table public.inventory_transactions alter column cost_source set not null;
+
+-- one physical event = one row (P-02). Keys are business-scoped by the writer.
+create unique index if not exists uq_inventory_tx_idempotency
+  on public.inventory_transactions(idempotency_key) where idempotency_key is not null;
+create index if not exists idx_inventory_tx_item_date on public.inventory_transactions(item_id, recorded_at);
+create index if not exists idx_inventory_tx_movement on public.inventory_transactions(movement_type);
+
+-- ── 5. Units (P-03) ─────────────────────────────────────────────────────────────
+alter table public.inventory_items
+  add column if not exists kg_per_unit numeric;
+comment on column public.inventory_items.kg_per_unit is
+  'How many kg one stock unit weighs (e.g. 1 piece of straw = X kg). NULL = unknown: the system must not convert.';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'inventory_items_kg_per_unit_chk') then
+    alter table public.inventory_items add constraint inventory_items_kg_per_unit_chk
+      check (kg_per_unit is null or kg_per_unit > 0);
+  end if;
+end $$;
+-- kg items weigh 1 kg per unit by definition; everything else stays unknown until the owner sets it.
+update public.inventory_items set kg_per_unit = 1 where lower(unit) = 'kg' and kg_per_unit is null;
+create or replace function public.trg_inventory_items_kg_default() returns trigger language plpgsql as $$
+begin
+  if lower(new.unit) = 'kg' and new.kg_per_unit is null then new.kg_per_unit := 1; end if;
+  return new;
+end $$;
+drop trigger if exists trg_inventory_items_kg_default on public.inventory_items;
+create trigger trg_inventory_items_kg_default before insert or update of unit, kg_per_unit on public.inventory_items
+  for each row execute function public.trg_inventory_items_kg_default();
+
+-- ── 6. Recipe integrity (Rule 3/4) ──────────────────────────────────────────────
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'feed_recipes_output_qty_pos_chk') then
+    alter table public.feed_recipes add constraint feed_recipes_output_qty_pos_chk check (output_qty > 0) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'recipe_ingredients_qty_pos_chk') then
+    alter table public.recipe_ingredients add constraint recipe_ingredients_qty_pos_chk check (qty_per_batch > 0) not valid;
+  end if;
+end $$;
+alter table public.feed_recipes validate constraint feed_recipes_output_qty_pos_chk;
+alter table public.recipe_ingredients validate constraint recipe_ingredients_qty_pos_chk;
+
+create or replace function public.assert_recipe_balanced(p_recipe_id uuid)
+returns void language plpgsql as $$
+declare v_out numeric; v_sum numeric; v_active boolean;
+begin
+  select output_qty, is_active into v_out, v_active from public.feed_recipes where id = p_recipe_id;
+  if not found or not coalesce(v_active, false) then return; end if;   -- only ACTIVE recipes must balance
+  select coalesce(sum(qty_per_batch), 0) into v_sum from public.recipe_ingredients where recipe_id = p_recipe_id;
+  if abs(v_sum - v_out) > 0.01 then
+    raise exception 'Recipe % is active but its ingredients total % kg while the batch size is % kg', p_recipe_id, v_sum, v_out
+      using errcode = 'check_violation';
+  end if;
+end $$;
+
+create or replace function public.trg_recipe_balanced() returns trigger language plpgsql as $$
+begin
+  if tg_table_name = 'feed_recipes' then
+    perform public.assert_recipe_balanced(new.id);
+  elsif tg_op = 'DELETE' then
+    perform public.assert_recipe_balanced(old.recipe_id);
+  else
+    perform public.assert_recipe_balanced(new.recipe_id);
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists trg_feed_recipes_balanced on public.feed_recipes;
+create constraint trigger trg_feed_recipes_balanced
+  after insert or update of is_active, output_qty on public.feed_recipes
+  deferrable initially deferred for each row execute function public.trg_recipe_balanced();
+drop trigger if exists trg_recipe_ingredients_balanced on public.recipe_ingredients;
+create constraint trigger trg_recipe_ingredients_balanced
+  after insert or update or delete on public.recipe_ingredients
+  deferrable initially deferred for each row execute function public.trg_recipe_balanced();
+
+-- ── 7. Costing: perpetual moving-average cost as of a date (P-04) ─────────────
+-- cost(item, d) = value on hand / quantity on hand, over movements with a known cost
+-- dated on or before d. Every OUT row removes value at the average of its moment (its
+-- stored unit_cost), so the average always describes the stock that is really left:
+--   100 kg @ ৳40 + 200 kg @ ৳50 on hand → ৳46.67;  100 @ ৳40 used up, then 100 @ ৳60 → ৳60
+-- (a cumulative average of every purchase ever made would say ৳50 and leave book value on
+-- an empty store). Undone purchases and undone consumption move value like any other row.
+-- With nothing on hand (or unknown value) the last known stock-in price is used.
+-- A movement dated after d never changes the cost as of d.
+create or replace function public.inventory_unit_cost_as_of(p_item_id uuid, p_as_of date)
+returns numeric language sql stable as $$
+  with m as (
+    select sum(case when type = 'purchase' then qty else -qty end) as q,
+           sum(case when type = 'purchase' then qty * unit_cost else -qty * unit_cost end) as v
+    from public.inventory_transactions
+    where item_id = p_item_id and recorded_at <= p_as_of
+      and unit_cost is not null and cost_source <> 'missing'
+  )
+  select case
+    when m.q > 0.0001 and m.v >= 0 then round(m.v / m.q, 6)
+    else (select t.unit_cost from public.inventory_transactions t
+          where t.item_id = p_item_id and t.recorded_at <= p_as_of
+            and t.movement_type in ('purchase', 'opening_balance', 'own_production', 'feed_mix_output', 'adjustment_in', 'return')
+            and t.unit_cost is not null and t.cost_source <> 'missing'
+          order by t.recorded_at desc, t.created_at desc limit 1)
+  end
+  from m
+$$;
+
+-- ── 8. Insert-time rules: default classification, cost, stock guard ──────────────
+create or replace function public.trg_inventory_tx_before_insert() returns trigger language plpgsql as $$
+declare v_balance numeric;
+begin
+  -- default meaning from direction for writers that don't set it
+  if new.movement_type is null then
+    new.movement_type := case when new.type = 'purchase' then 'purchase' else 'consumption' end;
+  end if;
+
+  -- serialise all movements of one item (concurrency: no double spend)
+  perform pg_advisory_xact_lock(hashtextextended(new.item_id::text, 0));
+
+  if new.type = 'consumption' then
+    -- a purchase_reversal must undo a purchase row of the same item, at that row's cost
+    if new.movement_type = 'purchase_reversal' then
+      if new.reverses_id is null or not exists (select 1 from public.inventory_transactions o
+          where o.id = new.reverses_id and o.item_id = new.item_id and o.movement_type = 'purchase' and o.qty >= new.qty) then
+        raise exception 'purchase_reversal must reference a purchase row of the same item with at least this quantity'
+          using errcode = 'check_violation';
+      end if;
+      select unit_cost, cost_source into new.unit_cost, new.cost_source
+      from public.inventory_transactions where id = new.reverses_id;
+    -- OUT movements are valued at WAC as of their date unless a manual cost is declared
+    elsif coalesce(new.cost_source, '') <> 'manual' then
+      new.unit_cost := public.inventory_unit_cost_as_of(new.item_id, new.recorded_at::date);
+      new.cost_source := case when new.unit_cost is null then 'missing' else 'wac' end;
+    end if;
+    -- stock guard: signed balance of every movement for this item (no clamping, no sign tricks).
+    -- A usage-period posting is computed from the stock available AS OF its end date by the
+    -- period reconciliation itself, so the all-dates balance check does not apply to it.
+    if new.period_line_id is not null then return new; end if;
+    select coalesce(sum(case when type = 'purchase' then qty else -qty end), 0) into v_balance
+    from public.inventory_transactions where item_id = new.item_id;
+    if v_balance - new.qty < -0.0001 then
+      raise exception 'Insufficient stock for item %: on hand %, requested %', new.item_id, round(v_balance, 4), new.qty
+        using errcode = 'check_violation';
+    end if;
+  else
+    if new.cost_source is null then
+      new.cost_source := case
+        when new.movement_type = 'feed_mix_output' then 'mix_inputs'
+        -- grass from own/leased land: the land cost is an expense (Rent & Lease), so the fodder
+        -- itself carries no cost here — valuing it too would count the land cost twice
+        when new.movement_type = 'own_production' and coalesce(new.unit_cost, 0) = 0 then 'zero_confirmed'
+        when new.unit_cost is null and new.movement_type in ('adjustment_in','return') then 'wac'
+        when new.unit_cost is null then 'missing'
+        when new.unit_cost = 0 then 'zero_unconfirmed'
+        else 'invoice' end;
+    end if;
+    if new.movement_type = 'own_production' and new.unit_cost is null then
+      new.unit_cost := 0;
+    end if;
+    -- a reversal must point at the consumption row it undoes and carry that row's cost
+    if new.movement_type = 'consumption_reversal' then
+      if new.reverses_id is null or not exists (select 1 from public.inventory_transactions o
+          where o.id = new.reverses_id and o.item_id = new.item_id and o.type = 'consumption' and o.qty >= new.qty) then
+        raise exception 'consumption_reversal must reference a consumption row of the same item with at least this quantity'
+          using errcode = 'check_violation';
+      end if;
+      -- an undo gives back the value that row took out; only an explicit, audited correction
+      -- may state its own cost (e.g. ৳0 for quantity that never existed)
+      if new.unit_cost is null then
+        select unit_cost into new.unit_cost from public.inventory_transactions where id = new.reverses_id;
+        -- the generic IN default above marked it 'missing' (no cost yet); it now has the original's cost
+        new.cost_source := case when new.unit_cost is null then 'missing' else 'correction' end;
+      end if;
+    end if;
+    if new.unit_cost is null and new.movement_type in ('adjustment_in','return') then
+      new.unit_cost := public.inventory_unit_cost_as_of(new.item_id, new.recorded_at::date);
+      if new.unit_cost is null then new.cost_source := 'missing'; end if;
+    end if;
+  end if;
+  return new;
+end $$;
+
+-- the old guard (20260626) ignored negative-qty purchases and took no lock: replace it
+drop trigger if exists trg_check_inventory_stock on public.inventory_transactions;
+drop trigger if exists trg_inventory_tx_before_insert on public.inventory_transactions;
+create trigger trg_inventory_tx_before_insert
+  before insert on public.inventory_transactions
+  for each row execute function public.trg_inventory_tx_before_insert();
+
+-- ── 9. Signed stock & value view (P-05: negatives are visible) ──────────────────
+create or replace view public.v_inventory_balance
+with (security_invoker = true) as
+select i.id as item_id, i.business_id, i.name, i.unit, i.category, i.kg_per_unit,
+       coalesce(sum(case when t.type = 'purchase' then t.qty else -t.qty end), 0)                          as qty_on_hand,
+       coalesce(sum(case when t.type = 'purchase' then t.qty * coalesce(t.unit_cost,0)
+                         else -t.qty * coalesce(t.unit_cost,0) end), 0)                                    as value_on_hand,
+       count(*) filter (where t.cost_source = 'missing')                                                   as rows_missing_cost,
+       count(*) filter (where t.cost_source = 'zero_unconfirmed')                                          as rows_zero_unconfirmed,
+       count(*) filter (where t.is_estimate)                                                               as rows_estimated
+from public.inventory_items i
+left join public.inventory_transactions t on t.item_id = i.id
+where i.deleted_at is null
+group by i.id;
+
+-- ── 9b. Per-animal consumption net of audited reversals (used by the accounting engine) ──
+create or replace function public.get_cattle_consumptions(p_business_id uuid)
+returns table (cattle_id uuid, category text, total_cost numeric) language plpgsql as $$
+begin
+  return query
+  select it.cattle_id, i.category::text,
+         sum(case when it.movement_type = 'consumption_reversal' then -1 else 1 end * it.qty * coalesce(it.unit_cost, 0))
+  from public.inventory_transactions it
+  join public.inventory_items i on i.id = it.item_id
+  where i.business_id = p_business_id
+    and it.cattle_id is not null
+    and (it.type = 'consumption' or it.movement_type = 'consumption_reversal')
+  group by it.cattle_id, i.category;
+end $$;
+
+-- current unit cost of every item — the ONE place pages read cost from (no app-side averages)
+create or replace view public.v_inventory_unit_cost with (security_invoker = true) as
+select i.id as item_id, i.business_id,
+       public.inventory_unit_cost_as_of(i.id, (now() at time zone 'Asia/Dhaka')::date) as unit_cost
+from public.inventory_items i
+where i.deleted_at is null;
+
+-- ── 10. Explicit daily feeding (replaces page-load auto-deduction) ─────────────────
+-- One call records one herd feeding for one date. The idempotency key makes a second
+-- call for the same business/date/item fail instead of deducting twice.
+create or replace function public.record_herd_feeding(
+  p_business_id uuid, p_date date, p_lines jsonb, p_note text default null
+) returns integer language plpgsql security invoker as $$
+declare v_line jsonb; v_count int := 0;
+begin
+  for v_line in select * from jsonb_array_elements(p_lines) loop
+    if (v_line->>'qty')::numeric <= 0 then continue; end if;
+    if not exists (select 1 from public.inventory_items
+                   where id = (v_line->>'item_id')::uuid and business_id = p_business_id) then
+      raise exception 'Item % does not belong to this business', v_line->>'item_id' using errcode = '42501';
+    end if;
+    insert into public.inventory_transactions
+      (item_id, type, movement_type, qty, recorded_at, notes, idempotency_key, created_by)
+    values ((v_line->>'item_id')::uuid, 'consumption', 'consumption', (v_line->>'qty')::numeric, p_date,
+            coalesce(p_note, 'Daily herd feeding (recorded)'),
+            'herd-feeding:' || p_business_id || ':' || p_date || ':' || (v_line->>'item_id'),
+            auth.uid());
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end $$;
+revoke all on function public.record_herd_feeding(uuid, date, jsonb, text) from public, anon;
+grant execute on function public.record_herd_feeding(uuid, date, jsonb, text) to authenticated, service_role;
+
+-- ── 11. Feed mixing as an internal transformation (P-03/F-03, F-01, F-11) ────────
+-- Ingredients scale by the recipe's own ingredient total (= batch size); inputs are
+-- feed_mix_input at WAC; the output is feed_mix_output valued at the inputs' cost.
+-- Never a purchase, never cash. One transaction; idempotent per batch id.
+create or replace function public.produce_feed_batch(
+  p_business_id uuid, p_recipe_id uuid, p_output_item_id uuid, p_output_qty numeric, p_date date, p_batch_id uuid
+) returns numeric language plpgsql security invoker as $$
+declare v_sum numeric; v_ing record; v_in_qty numeric; v_cost numeric := 0; v_row_cost numeric; v_name text;
+        v_missing boolean := false;
+begin
+  if p_output_qty <= 0 then raise exception 'Batch quantity must be > 0' using errcode = 'check_violation'; end if;
+  select name into v_name from public.feed_recipes where id = p_recipe_id and business_id = p_business_id;
+  if not found then raise exception 'Recipe not found' using errcode = '42501'; end if;
+  if not exists (select 1 from public.inventory_items where id = p_output_item_id and business_id = p_business_id) then
+    raise exception 'Output item not found' using errcode = '42501';
+  end if;
+  select coalesce(sum(qty_per_batch), 0) into v_sum from public.recipe_ingredients where recipe_id = p_recipe_id;
+  if v_sum <= 0 then raise exception 'Recipe has no ingredients' using errcode = 'check_violation'; end if;
+
+  for v_ing in select item_id, qty_per_batch from public.recipe_ingredients where recipe_id = p_recipe_id loop
+    v_in_qty := round(v_ing.qty_per_batch / v_sum * p_output_qty, 4);
+    insert into public.inventory_transactions (item_id, type, movement_type, qty, recorded_at, notes, idempotency_key, created_by)
+    values (v_ing.item_id, 'consumption', 'feed_mix_input', v_in_qty, p_date,
+            'Feed mix input: ' || v_name || ' ×' || p_output_qty || ' kg',
+            'feed-batch:' || p_batch_id || ':in:' || v_ing.item_id, auth.uid())
+    returning unit_cost into v_row_cost;
+    if v_row_cost is null then v_missing := true; end if;   -- ingredient has no known cost yet
+    v_cost := v_cost + v_in_qty * coalesce(v_row_cost, 0);
+  end loop;
+
+  insert into public.inventory_transactions (item_id, type, movement_type, qty, unit_cost, cost_source, recorded_at, notes, idempotency_key, created_by)
+  -- an unknown ingredient cost makes the batch cost unknown: never value it as if that input were free
+  values (p_output_item_id, 'purchase', 'feed_mix_output', p_output_qty,
+          case when v_missing then null else round(v_cost / p_output_qty, 6) end,
+          case when v_missing then 'missing' else 'mix_inputs' end, p_date,
+          'Feed mix output: ' || v_name || ' ×' || p_output_qty || ' kg',
+          'feed-batch:' || p_batch_id || ':out', auth.uid());
+  return case when v_missing then null else round(v_cost, 2) end;
+end $$;
+revoke all on function public.produce_feed_batch(uuid, uuid, uuid, numeric, date, uuid) from public, anon;
+grant execute on function public.produce_feed_batch(uuid, uuid, uuid, numeric, date, uuid) to authenticated, service_role;
+
+-- (commit; removed)
+
+
+-- ===================== supabase/migrations/20260925110000_expense_categories.sql =====================
+-- ============================================================================
+-- Configurable expense categories (utilities first) + audited cost entries.
+-- Rollback: supabase/rollback/20260925110000_expense_categories_down.sql
+--
+-- * expense_categories: per-business, admin-managed list. `kind` decides the accounting
+--   account, so a renamed category never changes where its expenses are booked.
+--   Categories are disabled, never deleted (history keeps pointing at them).
+-- * cost_entries.category_id links an expense to a category; the old free-text
+--   `category` stays for existing rows and reports.
+-- * cost_entry_audit: every insert/update of a cost entry (incl. soft delete) is logged
+--   by a trigger with the old and new row — edits are corrections, not silent rewrites.
+-- * data_correction_audit: generic audit for one-off data corrections outside the ledger.
+-- * Optional bill/invoice attachment (private storage bucket, one folder per business).
+-- Additive and idempotent.
+-- ============================================================================
+-- (begin; removed: one transaction for the whole release)
+
+-- ── 1. Categories ────────────────────────────────────────────────────────────
+create table if not exists public.expense_categories (
+  id          uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  kind        text not null check (kind in ('utility','labor','rent','transport','repair','veterinary','general')),
+  name        text not null check (length(btrim(name)) between 1 and 80),
+  is_active   boolean not null default true,
+  sort_order  integer not null default 0,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  created_by  uuid default auth.uid()
+);
+create unique index if not exists uq_expense_categories_name
+  on public.expense_categories (business_id, kind, lower(btrim(name)));
+create index if not exists idx_expense_categories_biz on public.expense_categories (business_id, kind, is_active);
+
+comment on column public.expense_categories.kind is
+  'Accounting group: utility → 6300 Utilities, labor → 6200, rent → 6400, transport → 6700, repair → 6800, veterinary → 6100, general → 6600';
+
+alter table public.expense_categories enable row level security;
+drop policy if exists "expense categories readable by tenant" on public.expense_categories;
+create policy "expense categories readable by tenant" on public.expense_categories
+  for select using (
+    business_id in (
+      select id from public.businesses where owner_id = auth.uid()
+      union
+      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+    )
+  );
+drop policy if exists "expense categories managed by tenant" on public.expense_categories;
+create policy "expense categories managed by tenant" on public.expense_categories
+  for insert with check (
+    business_id in (
+      select id from public.businesses where owner_id = auth.uid()
+      union
+      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+    )
+  );
+drop policy if exists "expense categories updated by tenant" on public.expense_categories;
+create policy "expense categories updated by tenant" on public.expense_categories
+  for update using (
+    business_id in (
+      select id from public.businesses where owner_id = auth.uid()
+      union
+      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+    )
+  );
+-- no delete policy: categories are disabled, never deleted
+
+create or replace function public.trg_expense_categories_touch() returns trigger language plpgsql as $$
+begin new.updated_at := now(); return new; end $$;
+drop trigger if exists trg_expense_categories_touch on public.expense_categories;
+create trigger trg_expense_categories_touch before update on public.expense_categories
+  for each row execute function public.trg_expense_categories_touch();
+
+-- default utility categories for every business (existing and new)
+create or replace function public.seed_default_expense_categories(p_business_id uuid) returns void
+language sql security definer set search_path = public as $$
+  insert into public.expense_categories (business_id, kind, name, sort_order, created_by)
+  select p_business_id, 'utility', v.name, v.ord, null
+  from (values ('Electricity', 1), ('WiFi / Internet', 2), ('Gas', 3), ('Water', 4), ('Telephone', 5), ('Other utilities', 9)) v(name, ord)
+  on conflict do nothing
+$$;
+revoke all on function public.seed_default_expense_categories(uuid) from public, anon, authenticated;
+
+select public.seed_default_expense_categories(id) from public.businesses;
+
+create or replace function public.trg_businesses_seed_categories() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin perform public.seed_default_expense_categories(new.id); return new; end $$;
+drop trigger if exists trg_businesses_seed_categories on public.businesses;
+create trigger trg_businesses_seed_categories after insert on public.businesses
+  for each row execute function public.trg_businesses_seed_categories();
+
+-- ── 2. Link cost entries to categories; optional attachment ───────────────────
+alter table public.cost_entries
+  add column if not exists category_id     uuid references public.expense_categories(id),
+  add column if not exists attachment_path text;
+create index if not exists idx_cost_entries_category on public.cost_entries (category_id);
+
+-- a cost entry may only use a category of its own business
+create or replace function public.trg_cost_entries_category_check() returns trigger language plpgsql as $$
+begin
+  if new.category_id is not null and not exists (
+       select 1 from public.expense_categories c where c.id = new.category_id and c.business_id = new.business_id) then
+    raise exception 'Expense category does not belong to this business' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_cost_entries_category_check on public.cost_entries;
+create trigger trg_cost_entries_category_check before insert or update of category_id, business_id on public.cost_entries
+  for each row execute function public.trg_cost_entries_category_check();
+
+-- ── 3. Audit of every cost entry change ───────────────────────────────────────
+create table if not exists public.cost_entry_audit (
+  id            uuid primary key default gen_random_uuid(),
+  cost_entry_id uuid not null,
+  business_id   uuid not null,
+  action        text not null check (action in ('insert','update','soft_delete','restore')),
+  old_row       jsonb,
+  new_row       jsonb,
+  changed_by    uuid default auth.uid(),
+  changed_at    timestamptz not null default now()
+);
+create index if not exists idx_cost_entry_audit_entry on public.cost_entry_audit (cost_entry_id, changed_at);
+alter table public.cost_entry_audit enable row level security;
+drop policy if exists "cost entry audit readable by tenant" on public.cost_entry_audit;
+create policy "cost entry audit readable by tenant" on public.cost_entry_audit
+  for select using (
+    business_id in (
+      select id from public.businesses where owner_id = auth.uid()
+      union
+      select business_id from public.business_users where user_id = auth.uid() and is_active = true
+    )
+  );
+-- written only by the trigger (security definer); no insert/update/delete policies
+
+create or replace function public.trg_cost_entries_audit() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_action text;
+begin
+  if tg_op = 'INSERT' then
+    v_action := 'insert';
+  elsif old.deleted_at is null and new.deleted_at is not null then
+    v_action := 'soft_delete';
+  elsif old.deleted_at is not null and new.deleted_at is null then
+    v_action := 'restore';
+  else
+    if to_jsonb(old) = to_jsonb(new) then return new; end if;
+    v_action := 'update';
+  end if;
+  insert into public.cost_entry_audit (cost_entry_id, business_id, action, old_row, new_row)
+  values (new.id, new.business_id, v_action, case when tg_op = 'UPDATE' then to_jsonb(old) end, to_jsonb(new));
+  return new;
+end $$;
+drop trigger if exists trg_cost_entries_audit on public.cost_entries;
+create trigger trg_cost_entries_audit after insert or update on public.cost_entries
+  for each row execute function public.trg_cost_entries_audit();
+
+-- ── 4. Generic audit for one-off data corrections (outside the inventory ledger) ──
+create table if not exists public.data_correction_audit (
+  id               uuid primary key default gen_random_uuid(),
+  correction_batch text not null,
+  table_name       text not null,
+  row_id           uuid not null,
+  field            text not null,
+  old_value        text,
+  new_value        text,
+  reason           text not null,
+  evidence         text,
+  created_at       timestamptz not null default now(),
+  created_by       uuid default auth.uid()
+);
+create index if not exists idx_data_correction_audit_row on public.data_correction_audit (table_name, row_id);
+alter table public.data_correction_audit enable row level security;
+-- readable by service role / SQL editor only (it can reference several tables)
+
+-- ── 5. Private bucket for bills (only where Supabase storage exists) ──────────
+do $$
+begin
+  if to_regclass('storage.buckets') is not null then
+    insert into storage.buckets (id, name, public) values ('expense-bills', 'expense-bills', false)
+    on conflict (id) do nothing;
+    -- objects live under "<business_id>/…"; members of that business may read and add
+    execute $p$drop policy if exists "expense bills readable by tenant" on storage.objects$p$;
+    execute $p$create policy "expense bills readable by tenant" on storage.objects for select using (
+      bucket_id = 'expense-bills' and (storage.foldername(name))[1]::uuid in (
+        select id from public.businesses where owner_id = auth.uid()
+        union select business_id from public.business_users where user_id = auth.uid() and is_active = true))$p$;
+    execute $p$drop policy if exists "expense bills uploaded by tenant" on storage.objects$p$;
+    execute $p$create policy "expense bills uploaded by tenant" on storage.objects for insert with check (
+      bucket_id = 'expense-bills' and (storage.foldername(name))[1]::uuid in (
+        select id from public.businesses where owner_id = auth.uid()
+        union select business_id from public.business_users where user_id = auth.uid() and is_active = true))$p$;
+  end if;
+end $$;
+
+-- (commit; removed)
+
+
+-- ===================== supabase/migrations/20260925120000_weight_types.sql =====================
+-- ============================================================================
+-- Estimated vs measured weights.
+-- Rollback: supabase/rollback/20260925120000_weight_types_down.sql
+--
+-- cattle.initial_weight_type: how the weight entered at purchase was obtained.
+--   'measured'  = weighed on a scale / tape at purchase
+--   'estimated' = a guess used until the animal was weighed (not a measurement)
+--   'unknown'   = recorded before this distinction existed (treated like measured,
+--                 which is how the app has always used it)
+-- weight_logs.weight_type: 'measured' (default) or 'estimated'.
+--
+-- Growth (ADG, weight gain) is computed from MEASURED weights only: when the initial
+-- weight is an estimate, the baseline is the first measured weight. Nothing is
+-- overwritten: the estimate stays on record, labelled.
+-- Additive and idempotent.
+-- ============================================================================
+-- (begin; removed: one transaction for the whole release)
+
+alter table public.cattle
+  add column if not exists initial_weight_type text not null default 'unknown';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'cattle_initial_weight_type_chk') then
+    alter table public.cattle add constraint cattle_initial_weight_type_chk
+      check (initial_weight_type in ('measured','estimated','unknown'));
+  end if;
+end $$;
+comment on column public.cattle.initial_weight_type is
+  'measured | estimated | unknown. An estimated initial weight is never used as a growth baseline.';
+
+alter table public.weight_logs
+  add column if not exists weight_type text not null default 'measured';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'weight_logs_weight_type_chk') then
+    alter table public.weight_logs add constraint weight_logs_weight_type_chk
+      check (weight_type in ('measured','estimated'));
+  end if;
+end $$;
+comment on column public.weight_logs.weight_type is 'measured (scale/tape) or estimated (visual guess)';
+
+-- (commit; removed)
+
+
+-- ===================== supabase/migrations/20260925130000_feed_usage_periods.sql =====================
+-- ============================================================================
+-- Feed usage periods: feed is eaten continuously between a start and an end date.
+-- Design: docs/FEED_USAGE_ARCHITECTURE.md. Rollback: supabase/rollback/20260925130000_feed_usage_periods_down.sql
+--
+--   open period   → nothing is posted; the app shows a running ESTIMATE
+--   close period  → closing count entered; consumed = stock available at the end date
+--                   − closing count, posted as ONE consumption row (ACTUAL), valued at WAC
+--   late entries  → any movement dated inside / before a closed period re-reconciles it
+--                   automatically (old posting reversed, correct one posted — audited),
+--                   so entering a purchase late gives the same result as entering it on time
+--   count > stock → nothing invented: the period is 'unreconciled' with the exact gap
+-- Requires 20260925100000 (ledger). Additive and idempotent.
+-- ============================================================================
+-- (begin; removed: one transaction for the whole release)
+
+-- ── 1. Tables ────────────────────────────────────────────────────────────────
+create table if not exists public.feed_usage_periods (
+  id              uuid primary key default gen_random_uuid(),
+  business_id     uuid not null references public.businesses(id),
+  target_type     text not null check (target_type in ('item', 'recipe')),
+  item_id         uuid references public.inventory_items(id),
+  recipe_id       uuid references public.feed_recipes(id),     -- no cascade: a used recipe cannot be deleted
+  start_date      date not null,
+  end_date        date,
+  status          text not null default 'open' check (status in ('open', 'closed', 'unreconciled', 'cancelled')),
+  rule_type       text not null default 'weight_share' check (rule_type in ('weight_share', 'pct_live_weight', 'per_head')),
+  rule_value      numeric,
+  notes           text,
+  idempotency_key text unique,
+  created_at      timestamptz not null default now(),
+  created_by      uuid default auth.uid(),
+  closed_at       timestamptz,
+  closed_by       uuid,
+  constraint feed_usage_periods_target_chk check (
+    (target_type = 'item' and item_id is not null and recipe_id is null) or
+    (target_type = 'recipe' and recipe_id is not null and item_id is null)),
+  constraint feed_usage_periods_dates_chk check (end_date is null or end_date >= start_date),
+  constraint feed_usage_periods_rule_chk check ((rule_type = 'weight_share') = (rule_value is null) and (rule_value is null or rule_value > 0)),
+  constraint feed_usage_periods_open_chk check ((status = 'open') = (end_date is null) or status = 'cancelled')
+);
+create index if not exists idx_feed_usage_periods_biz on public.feed_usage_periods (business_id, status, start_date);
+comment on table public.feed_usage_periods is
+  'Feed in continuous use from start_date to end_date. Open = running estimate (nothing posted); closed = actual, reconciled from the closing count.';
+comment on column public.feed_usage_periods.rule_type is
+  'How the period is split between animals and days: weight_share (by live weight), pct_live_weight (rule_value % of live weight per day), per_head (rule_value units per head per day).';
+
+create table if not exists public.feed_usage_period_lines (
+  id             uuid primary key default gen_random_uuid(),
+  period_id      uuid not null references public.feed_usage_periods(id) on delete restrict,
+  item_id        uuid not null references public.inventory_items(id),
+  share          numeric not null check (share > 0 and share <= 1),   -- recipe share snapshot (1 for an item period)
+  closing_qty    numeric check (closing_qty is null or closing_qty >= 0),
+  available_qty  numeric,       -- stock available on the end date (excluding this line's own postings)
+  consumed_qty   numeric,       -- posted (actual) consumption
+  gap_qty        numeric,       -- closing count above recorded stock (a stock-in probably not entered yet)
+  consumed_value numeric,
+  cost_missing   boolean not null default false,
+  reconciled_at  timestamptz,
+  unique (period_id, item_id)
+);
+create index if not exists idx_feed_usage_lines_item on public.feed_usage_period_lines (item_id);
+
+create table if not exists public.feed_usage_period_events (
+  id         uuid primary key default gen_random_uuid(),
+  period_id  uuid not null references public.feed_usage_periods(id),
+  action     text not null check (action in ('open', 'close', 'correct', 'reopen', 'cancel', 'reconcile')),
+  detail     jsonb,
+  created_at timestamptz not null default now(),
+  created_by uuid default auth.uid()
+);
+create index if not exists idx_feed_usage_events_period on public.feed_usage_period_events (period_id, created_at);
+
+-- postings link back to their period line
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'inventory_tx_period_line_fk') then
+    alter table public.inventory_transactions add constraint inventory_tx_period_line_fk
+      foreign key (period_line_id) references public.feed_usage_period_lines(id);
+  end if;
+end $$;
+create index if not exists idx_inventory_tx_period_line on public.inventory_transactions (period_line_id) where period_line_id is not null;
+
+-- RLS: tenants read; all writes go through the functions below (security definer + explicit checks)
+alter table public.feed_usage_periods enable row level security;
+alter table public.feed_usage_period_lines enable row level security;
+alter table public.feed_usage_period_events enable row level security;
+drop policy if exists "usage periods readable by tenant" on public.feed_usage_periods;
+create policy "usage periods readable by tenant" on public.feed_usage_periods for select using (
+  business_id in (select id from public.businesses where owner_id = auth.uid()
+                  union select business_id from public.business_users where user_id = auth.uid() and is_active = true));
+drop policy if exists "usage lines readable by tenant" on public.feed_usage_period_lines;
+create policy "usage lines readable by tenant" on public.feed_usage_period_lines for select using (
+  period_id in (select id from public.feed_usage_periods));
+drop policy if exists "usage events readable by tenant" on public.feed_usage_period_events;
+create policy "usage events readable by tenant" on public.feed_usage_period_events for select using (
+  period_id in (select id from public.feed_usage_periods));
+
+-- ── 2. Helpers ───────────────────────────────────────────────────────────────
+create or replace function public.feed_can_write_business(p_business_id uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  -- no user: only the service role or a direct database session (migrations, SQL editor).
+  -- (current_user is the function owner inside security definer, so it must not be used here)
+  select case
+    when auth.uid() is null then coalesce(auth.role(), '') = 'service_role' or session_user in ('postgres', 'supabase_admin')
+    else exists (select 1 from public.businesses where id = p_business_id and owner_id = auth.uid())
+      or exists (select 1 from public.business_users where business_id = p_business_id and user_id = auth.uid() and is_active = true)
+  end
+$$;
+
+create or replace function public.feed_today() returns date language sql stable as $$
+  select (now() at time zone 'Asia/Dhaka')::date   -- the farm's calendar day
+$$;
+
+-- one item may be in only one (non-cancelled) period at any date
+create or replace function public.feed_assert_no_overlap(p_item_id uuid, p_start date, p_end date, p_exclude uuid)
+returns void language plpgsql stable as $$
+declare v_conflict record;
+begin
+  select p.start_date, p.end_date into v_conflict
+  from public.feed_usage_period_lines l join public.feed_usage_periods p on p.id = l.period_id
+  where l.item_id = p_item_id and p.status <> 'cancelled' and p.id is distinct from p_exclude
+    and daterange(p.start_date, coalesce(p.end_date, 'infinity'::date), '[]')
+        && daterange(p_start, coalesce(p_end, 'infinity'::date), '[]')
+  limit 1;
+  if found then
+    raise exception 'This feed is already in a usage period from % to % — end that period first',
+      v_conflict.start_date, coalesce(v_conflict.end_date::text, 'now') using errcode = 'exclusion_violation';
+  end if;
+end $$;
+
+-- ── 3. Reconciliation (the only place a period posts to the ledger) ─────────
+create or replace function public.reconcile_feed_usage_period(p_period_id uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  p record; l record; v_post record;
+  v_available numeric; v_consumed numeric; v_target numeric;
+  v_posted_qty numeric; v_posted_value numeric; v_wac numeric; v_n int;
+  v_status text := 'closed'; v_changed boolean := false; v_row_cost numeric;
+begin
+  select * into p from public.feed_usage_periods where id = p_period_id for update;
+  if not found then raise exception 'Usage period not found' using errcode = 'P0002'; end if;
+  if p.status in ('open', 'cancelled') then return p.status; end if;
+
+  for l in select * from public.feed_usage_period_lines where period_id = p_period_id order by item_id loop
+    perform pg_advisory_xact_lock(hashtextextended(l.item_id::text, 0));
+
+    -- stock available on the end date, excluding this line's own postings and their reversals
+    select coalesce(sum(case when t.type = 'purchase' then t.qty else -t.qty end), 0) into v_available
+    from public.inventory_transactions t
+    where t.item_id = l.item_id and t.recorded_at::date <= p.end_date
+      and t.period_line_id is distinct from l.id;
+
+    v_consumed := v_available - coalesce(l.closing_qty, 0);
+    v_target   := greatest(v_consumed, 0);
+    v_wac      := public.inventory_unit_cost_as_of(l.item_id, p.end_date);
+
+    select coalesce(sum(case when t.type = 'consumption' then t.qty else -t.qty end), 0),
+           coalesce(sum(case when t.type = 'consumption' then 1 else -1 end * t.qty * coalesce(t.unit_cost, 0)), 0)
+      into v_posted_qty, v_posted_value
+    from public.inventory_transactions t where t.period_line_id = l.id;
+
+    if abs(v_posted_qty - v_target) > 0.0001
+       or abs(v_posted_value - v_target * coalesce(v_wac, 0)) > 0.01 then
+      v_changed := true;
+      -- undo every still-active posting of this line (history kept)
+      for v_post in
+        select t.* from public.inventory_transactions t
+        where t.period_line_id = l.id and t.type = 'consumption'
+          and not exists (select 1 from public.inventory_transactions r where r.reverses_id = t.id)
+      loop
+        insert into public.inventory_transactions
+          (item_id, type, movement_type, qty, unit_cost, cost_source, recorded_at, notes,
+           idempotency_key, reverses_id, period_line_id, created_by)
+        values (v_post.item_id, 'purchase', 'consumption_reversal', v_post.qty, v_post.unit_cost, 'correction',
+                v_post.recorded_at, 'Usage period re-reconciled: previous posting undone',
+                'period-line:' || l.id || ':reverse:' || v_post.id, v_post.id, l.id, auth.uid());
+      end loop;
+      if v_target > 0 then
+        select count(*) + 1 into v_n from public.inventory_transactions where period_line_id = l.id and type = 'consumption';
+        insert into public.inventory_transactions
+          (item_id, type, movement_type, qty, recorded_at, notes, idempotency_key, period_line_id, created_by)
+        values (l.item_id, 'consumption', 'consumption', round(v_target, 4), p.end_date,
+                'Feed usage period ' || p.start_date || ' → ' || p.end_date,
+                'period-line:' || l.id || ':post:' || v_n, l.id, auth.uid())
+        returning unit_cost into v_row_cost;
+      end if;
+    end if;
+
+    select coalesce(sum(case when t.type = 'consumption' then 1 else -1 end * t.qty * coalesce(t.unit_cost, 0)), 0)
+      into v_posted_value
+    from public.inventory_transactions t where t.period_line_id = l.id;
+
+    update public.feed_usage_period_lines set
+      available_qty = v_available,
+      consumed_qty  = v_target,
+      gap_qty       = greatest(-v_consumed, 0),
+      consumed_value = round(v_posted_value, 2),
+      cost_missing  = (v_target > 0 and v_wac is null),
+      reconciled_at = now()
+    where id = l.id;
+
+    if v_consumed < -0.0001 or (v_target > 0 and v_wac is null) then v_status := 'unreconciled'; end if;
+  end loop;
+
+  update public.feed_usage_periods set status = v_status where id = p_period_id;
+  if v_changed then
+    insert into public.feed_usage_period_events (period_id, action, detail)
+    values (p_period_id, 'reconcile', jsonb_build_object('status', v_status));
+  end if;
+  return v_status;
+end $$;
+
+-- every closed period of these items that ends on/after p_from, earliest first
+create or replace function public.reconcile_feed_usage_from(p_item_id uuid, p_from date) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  for v_id in
+    select p.id from public.feed_usage_periods p
+    where p.status in ('closed', 'unreconciled') and p.end_date >= p_from
+      and exists (select 1 from public.feed_usage_period_lines l where l.period_id = p.id and l.item_id = p_item_id)
+    order by p.end_date, p.start_date
+  loop
+    perform public.reconcile_feed_usage_period(v_id);
+  end loop;
+end $$;
+
+-- late / back-dated movements re-reconcile the closed periods they affect
+create or replace function public.trg_inventory_tx_reconcile_periods() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_from date;
+begin
+  if new.period_line_id is not null then return null; end if;         -- a period's own posting
+  v_from := new.recorded_at::date;
+  if tg_op = 'UPDATE' then v_from := least(v_from, old.recorded_at::date); end if;
+  perform public.reconcile_feed_usage_from(new.item_id, v_from);
+  if tg_op = 'UPDATE' and old.item_id <> new.item_id then
+    perform public.reconcile_feed_usage_from(old.item_id, old.recorded_at::date);
+  end if;
+  return null;
+end $$;
+drop trigger if exists trg_inventory_tx_reconcile_periods on public.inventory_transactions;
+create trigger trg_inventory_tx_reconcile_periods
+  after insert or update of qty, unit_cost, recorded_at, item_id on public.inventory_transactions
+  for each row execute function public.trg_inventory_tx_reconcile_periods();
+
+-- ── 4. Actions ───────────────────────────────────────────────────────────────
+create or replace function public.open_feed_usage_period(
+  p_business_id uuid, p_target_type text, p_target_id uuid, p_start date,
+  p_rule_type text default 'weight_share', p_rule_value numeric default null,
+  p_notes text default null, p_idempotency_key text default null
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid; v_sum numeric; r record;
+begin
+  if not public.feed_can_write_business(p_business_id) then
+    raise exception 'Not allowed for this business' using errcode = '42501';
+  end if;
+  if p_idempotency_key is not null then
+    select id into v_id from public.feed_usage_periods where idempotency_key = p_idempotency_key;
+    if found then return v_id; end if;
+  end if;
+  if p_start is null or p_start > public.feed_today() then
+    raise exception 'Start date must be today or earlier' using errcode = 'check_violation';
+  end if;
+
+  if p_target_type = 'item' then
+    if not exists (select 1 from public.inventory_items where id = p_target_id and business_id = p_business_id and deleted_at is null) then
+      raise exception 'Feed item not found' using errcode = '42501';
+    end if;
+    perform public.feed_assert_no_overlap(p_target_id, p_start, null, null);
+    insert into public.feed_usage_periods (business_id, target_type, item_id, start_date, rule_type, rule_value, notes, idempotency_key)
+    values (p_business_id, 'item', p_target_id, p_start, p_rule_type, p_rule_value, p_notes, p_idempotency_key)
+    returning id into v_id;
+    insert into public.feed_usage_period_lines (period_id, item_id, share) values (v_id, p_target_id, 1);
+  elsif p_target_type = 'recipe' then
+    if not exists (select 1 from public.feed_recipes where id = p_target_id and business_id = p_business_id and deleted_at is null) then
+      raise exception 'Recipe not found' using errcode = '42501';
+    end if;
+    select sum(qty_per_batch) into v_sum from public.recipe_ingredients where recipe_id = p_target_id;
+    if coalesce(v_sum, 0) <= 0 then raise exception 'Recipe has no ingredients' using errcode = 'check_violation'; end if;
+    insert into public.feed_usage_periods (business_id, target_type, recipe_id, start_date, rule_type, rule_value, notes, idempotency_key)
+    values (p_business_id, 'recipe', p_target_id, p_start, p_rule_type, p_rule_value, p_notes, p_idempotency_key)
+    returning id into v_id;
+    for r in select item_id, sum(qty_per_batch) as q from public.recipe_ingredients where recipe_id = p_target_id group by item_id loop
+      perform public.feed_assert_no_overlap(r.item_id, p_start, null, v_id);
+      insert into public.feed_usage_period_lines (period_id, item_id, share) values (v_id, r.item_id, round(r.q / v_sum, 6));
+    end loop;
+  else
+    raise exception 'Unknown target type %', p_target_type using errcode = 'check_violation';
+  end if;
+
+  insert into public.feed_usage_period_events (period_id, action, detail)
+  values (v_id, 'open', jsonb_build_object('start_date', p_start, 'rule_type', p_rule_type, 'rule_value', p_rule_value));
+  return v_id;
+end $$;
+
+-- Close (first time) or correct (already closed: needs a reason). p_closing = [{"item_id":…, "qty":…}]
+create or replace function public.close_feed_usage_period(
+  p_period_id uuid, p_end_date date, p_closing jsonb, p_reason text default null
+) returns text language plpgsql security definer set search_path = public as $$
+declare p record; l record; v_qty numeric; v_status text; v_action text;
+begin
+  select * into p from public.feed_usage_periods where id = p_period_id for update;
+  if not found then raise exception 'Usage period not found' using errcode = 'P0002'; end if;
+  if not public.feed_can_write_business(p.business_id) then
+    raise exception 'Not allowed for this business' using errcode = '42501';
+  end if;
+  if p.status = 'cancelled' then raise exception 'This period was cancelled' using errcode = 'check_violation'; end if;
+  if p_end_date is null or p_end_date < p.start_date then
+    raise exception 'End date must be on or after the start date (%)', p.start_date using errcode = 'check_violation';
+  end if;
+  if p_end_date > public.feed_today() then
+    raise exception 'End date cannot be in the future' using errcode = 'check_violation';
+  end if;
+  v_action := case when p.status = 'open' then 'close' else 'correct' end;
+  if v_action = 'correct' and coalesce(btrim(p_reason), '') = '' then
+    raise exception 'A reason is required to correct a closed period' using errcode = 'check_violation';
+  end if;
+
+  for l in select * from public.feed_usage_period_lines where period_id = p_period_id loop
+    perform public.feed_assert_no_overlap(l.item_id, p.start_date, p_end_date, p_period_id);
+    select (e->>'qty')::numeric into v_qty
+    from jsonb_array_elements(coalesce(p_closing, '[]'::jsonb)) e where (e->>'item_id')::uuid = l.item_id;
+    if v_qty is null or v_qty < 0 then
+      raise exception 'Enter the remaining quantity (0 if finished) for every item of the period' using errcode = 'check_violation';
+    end if;
+    update public.feed_usage_period_lines set closing_qty = v_qty where id = l.id;
+  end loop;
+
+  update public.feed_usage_periods
+  set end_date = p_end_date, status = 'closed', closed_at = coalesce(closed_at, now()), closed_by = coalesce(closed_by, auth.uid())
+  where id = p_period_id;
+
+  insert into public.feed_usage_period_events (period_id, action, detail)
+  values (p_period_id, v_action, jsonb_build_object('end_date', p_end_date, 'closing', p_closing, 'reason', p_reason,
+                                                     'previous_end_date', p.end_date));
+
+  v_status := public.reconcile_feed_usage_period(p_period_id);
+  -- later closed periods of the same items depend on this one's posting
+  for l in select item_id from public.feed_usage_period_lines where period_id = p_period_id loop
+    perform public.reconcile_feed_usage_from(l.item_id, p_end_date + 1);
+  end loop;
+  select status into v_status from public.feed_usage_periods where id = p_period_id;
+  return v_status;
+end $$;
+
+-- Cancel an OPEN period started by mistake (nothing was posted; kept for audit)
+create or replace function public.cancel_feed_usage_period(p_period_id uuid, p_reason text)
+returns void language plpgsql security definer set search_path = public as $$
+declare p record;
+begin
+  select * into p from public.feed_usage_periods where id = p_period_id for update;
+  if not found then raise exception 'Usage period not found' using errcode = 'P0002'; end if;
+  if not public.feed_can_write_business(p.business_id) then raise exception 'Not allowed' using errcode = '42501'; end if;
+  if p.status <> 'open' then raise exception 'Only an open period can be cancelled; correct a closed one instead' using errcode = 'check_violation'; end if;
+  if coalesce(btrim(p_reason), '') = '' then raise exception 'A reason is required' using errcode = 'check_violation'; end if;
+  update public.feed_usage_periods set status = 'cancelled' where id = p_period_id;
+  insert into public.feed_usage_period_events (period_id, action, detail) values (p_period_id, 'cancel', jsonb_build_object('reason', p_reason));
+end $$;
+
+revoke all on function public.open_feed_usage_period(uuid, text, uuid, date, text, numeric, text, text) from public, anon;
+revoke all on function public.close_feed_usage_period(uuid, date, jsonb, text) from public, anon;
+revoke all on function public.cancel_feed_usage_period(uuid, text) from public, anon;
+revoke all on function public.reconcile_feed_usage_period(uuid) from public, anon, authenticated;
+revoke all on function public.reconcile_feed_usage_from(uuid, date) from public, anon, authenticated;
+grant execute on function public.open_feed_usage_period(uuid, text, uuid, date, text, numeric, text, text) to authenticated, service_role;
+grant execute on function public.close_feed_usage_period(uuid, date, jsonb, text) to authenticated, service_role;
+grant execute on function public.cancel_feed_usage_period(uuid, text) to authenticated, service_role;
+
+-- ── 5. Read model ────────────────────────────────────────────────────────────
+create or replace view public.v_feed_usage_lines with (security_invoker = true) as
+select l.id as line_id, p.id as period_id, p.business_id, p.target_type, p.item_id as period_item_id, p.recipe_id,
+       p.start_date, p.end_date, p.status, p.rule_type, p.rule_value,
+       l.item_id, i.name as item_name, i.unit, i.category, i.kg_per_unit, l.share,
+       l.closing_qty, l.available_qty, l.consumed_qty, l.gap_qty, l.consumed_value, l.cost_missing,
+       (coalesce(p.end_date, public.feed_today()) - p.start_date + 1) as days,
+       case when p.end_date is not null and l.consumed_qty is not null
+            then round(l.consumed_qty / (p.end_date - p.start_date + 1), 4) end as actual_daily_qty
+from public.feed_usage_period_lines l
+join public.feed_usage_periods p on p.id = l.period_id
+join public.inventory_items i on i.id = l.item_id
+where p.status <> 'cancelled';
+
+-- (commit; removed)
+
+
+-- ===================== integrity check (docs/sql/feed_ledger_reconciliation.sql §7) =====================
+do $$
+declare a int; b int; c int; d int; e int;
+begin
+  select count(*) into a from public.inventory_transactions where movement_type is null;
+  select count(*) into b from public.inventory_transactions where qty <= 0;
+  select count(*) into c from public.inventory_transactions where (type = 'purchase') <>
+      (movement_type in ('purchase','opening_balance','own_production','feed_mix_output','adjustment_in','return','consumption_reversal'));
+  select count(*) into d from (select idempotency_key from public.inventory_transactions where idempotency_key is not null group by 1 having count(*) > 1) x;
+  select count(*) into e from public.feed_recipes r where r.is_active and abs(r.output_qty -
+      (select coalesce(sum(qty_per_batch),0) from public.recipe_ingredients x where x.recipe_id = r.id)) > 0.01;
+  if a + b + c + d + e > 0 then
+    raise exception 'integrity check failed (no meaning %, qty<=0 %, direction %, duplicate keys %, unbalanced recipes %) — nothing was changed', a, b, c, d, e;
+  end if;
+end $$;
+
+-- ===================== supabase/corrections/20260925_feed_historical_corrections.sql =====================
+-- ============================================================================
+-- Historical data corrections — batch 20260925-feed-corrections
+-- Sources: docs/PRODUCTION_FEED_RECONCILIATION.md (C1–C8) and the owner's answers of
+-- 2026-09-24 (C3, C6, C9, C11, C12). Requires migrations 20260925100000,
+-- 20260925110000 and 20260925120000.
+-- Rollback: supabase/rollback/20260925_feed_historical_corrections_down.sql
+--
+-- Principles:
+--   * No row is deleted. No existing non-NULL quantity or cost is changed.
+--   * A wrong stock movement is undone by an explicit consumption_reversal row that
+--     points at it (reverses_id) — the original stays as evidence.
+--   * Only corrections supported by the data or confirmed by the owner are applied.
+--   * Every change writes an audit row (inventory_ledger_audit / data_correction_audit).
+--   * Idempotent: re-running changes nothing.
+-- ============================================================================
+-- (begin; removed: one transaction for the whole release)
+
+-- ── C1: 2026-08-29 was auto-deducted twice (second run 1.6 s after the first) ─────
+-- The next physical true-up (2026-09-03) already reset stock to the count, so the
+-- duplicate only mis-dated consumption. Value-neutral re-dating: undo the duplicate on
+-- 08-29, record the same quantity/cost as consumption on 09-03.
+with dup as (
+  select t.*
+  from public.inventory_transactions t
+  where t.id in (
+    '7ef6393e-cadc-4929-b28e-5878d9b85ea7','fea4b43d-d44f-4b86-b706-72658a11210e',
+    '72bc7dc0-df3d-403e-a852-85430aca42fd','b2483cfe-63fc-43f1-8f0d-7b25b9c35ca5',
+    '00f3b999-cf35-4051-80a0-bbe1f2fbb94c','bd1a6944-c0ca-4f9d-b745-af8f1a9803b0',
+    '5ba57090-85f2-4406-baaf-9a6bcce044f6')
+    and t.recorded_at = '2026-08-29'
+    and t.notes ilike 'Auto-Feed Deduction%'
+),
+rev as (
+  insert into public.inventory_transactions
+    (item_id, type, movement_type, qty, unit_cost, cost_source, recorded_at, notes, idempotency_key, reverses_id)
+  select item_id, 'purchase', 'consumption_reversal', qty, unit_cost, 'correction', recorded_at,
+         'Correction C1: reversal of duplicate auto-deduction ' || id, 'correction:C1:reversal:' || id, id
+  from dup
+  where not exists (select 1 from public.inventory_transactions x where x.idempotency_key = 'correction:C1:reversal:' || dup.id)
+  returning id, reverses_id
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason, evidence)
+select id, 'insert_correction', '20260925-feed-corrections', 'reverses_id', null, reverses_id::text,
+       'C1: duplicate 2026-08-29 deduction reversed (value-neutral re-dating)',
+       'PRODUCTION_FEED_RECONCILIATION.md §2: duplicate rows created 07:28:11.2 on 2026-08-31, 1.6 s after the first run'
+from rev;
+
+with dup as (
+  select t.* from public.inventory_transactions t
+  where t.id in (select reverses_id from public.inventory_transactions where idempotency_key like 'correction:C1:reversal:%')
+),
+top as (
+  insert into public.inventory_transactions
+    (item_id, type, movement_type, qty, unit_cost, cost_source, is_estimate, recorded_at, notes, idempotency_key)
+  select item_id, 'consumption', 'consumption', qty, unit_cost, 'manual', true, date '2026-09-03',
+         'Correction C1: consumption re-dated from 2026-08-29 to 2026-09-03 (' || id || ')',
+         'correction:C1:redate:' || id
+  from dup
+  where not exists (select 1 from public.inventory_transactions x where x.idempotency_key = 'correction:C1:redate:' || dup.id)
+  returning id, notes
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason, evidence)
+select id, 'insert_correction', '20260925-feed-corrections', 'recorded_at', '2026-08-29', '2026-09-03',
+       'C1: duplicate quantity attributed to the 2026-09-03 physical true-up', notes
+from top;
+
+-- ── C9: 30 rows written by the removed auto-engine on 2026-09-24 ──────────────────
+-- Created 09:27:17–09:27:30 UTC by one page view (local dev server → production), for
+-- 2026-09-20…24, the last day before it had ended. Formula quantities, not a recording
+-- of feeding, and not covered by any physical count. Undone so those days show as NOT
+-- RECORDED; the owner records the real feeding or a stock count instead.
+with gen as (
+  select t.* from public.inventory_transactions t
+  where t.id in (
+    'b46de69e-29ba-4408-b0d0-971b5d0c81c8','7b984014-160f-4c9f-bce3-120019895a66','b602d81a-9869-4fb8-9cbe-643123430ccc',
+    'd9559234-f1da-4816-a6e5-4ddc62d6ee28','22d333b7-c17d-426b-a71b-841f5c1255a3','8d8b7836-61b3-4cb9-852c-114b9612fd0a',
+    '3f401fff-e7dd-4385-873e-565c19dd36d7','afe245a1-7233-48e0-bd75-3f002a89a507','a0b3483c-3fff-4df9-b8e2-e1237c63cec2',
+    '3bd264f5-e96d-475f-8597-11fd5b06f8fc','69ba9566-7f7b-4c4f-9ac7-52cc49051636','408be284-87df-4e0b-a1a5-f9441396334a',
+    '52573292-99e2-4fd8-a9c3-bc2ce92aca6b','0375b9c2-b19d-445c-8f2f-f769beea5e5e','13790fd4-27d4-4307-9035-611c8d7c33dc',
+    '7060a61d-b7bb-4cf3-8418-6c4f9dc72a82','5e4d7aac-9c3f-4b95-924e-52dedd91978c','c8b94084-04cd-4b66-81d7-3bdc5990dc35',
+    '1e452e94-f955-4333-bcd1-047d1c850c4e','14239675-3611-4ffd-abac-68dc1551c8c5','269ee349-617c-41cd-bef8-30d52e8783cc',
+    '0b046354-9139-4f33-918c-d15a995f1386','13e4eeff-4917-4337-a6c7-1aeb9d0665e1','6991d401-e660-41a6-8ac2-417946b6f5f9',
+    'f6ee02cd-5d18-42e2-bc77-7c87f38020d5','1647c528-7561-4680-9135-85f6e1a73fdf','70d6c58b-0504-4b27-9ba2-839fed69a13b',
+    'f172be27-142e-4768-9c6a-9adf26a2439d','4f715d8d-5899-4b09-aaab-8cb2c5b3abee','cfe01e98-a1df-4075-a1e8-e73ffc813f5f')
+    and t.notes ilike 'Auto-Feed Deduction%'
+    and t.created_at >= '2026-09-24 09:27:00+00' and t.created_at < '2026-09-24 09:28:00+00'
+),
+rev as (
+  insert into public.inventory_transactions
+    (item_id, type, movement_type, qty, unit_cost, cost_source, recorded_at, notes, idempotency_key, reverses_id)
+  select item_id, 'purchase', 'consumption_reversal', qty, unit_cost, 'correction', recorded_at,
+         'Correction C9: undo automatic deduction created by a page view on 2026-09-24 (' || id || ')',
+         'correction:C9:reversal:' || id, id
+  from gen
+  where not exists (select 1 from public.inventory_transactions x where x.idempotency_key = 'correction:C9:reversal:' || gen.id)
+  returning id, reverses_id
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason, evidence)
+select id, 'insert_correction', '20260925-feed-corrections', 'reverses_id', null, reverses_id::text,
+       'C9: formula deduction generated by the removed auto-engine on a page view — not recorded feeding',
+       'FEED_COSTING_IMPLEMENTATION_REPORT.md §8: 30 rows created 2026-09-24 09:27:17–09:27:30 UTC for 09-20…09-24'
+from rev;
+
+-- ── C4 + C5: fill MISSING (NULL) costs, only for quantity that was actually received ──
+-- WAC as of the row date, applied to the part of the row covered by stock received up to
+-- that date. Uncovered quantity keeps no cost (handled by C11 for Mix Feed).
+with outs as (
+  select t.id, t.item_id, t.recorded_at, t.qty, t.unit_cost, t.cost_source,
+         coalesce(sum(t.qty) over (partition by t.item_id order by t.recorded_at, t.created_at, t.id
+                                   rows between unbounded preceding and 1 preceding), 0) as out_before
+  from public.inventory_transactions t
+  where t.type = 'consumption'
+),
+cand as (
+  select o.*,
+         (select coalesce(sum(i.qty), 0) from public.inventory_transactions i
+          where i.item_id = o.item_id and i.type = 'purchase' and i.movement_type <> 'consumption_reversal'
+            and i.recorded_at <= o.recorded_at) as in_to_date,
+         public.inventory_unit_cost_as_of(o.item_id, o.recorded_at) as wac
+  from outs o
+  where o.cost_source = 'missing' and o.unit_cost is null
+),
+fill as (
+  select id, item_id, qty, wac,
+         least(qty, greatest(0, in_to_date - out_before)) as covered
+  from cand
+  where wac is not null
+),
+upd as (
+  update public.inventory_transactions t
+  set unit_cost = round(f.wac * f.covered / f.qty, 6), cost_source = 'correction'
+  from fill f
+  where t.id = f.id and f.covered > 0 and t.cost_source = 'missing' and t.unit_cost is null
+  returning t.id, t.unit_cost, f.covered, f.qty, f.wac
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason, evidence)
+select id, 'fill_missing_cost', '20260925-feed-corrections', 'unit_cost', null, unit_cost::text,
+       'C4/C5: missing cost filled at weighted-average cost as of the row date',
+       'covered ' || covered || ' of ' || qty || ' @ WAC ' || wac
+from upd;
+
+-- ── C11: Mix Feed deducted 34.38 kg more than was ever in stock ───────────────────
+-- The only Mix Feed stock-in is the external purchase of 122 kg @ ৳45 on 2026-06-01
+-- (an ordinary purchase row — correct as it is). The owner confirmed (2026-09-24) that
+-- all Mix Feed came from that purchase and none was mixed. The old engine kept deducting
+-- by formula until 2026-06-16 (156.38 kg). Quantity beyond the 122 kg cannot have been fed,
+-- so exactly that excess is undone; the excess carries no value (it never existed).
+with rows as (
+  select t.id, t.item_id, t.qty, t.recorded_at, t.unit_cost, t.cost_source,
+         sum(t.qty) over (order by t.recorded_at, t.created_at, t.id) as out_through,
+         (select coalesce(sum(i.qty), 0) from public.inventory_transactions i
+          where i.item_id = t.item_id and i.type = 'purchase' and i.movement_type <> 'consumption_reversal') as in_total
+  from public.inventory_transactions t
+  where t.item_id = '76817533-320a-4781-a74c-75a1e7aee509' and t.type = 'consumption'
+),
+excess as (
+  select *, round(least(qty, greatest(0, out_through - in_total)), 4) as ex from rows
+),
+rev as (
+  insert into public.inventory_transactions
+    (item_id, type, movement_type, qty, unit_cost, cost_source, recorded_at, notes, idempotency_key, reverses_id)
+  select item_id, 'purchase', 'consumption_reversal', ex, 0, 'correction', recorded_at,
+         'Correction C11: undo ' || ex || ' kg deducted beyond the Mix Feed ever in stock (' || id || ')',
+         'correction:C11:reversal:' || id, id
+  from excess
+  where ex > 0
+    and not exists (select 1 from public.inventory_transactions x where x.idempotency_key = 'correction:C11:reversal:' || excess.id)
+  returning id, reverses_id, qty
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason, evidence)
+select id, 'insert_correction', '20260925-feed-corrections', 'reverses_id', null, reverses_id::text,
+       'C11: quantity deducted beyond total Mix Feed received (owner: all Mix Feed came from the 122 kg purchase)',
+       qty || ' kg undone'
+from rev;
+
+-- rows that were entirely beyond stock never had a value: 0, not "missing"
+with phantom as (
+  update public.inventory_transactions t set unit_cost = 0, cost_source = 'correction'
+  where t.item_id = '76817533-320a-4781-a74c-75a1e7aee509' and t.type = 'consumption'
+    and t.unit_cost is null and t.cost_source = 'missing'
+    and exists (select 1 from public.inventory_transactions r
+                where r.reverses_id = t.id and r.movement_type = 'consumption_reversal' and r.qty = t.qty)
+  returning t.id
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason)
+select id, 'fill_missing_cost', '20260925-feed-corrections', 'unit_cost', null, '0',
+       'C11: row fully undone — the quantity never existed, so it has no value'
+from phantom;
+
+-- ── C3: 50 kg কুড়া at ৳0 on 2026-08-25 — owner confirmed it was received free ─────
+with z as (
+  update public.inventory_transactions t set cost_source = 'zero_confirmed'
+  where t.id = '3afda62b-3120-450e-b856-61026a139b74' and t.unit_cost = 0 and t.cost_source = 'zero_unconfirmed'
+  returning t.id
+)
+insert into public.inventory_ledger_audit (transaction_id, action, correction_batch, field, old_value, new_value, reason, evidence)
+select id, 'classify', '20260925-feed-corrections', 'cost_source', 'zero_unconfirmed', 'zero_confirmed',
+       'C3: owner confirmed on 2026-09-24 that the 50 kg bran was received free (৳0, no cash)',
+       'Invoice memo, supplier Bashundia Mor, 2026-08-25'
+from z;
+
+-- ── C6: WiFi bill recorded under "feed" → Utilities › WiFi / Internet ──────────────
+with cat as (
+  select c.id from public.expense_categories c
+  where c.business_id = 'dcf3e774-ae39-4c7e-be80-ae8d2ad71d39' and c.kind = 'utility' and c.name = 'WiFi / Internet'
+),
+upd as (
+  update public.cost_entries e set category = 'utilities', category_id = (select id from cat)
+  where e.id = '17a72421-538f-44ac-a78a-50d97647b57d' and e.category = 'feed' and exists (select 1 from cat)
+  returning e.id
+)
+insert into public.data_correction_audit (correction_batch, table_name, row_id, field, old_value, new_value, reason, evidence)
+select '20260925-feed-corrections', 'cost_entries', id, 'category', 'feed', 'utilities / WiFi / Internet',
+       'C6: WiFi bill is a utility, not feed (owner confirmed 2026-09-24)', 'Wifi bill and Connection Charge, ৳1,050, 2026-06-21'
+from upd;
+
+-- ── C12: C005 / C006 initial weights were estimates (owner, 2026-09-24) ───────────
+-- The values stay on record (180 kg / 250 kg), labelled estimated; the 2026-09-14
+-- scale weights (200 kg / 210 kg) are the measurements. No weight is changed.
+with upd as (
+  update public.cattle c set initial_weight_type = 'estimated'
+  where c.id in ('2cf7ef74-6198-4356-ad99-60127ab3d19d', 'a970c5b1-0946-4182-8b0f-513e66f49ed7')
+    and c.initial_weight_type <> 'estimated'
+  returning c.id, c.tag_id, c.initial_weight_kg
+)
+insert into public.data_correction_audit (correction_batch, table_name, row_id, field, old_value, new_value, reason, evidence)
+select '20260925-feed-corrections', 'cattle', id, 'initial_weight_type', 'unknown', 'estimated',
+       'C12: initial weight was entered without weighing (owner confirmed 2026-09-24)',
+       tag_id || ': ' || initial_weight_kg || ' kg estimated at purchase; measured weight recorded 2026-09-14'
+from upd;
+
+-- (commit; removed)
+
+-- Not applied here (by design):
+--   C2  opening stock → reclassified as opening_balance by the ledger migration (audited there).
+--   C7/C8 per-animal and accounting figures are computed, not stored — fixed by the code change.
+--   The 15 days with no recorded feeding stay NOT RECORDED (never back-filled).
+--   Straw physical count (owner: ≈128 pieces; ledger: 240) — record a stock count in the app.
+
+
+-- ===================== record the migrations as applied =====================
+do $$
+declare v text[] := array['20260925090000','20260925100000','20260925110000','20260925120000','20260925130000'];
+        n text[] := array['baseline_drift_columns','feed_inventory_ledger','expense_categories','weight_types','feed_usage_periods'];
+        has_name boolean; i int;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is null then return; end if;
+  select exists (select 1 from information_schema.columns where table_schema = 'supabase_migrations'
+                 and table_name = 'schema_migrations' and column_name = 'name') into has_name;
+  for i in 1 .. array_length(v, 1) loop
+    if has_name then
+      execute 'insert into supabase_migrations.schema_migrations (version, name) values ($1, $2) on conflict do nothing' using v[i], n[i];
+    else
+      execute 'insert into supabase_migrations.schema_migrations (version) values ($1) on conflict do nothing' using v[i];
+    end if;
+  end loop;
+end $$;
+
+commit;
+
+-- ===================== summary (read-only) =====================
+select
+  (select count(*) from public.inventory_transactions) as ledger_rows,
+  (select round(sum(value_on_hand), 2) from public.v_inventory_balance) as stock_value,
+  (select count(*) from public.inventory_ledger_audit) as audit_rows,
+  'release applied' as status;

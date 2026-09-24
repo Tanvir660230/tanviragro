@@ -151,7 +151,6 @@ export function EnterpriseNutritionWorkspace({
         feederOperator,
         feedItemId: chosenFeed.id,
         feedItemName: chosenFeed.name,
-        unitCostBdt: chosenFeed.costPerKgAsFed,
         cattleAllocations,
       };
 

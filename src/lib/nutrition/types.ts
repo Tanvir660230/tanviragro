@@ -20,9 +20,14 @@ export interface FeedNutrientProfile {
   meMcalKgDm?: number;      // Metabolizable energy Mcal/kg DM
   caPercentDm?: number;     // Calcium %
   pPercentDm?: number;      // Phosphorus %
-  costPerKgAsFed: number;   // Unit cost (BDT / kg as-fed)
+  /** weighted-average BDT per kg as fed; null = no known price (shown as "No data", never guessed) */
+  costPerKgAsFed: number | null;
+  /** signed stock on hand in kg (negative = stock-in missing) */
   currentStockKg: number;
-  lowStockThresholdKg: number;
+  /** null = no alert threshold set */
+  lowStockThresholdKg: number | null;
+  /** "reference" = typical values for the category, not measured for this feed */
+  nutrientSource?: "reference" | "measured";
   batchNumber?: string;
   expiryDate?: string | null;
   supplierName?: string;

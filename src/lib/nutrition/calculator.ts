@@ -89,7 +89,8 @@ export function evaluateRationCompliance(
     const dmKg = asFed * ing.dmPercent;
     const cpGrams = dmKg * (ing.cpPercentDm / 100) * 1000;
     const tdnKg = dmKg * (ing.tdnPercentDm / 100);
-    const cost = asFed * ing.costPerKgAsFed;
+    // unknown price adds nothing here; callers see costPerKgAsFed === null and label it
+    const cost = asFed * (ing.costPerKgAsFed ?? 0);
 
     totalAsFedKg += asFed;
     totalDryMatterKg += dmKg;

@@ -55,6 +55,8 @@ interface CattleInfo {
   purchase_date: string;
   purchase_price: number;
   initial_weight_kg: number;
+  /** measured | estimated | unknown — an estimate is kept on record but never used for growth */
+  initial_weight_type?: string | null;
   target_weight_kg: number | null;
   expected_daily_gain_kg: number | null;
   notes: string | null;
@@ -250,6 +252,13 @@ function EditForm({
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
           />
+        <select id="edit-weight-type" name="initial_weight_type" defaultValue={cattle.initial_weight_type ?? "unknown"}
+          className="mt-1.5 w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+          aria-label="How was the initial weight obtained">
+          <option value="measured">Weighed (scale or tape)</option>
+          <option value="estimated">Estimated (not weighed)</option>
+          {cattle.initial_weight_type === "unknown" && <option value="unknown">Not specified</option>}
+        </select>
         </div>
       </div>
 

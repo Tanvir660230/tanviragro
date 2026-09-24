@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Link from "next/link";
 import { SellTodaySummary } from "@/components/finance/SellTodaySummary";
 import { FinanceHero, FinanceHeroSkeleton } from "@/components/finance/FinanceHero";
 import { createClient } from "@/lib/supabase/server";
@@ -18,12 +19,12 @@ import { LoanDashboard } from "@/components/finance/LoanDashboard";
 import type { LoanRow } from "@/components/finance/LoanDashboard";
 import { getCurrentBusiness } from "@/lib/supabase/get-business";
 import { buildWeightPredictions } from "@/lib/cattle-weight";
-import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { MarketPriceCard } from "@/components/finance/MarketPriceCard";
 import { EnterpriseLivestockFinancialWorkspace } from "@/components/finance/EnterpriseLivestockFinancialWorkspace";
 import { LivestockProfitabilityEngine } from "@/lib/financial";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 
 
 export const metadata: Metadata = { title: "Finance & P&L" };
@@ -147,7 +148,7 @@ export default async function FinancePage(props: {
           .from("inventory_transactions")
           .select("id, qty, unit_cost, recorded_at, notes, inventory_items!inner(name, category, unit, business_id)")
           .eq("inventory_items.business_id", businessId)
-          .eq("type", "purchase")
+          .eq("movement_type", "purchase")
           .not("unit_cost", "is", null)
           .order("recorded_at", { ascending: false })
       : Promise.resolve({ data: [] }),
@@ -187,16 +188,15 @@ export default async function FinancePage(props: {
     businessId
       ? supabase
           .from("inventory_transactions")
-          .select("item_id, unit_cost, inventory_items!inner(business_id)")
+          .select("item_id, qty, unit_cost, inventory_items!inner(business_id)")
           .eq("inventory_items.business_id", businessId)
           .eq("type", "purchase")
           .order("recorded_at", { ascending: false })
-          .limit(300)
       : Promise.resolve({ data: [] }),
     businessId
       ? supabase
           .from("inventory_items")
-          .select("id, name, unit, roughage_active_from, roughage_active_until")
+          .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
           .eq("business_id", businessId)
           .not("roughage_active_from", "is", null)
       : Promise.resolve({ data: [] }),
@@ -399,18 +399,6 @@ export default async function FinancePage(props: {
 
   const defaultMarketPricePerKg: number = (bizConfig as { unit_price_bdt?: number } | null)?.unit_price_bdt ?? 0;
   const defaultDailyGainKg: number = (bizConfig as { default_daily_gain_kg?: number } | null)?.default_daily_gain_kg ?? 0.6;
-  const bizDefaultRoughage = (bizConfig as { default_roughage_type?: string } | null)?.default_roughage_type ?? "straw";
-  const defaultRoughageDm = ROUGHAGE_TYPES.find(r => r.id === bizDefaultRoughage)?.dmPercent ?? 0.90;
-
-  const unitCostMap: Record<string, number> = {};
-  for (const p of ((recentPurchasesData ?? []) as any[])) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) {
-      unitCostMap[p.item_id] = p.unit_cost; // First one found is most recent
-    }
-  }
-  
-  const roughages = (roughagesData ?? []) as { id: string; roughage_active_from: string; roughage_active_until: string | null }[];
-  const recipes = (recipesData ?? []) as { active_from: string; active_until: string | null; recipe_ingredients: { item_id: string; qty_per_batch: number }[] }[];
 
   const weightPredictions = buildWeightPredictions(
     activeCattleList.map((c) => ({
@@ -422,58 +410,18 @@ export default async function FinancePage(props: {
     ((weightLogsData ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string }[])
       .map((l) => ({ cattle_id: l.cattle_id, weight_kg: l.weight_kg, recorded_at: l.recorded_at }))
   );
+  // Actual herd feeding allocated to each animal (see lib/inventory/herd-feed-share.ts)
+  const herdFeedShare = await getHerdFeedShareByCattle(supabase, businessId);
   const nowMs = new Date().getTime();
   // Apply Algorithmic Feed Cost fallback for any cattle without direct feed logs
   for (const c of activeCattleList) {
-    if ((feedCostByCattle[c.id] ?? 0) === 0) {
-      const startMs = new Date(c.purchase_date + "T00:00:00").getTime();
-      const daysInPen = Math.max(0, Math.floor((nowMs - startMs) / 86400000));
-      const latestWeight = weightPredictions[c.id]?.predictedWeight ?? c.initial_weight_kg;
-      
-      const { allocatedFeedCost } = calculateAlgorithmicFeedCost({
-        daysInPen,
-        startMs,
-        recipes,
-        roughages,
-        unitCostMap,
-        feedData: {
-          initialWeightKg: c.initial_weight_kg ?? 0,
-          latestLoggedWeightKg: latestWeight,
-          lastWeighedAt: null,
-          purchaseDate: c.purchase_date ?? "",
-          expectedDailyGainKg: defaultDailyGainKg,
-          roughageDmPercent: defaultRoughageDm,
-        },
-        overrideRoughage: null,
-      });
-      feedCostByCattle[c.id] = allocatedFeedCost;
-    }
+    // Recorded herd feeding shared by head-days (actual), never a ration estimate
+    feedCostByCattle[c.id] = (feedCostByCattle[c.id] ?? 0) + (herdFeedShare[c.id] ?? 0);
   }
 
   for (const s of sales) {
-    if ((feedCostByCattle[s.cattle_id] ?? 0) === 0 && s.purchase_date) {
-      const startMs = new Date(s.purchase_date + "T00:00:00").getTime();
-      const daysInPen = Math.max(0, Math.floor((new Date(s.sold_at + "T00:00:00").getTime() - startMs) / 86400000));
-      const latestWeight = s.weight_at_sale_kg ?? s.initial_weight_kg;
-      
-      const { allocatedFeedCost } = calculateAlgorithmicFeedCost({
-        daysInPen,
-        startMs,
-        recipes,
-        roughages,
-        unitCostMap,
-        feedData: {
-          initialWeightKg: s.initial_weight_kg ?? 0,
-          latestLoggedWeightKg: latestWeight ?? null,
-          lastWeighedAt: s.sold_at,
-          purchaseDate: s.purchase_date,
-          expectedDailyGainKg: defaultDailyGainKg,
-          roughageDmPercent: defaultRoughageDm,
-        },
-        overrideRoughage: null,
-      });
-      feedCostByCattle[s.cattle_id] = allocatedFeedCost;
-    }
+    // Recorded herd feeding shared by head-days (actual), never a ration estimate
+    feedCostByCattle[s.cattle_id] = (feedCostByCattle[s.cattle_id] ?? 0) + (herdFeedShare[s.cattle_id] ?? 0);
   }
 
   const allTimeCattleCount = activeCattleList.length + sales.length + ((deadCattleData ?? []) as any[]).length;
@@ -557,6 +505,14 @@ export default async function FinancePage(props: {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Link
+          href="/dashboard/finance/utilities"
+          className="inline-flex h-8 items-center rounded-lg border border-border/70 bg-card px-3 text-xs font-medium hover:bg-muted"
+        >
+          Utility expenses (electricity, internet, gas…) →
+        </Link>
+      </div>
       {/* ── Enterprise Livestock Financial Workspace ── */}
       <EnterpriseLivestockFinancialWorkspace
         businessId={businessId ?? ""}

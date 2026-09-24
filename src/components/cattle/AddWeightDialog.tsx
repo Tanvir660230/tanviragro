@@ -145,6 +145,16 @@ function WeightForm({
         </button>
       </div>
 
+      {/* How was the weight obtained? Growth is computed from measured weights only. */}
+      <div className="space-y-1.5">
+        <Label htmlFor="wl_type">This weight is</Label>
+        <select id="wl_type" name="weight_type" defaultValue="measured"
+          className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm">
+          <option value="measured">Measured (scale or tape)</option>
+          <option value="estimated">Estimated (not weighed)</option>
+        </select>
+      </div>
+
       {/* Date */}
       <div className="space-y-1.5">
         <Label htmlFor="wl_date">Date *</Label>

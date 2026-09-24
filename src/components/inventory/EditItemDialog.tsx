@@ -27,6 +27,7 @@ import {
 } from "@/app/dashboard/(app)/inventory/actions";
 import { toast } from "sonner";
 import type { InventoryRow } from "./InventoryTable";
+import { KgPerUnitField } from "./ledger-fields";
 
 const CATEGORIES = [
   { value: "feed", label: "Feed" },
@@ -122,6 +123,8 @@ function EditItemForm({
           </datalist>
         </div>
       </div>
+
+      <KgPerUnitField unit={unit} defaultValue={item.kg_per_unit} idPrefix="edit" />
 
       <div className="space-y-1.5">
         <Label htmlFor="inv_threshold">Low Stock Alert Threshold</Label>

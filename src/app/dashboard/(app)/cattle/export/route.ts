@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
+import { measuredGrowth } from "@/lib/growth/baseline";
 
 export async function GET() {
   const supabase = await createClient();
@@ -19,13 +20,13 @@ export async function GET() {
     await Promise.all([
       supabase
         .from("cattle")
-        .select("id, tag_id, breed, gender, purchase_date, purchase_price, initial_weight_kg, status")
+        .select("id, tag_id, breed, gender, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, status")
         .eq("business_id", businessId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false }),
       supabase
         .from("weight_logs")
-        .select("cattle_id, weight_kg, recorded_at, cattle!inner(business_id)")
+        .select("cattle_id, weight_kg, recorded_at, weight_type, cattle!inner(business_id)")
         .is("deleted_at", null)
         .eq("cattle.business_id", businessId)
         .order("recorded_at", { ascending: false }),
@@ -45,10 +46,12 @@ export async function GET() {
         .in("item_id", feedItemIds)
     : { data: [] };
 
-  // Latest weight per cattle
+  // Latest MEASURED weight per cattle, and all logs for measured growth
   const latestWeightMap: Record<string, number> = {};
-  for (const log of (weightLogs ?? []) as { cattle_id: string; weight_kg: number }[]) {
-    if (!(log.cattle_id in latestWeightMap)) {
+  const logsByCattle: Record<string, { weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]> = {};
+  for (const log of (weightLogs ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]) {
+    (logsByCattle[log.cattle_id] ??= []).push(log);
+    if (log.weight_type !== "estimated" && !(log.cattle_id in latestWeightMap)) {
       latestWeightMap[log.cattle_id] = log.weight_kg;
     }
   }
@@ -69,6 +72,7 @@ export async function GET() {
     purchase_date: string;
     purchase_price: number;
     initial_weight_kg: number;
+    initial_weight_type: "measured" | "estimated" | "unknown";
     status: string;
   };
 
@@ -79,6 +83,7 @@ export async function GET() {
     "Purchase Date",
     "Purchase Price (৳)",
     "Initial Weight (kg)",
+    "Initial Weight Type",
     "Current Weight (kg)",
     "Weight Gain (kg)",
     "Days in Pen",
@@ -89,9 +94,11 @@ export async function GET() {
 
   const rows = (cattleData ?? []).map((c: CattleRow) => {
     const currentWeight = latestWeightMap[c.id] ?? c.initial_weight_kg;
-    const weightGain = currentWeight - c.initial_weight_kg;
+    // measured growth only; empty until the animal has two measurements
+    const growth = measuredGrowth(c, logsByCattle[c.id] ?? []);
+    const weightGain = growth ? growth.gainKg : null;
     const consumed = consumeMap[c.id] ?? 0;
-    const fcr = weightGain > 0 && consumed > 0 ? (consumed / weightGain).toFixed(2) : "";
+    const fcr = weightGain !== null && weightGain > 0 && consumed > 0 ? (consumed / weightGain).toFixed(2) : "";
     const daysInPen =
       c.status === "active"
         ? Math.floor((today - new Date(c.purchase_date).getTime()) / 86400000)
@@ -104,8 +111,9 @@ export async function GET() {
       c.purchase_date,
       c.purchase_price,
       c.initial_weight_kg,
-      currentWeight.toFixed(1),
-      weightGain.toFixed(1),
+      c.initial_weight_type,
+      Number(currentWeight).toFixed(1),
+      weightGain === null ? "" : weightGain.toFixed(1),
       daysInPen,
       consumed.toFixed(1),
       fcr,

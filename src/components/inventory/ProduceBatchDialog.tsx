@@ -15,7 +15,9 @@ import {
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { recipeIngredientTotal, scaleRecipe } from "@/lib/inventory/recipe-math";
 import { produceBatch, type ProduceBatchState } from "@/app/dashboard/(app)/inventory/recipe-actions";
+import { todayDhaka } from "@/lib/dates";
 
 type Recipe = {
   id: string;
@@ -39,11 +41,13 @@ function ProduceBatchForm({
   onSuccess: () => void;
 }) {
   const router = useRouter();
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
 
   const [recipeId, setRecipeId]     = useState("");
   const [qtyToProduce, setQty]      = useState("");
   const [outputItemId, setOutputId] = useState("");
+  // Fixed for this form instance (a new form per dialog open): a double submit is rejected by the database.
+  const [batchId] = useState(() => crypto.randomUUID());
 
   const [state, formAction, isPending] = useActionState<ProduceBatchState, FormData>(
     produceBatch, undefined
@@ -57,14 +61,15 @@ function ProduceBatchForm({
   }, [state?.success, onSuccess, router]);
 
   const selectedRecipe = recipes.find((r) => r.id === recipeId) ?? null;
-  const scale = selectedRecipe && parseFloat(qtyToProduce) > 0
-    ? parseFloat(qtyToProduce) / selectedRecipe.output_qty
-    : 0;
+  // Scale by the ingredient total (mass balance), never by the stored batch size.
+  const ingredientTotal = selectedRecipe ? recipeIngredientTotal(selectedRecipe.recipe_ingredients) : 0;
+  const target = parseFloat(qtyToProduce);
+  const scale = ingredientTotal > 0 && target > 0 ? target / ingredientTotal : 0;
 
   const ingredientChecks = useMemo(() => {
-    if (!selectedRecipe || scale <= 0) return [];
-    return selectedRecipe.recipe_ingredients.map((ing) => {
-      const need = ing.qty_per_batch * scale;
+    if (!selectedRecipe || !(target > 0)) return [];
+    return scaleRecipe(selectedRecipe.recipe_ingredients, target).map((ing) => {
+      const need = ing.qty;
       const item = allItems.find((i) => i.id === ing.item_id);
       const have = item?.stock ?? 0;
       return {
@@ -76,15 +81,16 @@ function ProduceBatchForm({
         ok: have >= need - 0.001,
       };
     });
-  }, [selectedRecipe, scale, allItems]);
+  }, [selectedRecipe, target, allItems]);
 
-  const canProduce = ingredientChecks.length > 0 && ingredientChecks.every((c) => c.ok);
+  const canProduce = ingredientChecks.length > 0 && ingredientChecks.every((c) => c.ok) && !!outputItemId;
 
   return (
     <form key={formKey} action={formAction} className="space-y-4 pt-1">
       <input type="hidden" name="recipe_id"     value={recipeId} />
       <input type="hidden" name="qty_to_produce" value={qtyToProduce} />
-      <input type="hidden" name="output_item_id" value={outputItemId === "skip" ? "" : outputItemId} />
+      <input type="hidden" name="output_item_id" value={outputItemId} />
+      <input type="hidden" name="batch_id" value={batchId} />
 
       {/* Recipe picker */}
       <div className="space-y-1.5">
@@ -169,13 +175,12 @@ function ProduceBatchForm({
 
       {/* Optional: credit output to a stock item */}
       <div className="space-y-1.5">
-        <Label>Add to Inventory Item (optional)</Label>
+        <Label>Mixed feed goes into *</Label>
         <Select value={outputItemId} onValueChange={(v) => setOutputId(v ?? "")}>
           <SelectTrigger>
-            <SelectValue placeholder="Skip — just deduct ingredients" />
+            <SelectValue placeholder="Choose the mixed-feed item…" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="skip">Skip — just deduct ingredients</SelectItem>
             {allItems
               .filter((i) => !selectedRecipe?.recipe_ingredients.some((ri) => ri.item_id === i.id))
               .map((i) => (
@@ -184,7 +189,7 @@ function ProduceBatchForm({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          The produced qty will be added as a purchase transaction for the selected item.
+          Added at the cost of its ingredients. Mixing is not a purchase and not a cash payment.
         </p>
       </div>
 

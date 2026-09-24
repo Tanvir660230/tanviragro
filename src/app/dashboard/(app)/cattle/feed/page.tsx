@@ -8,7 +8,8 @@ import {
   type WorkspaceCattleItem,
 } from "@/components/cattle/EnterpriseNutritionWorkspace";
 import type { FeedNutrientProfile, FeedCategory } from "@/lib/nutrition/nutrition-engine";
-import type { RoughageTypeId } from "@/utils/feed-calculator";
+import { ROUGHAGE_TYPES, type RoughageTypeId } from "@/utils/feed-calculator";
+import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 
 export const metadata: Metadata = {
   title: "Enterprise Feed & Nutrition Management",
@@ -107,7 +108,9 @@ async function FeedPlanningSection() {
     { data: bizData },
     { data: roughagesData },
     { data: recipesData },
-    { data: recentPurchases },
+    recentPurchases,
+    { data: feedItemRows },
+    { data: balanceRows },
   ] = await Promise.all([
     supabase
       .from("weight_logs")
@@ -123,7 +126,7 @@ async function FeedPlanningSection() {
       .maybeSingle(),
     supabase
       .from("inventory_items")
-      .select("id, name, unit, roughage_active_from, roughage_active_until")
+      .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
       .eq("business_id", businessId)
       .not("roughage_active_from", "is", null),
     supabase
@@ -131,13 +134,19 @@ async function FeedPlanningSection() {
       .select("id, active_from, active_until, recipe_ingredients(item_id, qty_per_batch)")
       .eq("business_id", businessId)
       .not("active_from", "is", null),
+    loadUnitCostMap(supabase, businessId),
     supabase
-      .from("inventory_transactions")
-      .select("item_id, unit_cost, inventory_items!inner(business_id)")
-      .eq("inventory_items.business_id", businessId)
-      .eq("type", "purchase")
-      .order("recorded_at", { ascending: false })
-      .limit(300),
+      .from("inventory_items")
+      .select("id, name, unit, category, kg_per_unit, low_stock_threshold")
+      .eq("business_id", businessId)
+      .in("category", ["feed", "roughage"])
+      .eq("is_discontinued", false)
+      .is("deleted_at", null)
+      .order("name", { ascending: true }),
+    supabase
+      .from("v_inventory_balance")
+      .select("item_id, qty_on_hand")
+      .eq("business_id", businessId),
   ]);
 
   // Build latest weight map
@@ -148,80 +157,38 @@ async function FeedPlanningSection() {
     }
   }
 
-  // Unit cost map (most recent purchase price per item)
-  const unitCostMap: Record<string, number> = {};
-  for (const p of (recentPurchases ?? []) as { item_id: string; unit_cost: number | null }[]) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) unitCostMap[p.item_id] = p.unit_cost;
-  }
-
-  // Active roughage (no active_until = currently active)
-  const roughages = (roughagesData ?? []) as { id: string; name: string; unit: string; roughage_active_from: string; roughage_active_until: string | null }[];
-  const activeRoughage = roughages.find((r) => !r.roughage_active_until) ?? roughages.at(-1) ?? null;
-  const roughageUnitCost = activeRoughage ? (unitCostMap[activeRoughage.id] ?? 0) : 0;
-
-  // Active recipe cost per kg of mix
-  type RecipeRow = { id: string; active_from: string; active_until: string | null; recipe_ingredients: { item_id: string; qty_per_batch: number }[] };
-  const recipes = (recipesData ?? []) as RecipeRow[];
-  const activeRecipe = recipes.find((r) => !r.active_until) ?? recipes.at(-1) ?? null;
-  let mixUnitCostPerKg = 0;
-  if (activeRecipe) {
-    let totalCost = 0, totalQty = 0;
-    for (const ing of activeRecipe.recipe_ingredients) {
-      totalQty += ing.qty_per_batch;
-      totalCost += ing.qty_per_batch * (unitCostMap[ing.item_id] ?? 0);
-    }
-    if (totalQty > 0) mixUnitCostPerKg = totalCost / totalQty;
-  }
-
+  // Weighted-average cost of IN rows with a known cost — never the latest purchase price (P-04)
+  const unitCostMap = recentPurchases;   // item_id → current unit cost (database)
   const defaultRoughageType = ((bizData as { default_roughage_type?: string } | null)?.default_roughage_type ?? "straw") as RoughageTypeId;
+  const roughageDm = ROUGHAGE_TYPES.find((r) => r.id === defaultRoughageType)?.dmPercent ?? 0.90;
 
-  // Build rich FeedNutrientProfiles
-  const inventoryItems: FeedNutrientProfile[] = [
-    {
-      id: "feed-mix-01",
-      name: "Standard Fattening Concentrate Mix",
-      category: "energy_concentrate",
-      dmPercent: 0.88,
-      cpPercentDm: 16.5,
-      tdnPercentDm: 75.0,
-      costPerKgAsFed: mixUnitCostPerKg > 0 ? mixUnitCostPerKg : 42.0,
-      currentStockKg: 850,
-      lowStockThresholdKg: 150,
-    },
-    {
-      id: "feed-straw-01",
-      name: activeRoughage?.name || "Khor / Rice Straw (খড়)",
-      category: "dry_roughage",
-      dmPercent: 0.90,
-      cpPercentDm: 4.2,
-      tdnPercentDm: 44.0,
-      costPerKgAsFed: roughageUnitCost > 0 ? roughageUnitCost : 8.5,
-      currentStockKg: 1200,
-      lowStockThresholdKg: 200,
-    },
-    {
-      id: "feed-protein-01",
-      name: "Mustard Oil Cake (সরিষার খৈল)",
-      category: "protein_concentrate",
-      dmPercent: 0.91,
-      cpPercentDm: 34.0,
-      tdnPercentDm: 78.0,
-      costPerKgAsFed: 48.0,
-      currentStockKg: 320,
-      lowStockThresholdKg: 100,
-    },
-    {
-      id: "feed-min-01",
-      name: "Livestock Mineral Pre-Mix (মিনারেল মিক্স)",
-      category: "mineral_supplement",
-      dmPercent: 0.95,
-      cpPercentDm: 0.0,
-      tdnPercentDm: 0.0,
-      costPerKgAsFed: 120.0,
-      currentStockKg: 45,
-      lowStockThresholdKg: 20,
-    },
-  ];
+  // Real inventory only: stock from the signed ledger balance, price = WAC (null = "No data").
+  // Feeding sessions dispense kilograms, so only items counted in kg are offered here;
+  // items counted in pieces (e.g. straw bundles) are recorded with "Record Feeding" in
+  // their own unit. Nutrient values are typical category values (no nutrient data is
+  // stored per item) and are labelled as such.
+  const stockByItem = new Map(
+    ((balanceRows ?? []) as { item_id: string; qty_on_hand: number | string }[]).map((b) => [b.item_id, Number(b.qty_on_hand)])
+  );
+  const inventoryItems: FeedNutrientProfile[] = ((feedItemRows ?? []) as {
+    id: string; name: string; unit: string; category: string; kg_per_unit: number | null; low_stock_threshold: number | null;
+  }[])
+    .filter((i) => i.unit.trim().toLowerCase() === "kg")
+    .map((i) => {
+      const isRoughage = i.category === "roughage";
+      return {
+        id: i.id,
+        name: i.name,
+        category: isRoughage ? "dry_roughage" : "energy_concentrate",
+        dmPercent: isRoughage ? roughageDm : 0.88,
+        cpPercentDm: isRoughage ? 4.2 : 16.5,
+        tdnPercentDm: isRoughage ? 44.0 : 75.0,
+        nutrientSource: "reference",
+        costPerKgAsFed: unitCostMap[i.id] ?? null,
+        currentStockKg: stockByItem.get(i.id) ?? 0,
+        lowStockThresholdKg: i.low_stock_threshold,
+      } satisfies FeedNutrientProfile;
+    });
 
   // Build WorkspaceCattleItem array
   const workspaceCattle: WorkspaceCattleItem[] = cattle.map((c) => {

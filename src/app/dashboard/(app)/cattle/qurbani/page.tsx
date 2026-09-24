@@ -32,12 +32,13 @@ function getNextEid(): Date {
 
 function linearADG(
   logs: { weight_kg: number; recorded_at: string }[],
-  initialWeight: number,
+  /** null when the purchase weight was only an estimate (then it is not a data point) */
+  initialWeight: number | null,
   purchaseDate: string
 ): number {
   const base = new Date(purchaseDate + "T00:00:00").getTime();
   const points = [
-    { x: 0, y: initialWeight },
+    ...(initialWeight !== null ? [{ x: 0, y: initialWeight }] : []),
     ...logs.map((l) => ({
       x: Math.max(0, Math.floor((new Date(l.recorded_at).getTime() - base) / 86400000)),
       y: l.weight_kg,
@@ -126,7 +127,7 @@ async function QurbaniBoardSection() {
   // Fetch all active qurbani-marked cattle
   const { data: rawCattle } = await supabase
     .from("cattle")
-    .select("id, tag_id, breed, gender, dob, purchase_date, initial_weight_kg, is_quarantined")
+    .select("id, tag_id, breed, gender, dob, purchase_date, initial_weight_kg, initial_weight_type, is_quarantined")
     .eq("business_id", businessId)
     .eq("status", "active")
     .eq("is_qurbani_marked", true)
@@ -140,7 +141,8 @@ async function QurbaniBoardSection() {
   const { data: rawLogs } = cattleIds.length
     ? await supabase
         .from("weight_logs")
-        .select("cattle_id, weight_kg, recorded_at")
+        .select("cattle_id, weight_kg, recorded_at, weight_type")
+        .eq("weight_type", "measured") // growth is fitted to measured weights only
         .in("cattle_id", cattleIds)
         .is("deleted_at", null)
         .order("recorded_at", { ascending: true })
@@ -156,7 +158,7 @@ async function QurbaniBoardSection() {
   const cattle: QurbaniCattle[] = cattleRows.map((c) => {
     const logs = logsByCattle[c.id] ?? [];
     const currentWt = logs.at(-1)?.weight_kg ?? (c.initial_weight_kg ?? 0);
-    const adg = linearADG(logs, c.initial_weight_kg ?? 0, c.purchase_date ?? "");
+    const adg = linearADG(logs, c.initial_weight_type === "estimated" ? null : (c.initial_weight_kg ?? 0), c.purchase_date ?? "");
     const projectedWt = Math.min(650, Math.max(0, currentWt + adg * daysToEid));
     const daysInPen = Math.max(
       0,

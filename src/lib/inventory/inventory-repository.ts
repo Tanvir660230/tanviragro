@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { StockLedgerEngine, type RawInventoryItemRow, type RawInventoryTxnRow } from "./stock-ledger";
 import { CostingEngine } from "./costing-engine";
 import type { ItemStockSummary, StockLedgerEntry, StockValuationBreakdown } from "./types";
+import { loadUnitCostMap } from "./unit-cost";
 
 /**
  * High-Performance Central Inventory Repository
@@ -24,14 +25,16 @@ export class CentralInventoryRepository {
         .order("name", { ascending: true }),
       supabase
         .from("inventory_transactions")
-        .select("id, item_id, type, qty, unit_cost, cattle_id, recorded_at, notes, created_at, inventory_items!inner(business_id)")
+        .select("id, item_id, type, movement_type, qty, unit_cost, cattle_id, recorded_at, notes, created_at, inventory_items!inner(business_id)")
         .eq("inventory_items.business_id", businessId)
         .order("recorded_at", { ascending: false }),
     ]);
 
     return StockLedgerEngine.compileInventoryPortfolio(
       (items ?? []) as RawInventoryItemRow[],
-      (txns ?? []) as RawInventoryTxnRow[]
+      (txns ?? []) as RawInventoryTxnRow[],
+      {},
+      await loadUnitCostMap(supabase, businessId)
     );
   }
 
@@ -52,7 +55,7 @@ export class CentralInventoryRepository {
         .maybeSingle(),
       supabase
         .from("inventory_transactions")
-        .select("id, item_id, type, qty, unit_cost, cattle_id, recorded_at, notes, created_at")
+        .select("id, item_id, type, movement_type, qty, unit_cost, cattle_id, recorded_at, notes, created_at")
         .eq("item_id", itemId)
         .order("recorded_at", { ascending: true }),
     ]);
@@ -109,7 +112,7 @@ export class CentralInventoryRepository {
         .from("inventory_transactions")
         .select("qty, unit_cost, recorded_at")
         .eq("item_id", itemId)
-        .eq("type", "purchase")
+        .eq("type", "purchase").neq("movement_type", "consumption_reversal") // an undo is not a new price
         .order("recorded_at", { ascending: true }),
       supabase
         .from("inventory_transactions")

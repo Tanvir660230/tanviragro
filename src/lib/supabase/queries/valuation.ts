@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildWeightPredictions } from "@/lib/cattle-weight";
-import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
+import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 
 type Client = SupabaseClient<any>;
 
@@ -46,8 +46,6 @@ export async function getLiveHerdValuation(
     .maybeSingle();
 
   const dailyGainKg: number = bizData?.default_daily_gain_kg ?? 0.6;
-  const bizDefaultRoughage = bizData?.default_roughage_type ?? "straw";
-  const defaultRoughageDm = ROUGHAGE_TYPES.find(r => r.id === bizDefaultRoughage)?.dmPercent ?? 0.90;
 
   // 2. Fetch Data in Parallel
   const [
@@ -92,14 +90,13 @@ export async function getLiveHerdValuation(
       .neq("entry_class", "asset"),
     supabase
       .from("inventory_transactions")
-      .select("item_id, unit_cost, inventory_items!inner(business_id)")
+      .select("item_id, qty, unit_cost, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", businessId)
       .eq("type", "purchase")
-      .order("recorded_at", { ascending: false })
-      .limit(300),
+      .order("recorded_at", { ascending: false }),
     supabase
       .from("inventory_items")
-      .select("id, name, unit, roughage_active_from, roughage_active_until")
+      .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
       .eq("business_id", businessId)
       .not("roughage_active_from", "is", null),
     supabase
@@ -150,16 +147,6 @@ export async function getLiveHerdValuation(
     }
   }
 
-  const unitCostMap: Record<string, number> = {};
-  for (const p of (recentPurchasesData ?? []) as any[]) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) {
-      unitCostMap[p.item_id] = p.unit_cost;
-    }
-  }
-
-  const roughages = (roughagesData ?? []) as any[];
-  const recipes = (recipesData ?? []) as any[];
-
   // 4. Predict Weights
   const weightPredictions = buildWeightPredictions(
     activeCattle.map((c) => ({
@@ -178,6 +165,8 @@ export async function getLiveHerdValuation(
   let totalEstimatedWeightKg = 0;
   const readyToSellCattle: LiveValuationResult["readyToSellCattle"] = [];
 
+  // Actual herd feeding allocated to each animal (see lib/inventory/herd-feed-share.ts)
+  const herdFeedShare = await getHerdFeedShareByCattle(supabase, businessId);
   for (const c of activeCattle) {
     const startMs = new Date(c.purchase_date + "T00:00:00").getTime();
     const daysInPen = Math.max(0, Math.floor((today.getTime() - startMs) / 86400000));
@@ -186,25 +175,8 @@ export async function getLiveHerdValuation(
     const estimatedWeight = pred?.predictedWeight ?? (c.initial_weight_kg + daysInPen * dailyGainKg);
 
     // Algorithmic Feed Cost Fallback
-    if ((feedCostByCattle[c.id] ?? 0) === 0) {
-      const { allocatedFeedCost } = calculateAlgorithmicFeedCost({
-        daysInPen,
-        startMs,
-        recipes,
-        roughages,
-        unitCostMap,
-        feedData: {
-          initialWeightKg: c.initial_weight_kg ?? 0,
-          latestLoggedWeightKg: estimatedWeight,
-          lastWeighedAt: null,
-          purchaseDate: c.purchase_date,
-          expectedDailyGainKg: dailyGainKg,
-          roughageDmPercent: defaultRoughageDm,
-        },
-        overrideRoughage: null,
-      });
-      feedCostByCattle[c.id] = allocatedFeedCost;
-    }
+    // Recorded herd feeding shared by head-days (actual), never a ration estimate
+    feedCostByCattle[c.id] = (feedCostByCattle[c.id] ?? 0) + (herdFeedShare[c.id] ?? 0);
 
     const estimatedMarketValue = marketPricePerKg > 0 ? estimatedWeight * marketPricePerKg : 0;
     const costBasis = Number(c.purchase_price) + (feedCostByCattle[c.id] ?? 0) + (costsByCattle[c.id] ?? 0);

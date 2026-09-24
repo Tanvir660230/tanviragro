@@ -26,7 +26,7 @@ import {
   LogOut, Trash2, Users, Building2, User, ShieldCheck,
   Wallet, Bell, Paintbrush, Heart, BadgeCheck, ChevronRight, Layers,
   Calendar, Wheat, Download, Languages, Settings2, Shield, Activity,
-  Database, CheckCircle2, HardDrive, Sparkles, ExternalLink, UserPlus
+  Database, CheckCircle2, HardDrive, Sparkles, ExternalLink, UserPlus, Zap
 } from "lucide-react";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
@@ -428,6 +428,25 @@ export default async function SettingsPage({
               </div>
               <div className="flex items-center gap-1 text-xs font-semibold text-primary mt-4 pt-3 border-t border-border/50">
                 <span>View Activity Log</span>
+                <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/finance/utilities"
+              className="flex flex-col justify-between rounded-2xl border border-border/70 bg-card p-5 hover:border-primary/50 hover:shadow-md transition-all group"
+            >
+              <div>
+                <div className="h-10 w-10 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 flex items-center justify-center text-sky-600 dark:text-sky-400 mb-3 group-hover:scale-105 transition-transform">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">Utility Categories &amp; Expenses</h4>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Add, rename or disable utilities (electricity, WiFi, gas, water, telephone) and record their bills.
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-xs font-semibold text-primary mt-4 pt-3 border-t border-border/50">
+                <span>Manage utilities</span>
                 <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </div>
             </Link>

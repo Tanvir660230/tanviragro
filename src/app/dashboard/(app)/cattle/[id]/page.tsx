@@ -40,6 +40,11 @@ import { RelatedRecordsPanel } from "@/components/cattle/RelatedRecordsPanel";
 import { StickyActionPanel } from "@/components/cattle/StickyActionPanel";
 import { TrackCattleView } from "@/components/cattle/TrackCattleView";
 import { HealthWorkspace } from "@/components/cattle/HealthWorkspace";
+import { measuredGrowth, measuredLogs, weightTypeLabel } from "@/lib/growth/baseline";
+import { animalFeedShares, type AnimalPresence } from "@/lib/inventory/feed-costing";
+import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
+import { loadFeedData } from "@/lib/feed/feed-data";
+import { dayList } from "@/lib/feed/usage-engine";
 
 
 type Props = { params: Promise<{ id: string }> };
@@ -61,7 +66,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 const STATUS_STYLE = CATTLE_STATUS_STYLE;
 
-type LogRow = Pick<WeightLog, "id" | "weight_kg" | "recorded_at" | "notes" | "girth_cm" | "length_cm">;
+type LogRow = Pick<WeightLog, "id" | "weight_kg" | "recorded_at" | "notes" | "girth_cm" | "length_cm" | "weight_type">;
 
 export type ConsumptionRow = {
   qty: number;
@@ -243,6 +248,7 @@ async function TimelineSection({ cattle, initialWeight, weights }: { cattle: Cat
       purchaseDate={cattle.purchase_date!}
       purchasePrice={Number(cattle.purchase_price)}
       initialWeight={initialWeight}
+      initialWeightType={cattle.initial_weight_type}
       weights={weights}
       healthEvents={(healthData ?? []) as HealthEvent[]}
       treatments={(treatmentsData ?? []) as CattleTreatment[]}
@@ -346,12 +352,12 @@ async function ProfileSection({ id }: { id: string }) {
     .maybeSingle();
   const bizDefaultRoughage = (bizSettingsData as { default_roughage_type?: string } | null)?.default_roughage_type ?? "straw";
 
-  // Pre-fetch feed item IDs so we can filter consumption transactions without a join
+  // Pre-fetch feed item IDs (concentrate AND roughage) so we can filter consumption without a join
   const { data: feedItemsData } = await supabase
     .from("inventory_items")
     .select("id, name, unit")
     .eq("business_id", businessId)
-    .eq("category", "feed");
+    .in("category", ["feed", "roughage"]);
   const feedItemIds = (feedItemsData ?? []).map(i => i.id);
   const feedItemMap: Record<string, { name: string; unit: string }> = {};
   for (const fi of feedItemsData ?? []) feedItemMap[fi.id] = { name: fi.name, unit: fi.unit };
@@ -366,11 +372,14 @@ async function ProfileSection({ id }: { id: string }) {
     { data: roughagesData },
     { data: recipesData },
     { data: latestSaleData },
+    { data: herdFeedData },
+    { data: presenceData },
+    { data: businessSalesData },
   ] = await Promise.all([
     supabase.from("cattle").select("*").eq("id", id).eq("business_id", businessId).maybeSingle(),
     supabase
       .from("weight_logs")
-      .select("id, weight_kg, recorded_at, notes, girth_cm, length_cm")
+      .select("id, weight_kg, recorded_at, notes, girth_cm, length_cm, weight_type")
       .eq("cattle_id", id)
       .is("deleted_at", null)
       .order("recorded_at", { ascending: true })
@@ -378,9 +387,10 @@ async function ProfileSection({ id }: { id: string }) {
     feedItemIds.length
       ? supabase
           .from("inventory_transactions")
-          .select("qty, unit_cost, recorded_at, notes, item_id")
+          .select("qty, unit_cost, recorded_at, notes, item_id, movement_type")
           .eq("cattle_id", id)
-          .eq("type", "consumption")
+          // feed eaten (and audited undos of it); not mixing inputs, wastage or count adjustments
+          .in("movement_type", ["consumption", "consumption_reversal"])
           .in("item_id", feedItemIds)
           .order("recorded_at", { ascending: true })
       : Promise.resolve({ data: [] as { qty: number; unit_cost: number | null; recorded_at: string; notes: string | null; item_id: string }[], error: null }),
@@ -408,7 +418,7 @@ async function ProfileSection({ id }: { id: string }) {
       .maybeSingle(),
     supabase
       .from("inventory_items")
-      .select("id, name, unit, roughage_active_from, roughage_active_until")
+      .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
       .eq("business_id", businessId)
       .not("roughage_active_from", "is", null),
     supabase
@@ -424,6 +434,26 @@ async function ProfileSection({ id }: { id: string }) {
       .order("sold_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Herd-level recorded feeding (no cattle_id): shared among animals present that day
+    feedItemIds.length
+      ? supabase
+          .from("inventory_transactions")
+          .select("qty, unit_cost, recorded_at, notes, item_id, cattle_id, is_estimate, movement_type")
+          .is("cattle_id", null)
+          .in("movement_type", ["consumption", "consumption_reversal"])
+          .in("item_id", feedItemIds)
+          .order("recorded_at", { ascending: true })
+      : Promise.resolve({ data: [] as { qty: number; unit_cost: number | null; recorded_at: string; notes: string | null; item_id: string; cattle_id: string | null; is_estimate: boolean }[], error: null }),
+    supabase
+      .from("cattle")
+      .select("id, purchase_date, status, updated_at")
+      .eq("business_id", businessId)
+      .is("deleted_at", null),
+    supabase
+      .from("sales")
+      .select("cattle_id, sold_at, cattle!inner(business_id)")
+      .eq("cattle.business_id", businessId)
+      .is("deleted_at", null),
   ]);
 
   if (!cattleData) notFound();
@@ -538,7 +568,7 @@ async function ProfileSection({ id }: { id: string }) {
   const individualCosts = (individualCostsData ?? []) as { amount: number; category: string; description: string | null; recorded_at: string }[];
   const otherIndividualCost = individualCosts.reduce((s, i) => s + Number(i.amount), 0);
 
-  const roughages = (roughagesData ?? []) as { id: string; name: string; unit: string; roughage_active_from: string; roughage_active_until: string | null }[];
+  const roughages = (roughagesData ?? []) as { id: string; name: string; unit: string; kg_per_unit: number | null; roughage_active_from: string; roughage_active_until: string | null }[];
   const recipes = (recipesData ?? []) as { id: string; active_from: string; active_until: string | null; recipe_ingredients: { item_id: string; qty_per_batch: number }[] }[];
   
   const currentRoughage = roughages.find(r => !r.roughage_active_until) || null;
@@ -548,54 +578,18 @@ async function ProfileSection({ id }: { id: string }) {
 
   // Algorithmic Feed Cost = sum of daily requirements * rough estimate of unit cost
   // Let's get a rough estimate of unit cost from recent purchase transactions.
-  const { data: recentPurchases } = await supabase
-    .from("inventory_transactions")
-    .select("item_id, unit_cost, inventory_items!inner(business_id)")
-    .eq("inventory_items.business_id", businessId)
-    .eq("type", "purchase")
-    .order("recorded_at", { ascending: false })
-    .limit(300);
-
-  const unitCostMap: Record<string, number> = {};
-  for (const p of (recentPurchases ?? [])) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) {
-      unitCostMap[p.item_id] = p.unit_cost; // First one found is most recent
-    }
-  }
+  // Current unit cost from the database (moving average of stock on hand) — never the latest price (P-04)
+  const unitCostMap = await loadUnitCostMap(supabase, businessId);
 
   // Calculate allocated cost over the days in pen
+  // ESTIMATE (ration plan × WAC). Shown for planning only — never added to actual cost.
   let allocatedFeedCost = 0;
   let allocatedConcentrateKg = 0;
   let allocatedRoughageKg = 0;
+  let estimateRoughageCostUnknown = false;
 
   if (daysInPen > 0 && startMs > 0) {
     const overrideRoughage = (c.manual_feed_override as { roughageKg?: number } | null)?.roughageKg ?? null;
-
-    function getCostsForDate(dateStr: string) {
-      let activeRecipe = recipes.find(r => r.active_from <= dateStr && (!r.active_until || r.active_until >= dateStr));
-      if (!activeRecipe && recipes.length > 0) {
-        activeRecipe = [...recipes].sort((a,b) => b.active_from.localeCompare(a.active_from)).find(r => r.active_from <= dateStr) || recipes[0];
-      }
-      
-      let mixFeedUnitCost = 0;
-      if (activeRecipe) {
-        let totalCost = 0;
-        let totalQty = 0;
-        for (const ing of activeRecipe.recipe_ingredients) {
-          totalQty += ing.qty_per_batch;
-          totalCost += ing.qty_per_batch * (unitCostMap[ing.item_id] || 0);
-        }
-        if (totalQty > 0) mixFeedUnitCost = totalCost / totalQty;
-      }
-
-      let activeRoughage = roughages.find(r => r.roughage_active_from <= dateStr && (!r.roughage_active_until || r.roughage_active_until >= dateStr));
-      if (!activeRoughage && roughages.length > 0) {
-         activeRoughage = [...roughages].sort((a,b) => b.roughage_active_from.localeCompare(a.roughage_active_from)).find(r => r.roughage_active_from <= dateStr) || roughages[0];
-      }
-      const roughageUnitCost = activeRoughage ? (unitCostMap[activeRoughage.id] || 0) : 0;
-
-      return { mixFeedUnitCost, roughageUnitCost };
-    }
 
     // logs is ordered ascending (oldest first) — take the last element for latest weight.
     const latestLog = logs[logs.length - 1];
@@ -610,7 +604,7 @@ async function ProfileSection({ id }: { id: string }) {
       roughageDmPercent: defaultRoughageDm,
     };
 
-    const { allocatedFeedCost: afc, allocatedConcentrateKg: ack, allocatedRoughageKg: ark } = calculateAlgorithmicFeedCost({
+    const { allocatedFeedCost: afc, allocatedConcentrateKg: ack, allocatedRoughageKg: ark, roughageCostUnknown: rcu } = calculateAlgorithmicFeedCost({
       daysInPen,
       startMs,
       recipes,
@@ -623,6 +617,7 @@ async function ProfileSection({ id }: { id: string }) {
     allocatedFeedCost = afc;
     allocatedConcentrateKg = ack;
     allocatedRoughageKg = ark;
+    estimateRoughageCostUnknown = rcu;
   }
 
   // Warn when allocated feed cost is zero despite having active feeds (missing purchase price data)
@@ -632,15 +627,52 @@ async function ProfileSection({ id }: { id: string }) {
     allocatedFeedCost === 0 &&
     Object.keys(unitCostMap).length === 0;
 
-  // Individual logged consumptions directly for this cow (if any).
-  const directFeedCost = consumptions
-    .filter((r) => r.unit_cost != null)
-    .reduce((s, r) => s + Number(r.qty) * Number(r.unit_cost!), 0);
+  // ── ACTUAL feed cost: recorded ledger consumption only ─────────────────────
+  // Rows logged for this animal count in full; herd rows are shared equally among the
+  // animals on the farm that day (head-day allocation). Each row keeps the cost the
+  // database gave it when it was recorded (WAC as of its date).
+  const saleDateById = new Map<string, string>();
+  for (const s of (businessSalesData ?? []) as { cattle_id: string; sold_at: string }[]) {
+    saleDateById.set(s.cattle_id, String(s.sold_at).slice(0, 10));
+  }
+  const presence: AnimalPresence[] = ((presenceData ?? []) as { id: string; purchase_date: string | null; status: string; updated_at: string | null }[])
+    .filter((a) => a.purchase_date)
+    .map((a) => ({
+      id: a.id,
+      from: String(a.purchase_date).slice(0, 10),
+      to: saleDateById.get(a.id) ?? (a.status === "active" ? null : a.updated_at ? String(a.updated_at).slice(0, 10) : null),
+    }));
+  type FeedRow = { qty: number; unit_cost: number | null; recorded_at: string; notes: string | null; item_id: string; cattle_id: string | null; is_estimate?: boolean; movement_type?: string };
+  // an audited reversal undoes (part of) a consumption row: count it as a negative quantity
+  const signed = (r: FeedRow): FeedRow => (r.movement_type === "consumption_reversal" ? { ...r, qty: -Number(r.qty) } : r);
+  const actualRows: FeedRow[] = [
+    ...((rawConsumptionData ?? []) as Omit<FeedRow, "cattle_id">[]).map((r) => signed({ ...r, cattle_id: id })),
+    ...((herdFeedData ?? []) as FeedRow[]).map(signed),
+  ];
+  const myShares = animalFeedShares(actualRows, presence, id);
+  // ── THE feed engine (lib/feed/usage-engine.ts): same numbers as the Feed Usage page ──
+  // Closed usage periods + recorded feeding, split per day by live weight and presence.
+  const feed = await loadFeedData(supabase, businessId);
+  const myFeed = feed.snapshot.perAnimal[id];
+  const actualFeedCost = myFeed?.actual ?? 0;
+  const runningFeedEstimate = myFeed?.estimated ?? 0;
+  const actualFeedRows: ConsumptionRow[] = Object.entries(myFeed?.actualValueByItem ?? {}).map(([itemId, value]) => {
+    const q = myFeed?.actualQtyByItem[itemId] ?? 0;
+    return { qty: q, unit_cost: q ? value / q : null, recorded_at: feed.asOf, notes: null, inventory_items: feedItemMap[itemId] ?? null };
+  });
+  const actualRowsMissingCost = myShares.filter(({ row }) => row.unit_cost == null && row.qty > 0).length;
+  // Rows written by the removed automatic engine: real stock movements, but their quantities
+  // came from the ration formula, not from a person recording the feeding.
+  const legacyEstimatedRows = myShares.filter(({ row }) => row.is_estimate && row.qty > 0).length;
 
-  // Use direct logs when available; fall back to algorithmic allocation otherwise.
-  // Mixing both would double-count: direct logs ARE the same feed that the allocation
-  // estimates from schedules — they measure the same physical feed from two angles.
-  const totalFeedCost = directFeedCost > 0 ? directFeedCost : allocatedFeedCost;
+  // Days in the pen that no usage period and no feeding record covers: NOT RECORDED, never guessed.
+  const penEnd = new Date(endMs).toISOString().slice(0, 10);
+  const me = feed.animals.find((a) => a.id === id);
+  const lastDay = me?.to && me.to < penEnd ? me.to : penEnd;
+  const feedDaysNotRecorded = me && me.from <= lastDay ? dayList(me.from, lastDay).filter((d) => !feed.coveredDays.has(d)).length : 0;
+
+  // Totals use ACTUAL recorded feed only. The estimate is displayed beside it, labelled.
+  const totalFeedCost = actualFeedCost;
 
   const overheadCost = 0;
   const totalCost = Number(c.purchase_price) + totalFeedCost + medicalCost + otherIndividualCost;
@@ -652,19 +684,19 @@ async function ProfileSection({ id }: { id: string }) {
   const sortedLogs = [...logs].sort(
     (a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
   );
-  const latestWeight = sortedLogs[0]?.weight_kg ?? (c.initial_weight_kg ?? 0);
-  const weightGain = parseFloat((latestWeight - (c.initial_weight_kg ?? 0)).toFixed(2));
+  // Current weight = latest MEASURED weight (an estimate is used only when nothing was weighed).
+  const measured = measuredLogs(logs);
+  const latestWeight = Number(measured.at(-1)?.weight_kg ?? sortedLogs[0]?.weight_kg ?? c.initial_weight_kg ?? 0);
+  // Growth between two measurements only — an estimated initial weight is never a baseline.
+  const growth = measuredGrowth(c, logs);
+  const weightGain = growth ? parseFloat(growth.gainKg.toFixed(2)) : 0;
   const breakEvenPerKg = latestWeight > 0 ? totalCost / latestWeight : null;
 
   // All-time ADG — use days from purchase to LAST WEIGH DATE (not today).
   // Using today inflates the denominator when the animal hasn't been weighed recently,
   // making ADG appear artificially lower than the measured growth rate.
-  const latestLogMs = logs.length > 0 ? new Date(sortedLogs[0].recorded_at).getTime() : nowMs;
-  const daysToLatestLog = Math.max(1, Math.floor((latestLogMs - startMs) / 86400000));
-  const adg =
-    logs.length > 0 && daysToLatestLog > 0
-      ? (latestWeight - (c.initial_weight_kg ?? 0)) / daysToLatestLog
-      : null;
+  const latestLogMs = measured.length > 0 ? new Date(measured[measured.length - 1].recorded_at).getTime() : nowMs;
+  const adg = growth ? growth.adg : null;
 
   // Extrapolate today's weight: cattle keep growing after the last weigh date.
   // Using only the last logged weight understates the sale estimate by (ADG × unweighed days).
@@ -772,6 +804,7 @@ async function ProfileSection({ id }: { id: string }) {
                 purchase_date: c.purchase_date ?? "",
                 purchase_price: c.purchase_price ?? 0,
                 initial_weight_kg: c.initial_weight_kg ?? 0,
+                initial_weight_type: c.initial_weight_type,
                 target_weight_kg: c.target_weight_kg ?? null,
                 expected_daily_gain_kg: c.expected_daily_gain_kg ?? null,
                 notes: c.notes,
@@ -855,7 +888,7 @@ async function ProfileSection({ id }: { id: string }) {
                 {latestWeight}
                 <span className="ml-1 text-lg font-normal text-muted-foreground">kg</span>
               </p>
-              {logs.length > 0 ? (
+              {growth ? (
                 <p
                   className={cn(
                     "mt-1.5 text-sm font-medium",
@@ -863,22 +896,31 @@ async function ProfileSection({ id }: { id: string }) {
                   )}
                 >
                   {weightGain >= 0 ? "+" : ""}
-                  {weightGain} kg from {c.initial_weight_kg} kg
+                  {weightGain} kg from {growth.baseline.weightKg} kg
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                    ({growth.baseline.source === "initial" ? "at purchase" : `first weighing, ${growth.baseline.date}`})
+                  </span>
                 </p>
               ) : (
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  {t.cattle_details.profile.initial_weight_purchase}
+                  {c.initial_weight_type === "estimated"
+                    ? "Growth is shown once the animal has been weighed twice."
+                    : t.cattle_details.profile.initial_weight_purchase}
                 </p>
               )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Initial {c.initial_weight_kg} kg · {weightTypeLabel(c.initial_weight_type)}
+                {c.initial_weight_type === "estimated" && " — a guess, not used for growth"}
+              </p>
             </div>
 
-            {weightGain > 0 && (c.initial_weight_kg ?? 0) > 0 && (
+            {growth && weightGain > 0 && (
               <div>
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{c.initial_weight_kg} kg</span>
+                  <span>{growth.baseline.weightKg} kg</span>
                   <span>
-                    {latestWeight} kg (+
-                    {((weightGain / c.initial_weight_kg!) * 100).toFixed(1)}%)
+                    {growth.latestKg} kg (+
+                    {((weightGain / growth.baseline.weightKg) * 100).toFixed(1)}%)
                   </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -886,7 +928,7 @@ async function ProfileSection({ id }: { id: string }) {
                     className="h-1.5 rounded-full bg-emerald-500 transition-all"
                     style={{
                       width: `${Math.min(
-                        (weightGain / c.initial_weight_kg!) * 300,
+                        (weightGain / growth.baseline.weightKg) * 300,
                         100
                       )}%`,
                     }}
@@ -945,11 +987,21 @@ async function ProfileSection({ id }: { id: string }) {
               </div>
               <div className="rounded-lg bg-muted/40 p-2.5 border border-border/50">
                 <p className="text-xs font-medium uppercase text-muted-foreground truncate">
-                  {t.cattle_details.profile.feed_cost}
+                  {t.cattle_details.profile.feed_cost} · Actual
                 </p>
                 <p className="mt-0.5 text-sm font-bold tabular-nums">
                   {totalFeedCost > 0
                     ? `৳${totalFeedCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
+                    : "No data"}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                  {runningFeedEstimate > 0 && (
+                    <span className="block text-amber-700 dark:text-amber-400">
+                      + running (feeds in use, not final): ৳{runningFeedEstimate.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    </span>
+                  )}
+                  Ration plan (reference): {allocatedFeedCost > 0
+                    ? `৳${allocatedFeedCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}${estimateRoughageCostUnknown ? " + roughage (counted per piece — see actual)" : ""}`
                     : "—"}
                 </p>
               </div>
@@ -1144,6 +1196,19 @@ async function ProfileSection({ id }: { id: string }) {
                 />
               </Suspense>
             )}
+            {(feedDaysNotRecorded > 0 || actualRowsMissingCost > 0 || legacyEstimatedRows > 0) && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
+                {feedDaysNotRecorded > 0 && (
+                  <p><strong>{feedDaysNotRecorded} day{feedDaysNotRecorded === 1 ? "" : "s"} NOT RECORDED</strong> — no feed usage period or feeding record covers these days, so the actual feed cost does not include them. They are not guessed. Start a feed on the Feed Usage page (a past start date is fine) to cover them.</p>
+                )}
+                {legacyEstimatedRows > 0 && (
+                  <p>{legacyEstimatedRows} of the feeding rows were created by the old automatic deduction (quantities from the ration formula, not weighed). They are stock movements, kept as recorded and flagged as estimates.</p>
+                )}
+                {actualRowsMissingCost > 0 && (
+                  <p>{actualRowsMissingCost} recorded feeding row{actualRowsMissingCost === 1 ? " has" : "s have"} no known cost (the item had no priced stock-in at the time). Not counted as ৳0.</p>
+                )}
+              </div>
+            )}
             {hasMissingFeedPrices && (
               <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
                 ⚠️ Feed cost cannot be calculated — no purchase price found for your active feed. Add a purchase transaction in Inventory to enable cost tracking.
@@ -1152,11 +1217,11 @@ async function ProfileSection({ id }: { id: string }) {
             <CostTimelineCard
               purchaseDate={c.purchase_date}
               purchasePrice={c.purchase_price}
-              consumptions={consumptions}
+              consumptions={actualFeedRows}
               treatments={treatments}
               individualCosts={individualCosts}
               overheadCost={overheadCost}
-              allocatedFeedCost={allocatedFeedCost}
+              allocatedFeedCost={0 /* the timeline shows actual costs only; the estimate is shown separately */}
               allocatedConcentrateKg={allocatedConcentrateKg}
               allocatedRoughageKg={allocatedRoughageKg}
               activeRoughage={currentRoughage}

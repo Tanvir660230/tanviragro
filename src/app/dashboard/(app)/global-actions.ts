@@ -2,8 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { LivestockProfitabilityEngine } from "@/lib/financial/profitability-engine";
-import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { buildWeightPredictions } from "@/lib/cattle-weight";
+import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 
 export async function getGlobalFormData() {
   const supabase = await createClient();
@@ -84,7 +84,7 @@ export async function getGlobalFormData() {
     supabase.rpc("get_cattle_consumptions", { p_business_id: biz.id }),
     supabase
       .from("inventory_items")
-      .select("id, name, unit, roughage_active_from, roughage_active_until")
+      .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
       .eq("business_id", biz.id)
       .not("roughage_active_from", "is", null),
     supabase
@@ -94,17 +94,14 @@ export async function getGlobalFormData() {
       .not("active_from", "is", null),
     supabase
       .from("inventory_transactions")
-      .select("item_id, unit_cost, inventory_items!inner(business_id)")
+      .select("item_id, qty, unit_cost, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", biz.id)
       .eq("type", "purchase")
       .order("recorded_at", { ascending: false })
-      .limit(300)
   ]);
 
   const marketPricePerKg = marketPriceData?.price_per_kg ?? biz.unit_price_bdt ?? 450;
   const defaultDailyGain = biz.default_daily_gain_kg ?? 0.8;
-  const bizDefaultRoughage = biz.default_roughage_type ?? "straw";
-  const defaultRoughageDm = ROUGHAGE_TYPES.find(r => r.id === bizDefaultRoughage)?.dmPercent ?? 0.90;
   const now = new Date();
 
   const cattleRaw = (cattleData ?? []) as any[];
@@ -112,15 +109,6 @@ export async function getGlobalFormData() {
   const costEntries = (costEntriesData ?? []) as any[];
   const treatments = (treatmentsData ?? []) as any[];
   const feedConsumptions = (rpcFeedData ?? []) as any[];
-  const roughages = (roughagesData ?? []) as any[];
-  const recipes = (recipesData ?? []) as any[];
-
-  const unitCostMap: Record<string, number> = {};
-  for (const p of (recentPurchasesData ?? []) as any[]) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) {
-      unitCostMap[p.item_id] = p.unit_cost;
-    }
-  }
 
   const feedCostByCattle: Record<string, number> = {};
   for (const t of feedConsumptions) {
@@ -152,37 +140,11 @@ export async function getGlobalFormData() {
     now
   );
 
+  // Actual herd feeding allocated to each animal (see lib/inventory/herd-feed-share.ts)
+  const herdFeedShare = await getHerdFeedShareByCattle(supabase, biz.id);
   for (const c of cattleRaw) {
-    if ((feedCostByCattle[c.id] ?? 0) === 0) {
-      const purchaseDateStr = c.purchase_date ? c.purchase_date : new Date(c.created_at || Date.now()).toISOString().split('T')[0];
-      const startMs = new Date(purchaseDateStr + "T00:00:00").getTime();
-      const nowMs = now.getTime();
-      const daysInPen = Math.max(0, Math.floor((nowMs - startMs) / 86400000));
-
-      const cLogs = weightLogs.filter(l => l.cattle_id === c.id).sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
-      const latestLog = cLogs[cLogs.length - 1];
-
-      const overrideRoughage = (c.manual_feed_override as { roughageKg?: number } | null)?.roughageKg ?? null;
-      const feedData = {
-        initialWeightKg: c.initial_weight_kg ?? 0,
-        latestLoggedWeightKg: latestLog?.weight_kg ?? c.initial_weight_kg ?? 0,
-        lastWeighedAt: latestLog?.recorded_at ?? null,
-        purchaseDate: purchaseDateStr,
-        expectedDailyGainKg: c.expected_daily_gain_kg ? Number(c.expected_daily_gain_kg) : defaultDailyGain,
-        roughageDmPercent: defaultRoughageDm,
-      };
-
-      const { allocatedFeedCost } = calculateAlgorithmicFeedCost({
-        daysInPen,
-        startMs,
-        recipes,
-        roughages,
-        unitCostMap,
-        feedData,
-        overrideRoughage,
-      });
-      feedCostByCattle[c.id] = allocatedFeedCost;
-    }
+    // Recorded herd feeding shared by head-days (actual), never a ration estimate
+    feedCostByCattle[c.id] = (feedCostByCattle[c.id] ?? 0) + (herdFeedShare[c.id] ?? 0);
   }
 
   const cattle = cattleRaw.map(c => {

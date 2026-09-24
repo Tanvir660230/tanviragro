@@ -16,7 +16,8 @@ export interface FeedSessionExecutionPayload {
   feederOperator: string;
   feedItemId: string;
   feedItemName: string;
-  unitCostBdt: number;
+  /** @deprecated ignored: the database values consumption at weighted-average cost */
+  unitCostBdt?: number;
   cattleAllocations: {
     cattleId: string;
     tagId: string;
@@ -71,78 +72,48 @@ export async function executeFeedingSessionAction(
       return { error: "Feed inventory item not found or unauthorized" };
     }
 
+    // One ledger row per animal. The database sets unit_cost (WAC as of the date); no
+    // cost_entries row is written, so the same feed is never counted twice.
     const inventoryTxns: {
       item_id: string;
       cattle_id: string;
       type: "consumption";
+      movement_type: "consumption";
       qty: number;
-      unit_cost?: number;
       recorded_at: string;
       notes: string;
     }[] = [];
 
-    const costEntries: {
-      business_id: string;
-      cattle_id: string;
-      category: string;
-      amount: number;
-      type: "variable";
-      entry_class: "expense";
-      recorded_at: string;
-      description: string;
-    }[] = [];
-
     let totalKgDispensed = 0;
     let totalWasteKg = 0;
-    let totalCostBdt = 0;
 
     for (const alloc of payload.cattleAllocations) {
-      const rowCost = alloc.actualDispensedKg * payload.unitCostBdt;
-
       totalKgDispensed += alloc.actualDispensedKg;
       totalWasteKg += alloc.wasteKg;
-      totalCostBdt += rowCost;
 
       if (alloc.actualDispensedKg > 0) {
         inventoryTxns.push({
           item_id: payload.feedItemId,
           cattle_id: alloc.cattleId,
           type: "consumption",
+          movement_type: "consumption",
           qty: alloc.actualDispensedKg,
-          unit_cost: payload.unitCostBdt > 0 ? payload.unitCostBdt : undefined,
           recorded_at: payload.dateISO,
           notes: `Feed Session (${payload.slot.toUpperCase()}) | Feeder: ${payload.feederOperator} | Target: ${alloc.targetAsFedKg}kg | Waste: ${alloc.wasteKg}kg ${alloc.notes ? "| " + alloc.notes : ""}`,
         });
-
-        if (rowCost > 0) {
-          costEntries.push({
-            business_id: businessId,
-            cattle_id: alloc.cattleId,
-            category: "Feed & Nutrition",
-            amount: Math.round(rowCost * 100) / 100,
-            type: "variable",
-            entry_class: "expense",
-            recorded_at: payload.dateISO,
-            description: `Daily Feeding (${payload.slot}) - ${payload.feedItemName} (${alloc.actualDispensedKg} kg)`,
-          });
-        }
       }
     }
 
+    let totalCostBdt = 0;
     if (inventoryTxns.length > 0) {
-      const { error: txnErr } = await supabase
+      const { data: saved, error: txnErr } = await supabase
         .from("inventory_transactions")
-        .insert(inventoryTxns);
+        .insert(inventoryTxns)
+        .select("qty, unit_cost");
       if (txnErr) {
         return { error: `Failed to deduct inventory: ${txnErr.message}` };
       }
-    }
-
-    if (costEntries.length > 0) {
-      const { error: costErr } = await supabase.from("cost_entries").insert(costEntries);
-      if (costErr) {
-        console.warn("Feed cost entry insertion warning:", costErr.message);
-      }
+      for (const r of saved ?? []) totalCostBdt += r.qty * (r.unit_cost ?? 0);
     }
 
     revalidatePath("/dashboard/cattle");

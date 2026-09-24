@@ -15,6 +15,7 @@ import {
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { createRecipe, type RecipeFormState } from "@/app/dashboard/(app)/inventory/recipe-actions";
+import { isRecipeBalanced, recipeIngredientTotal } from "@/lib/inventory/recipe-math";
 
 type InventoryItem = { id: string; name: string; unit: string };
 type Ingredient = { item_id: string; item_name: string; item_unit: string; qty_per_batch: number };
@@ -35,6 +36,7 @@ function RecipeForm({
   const [selectedItemId, setSelectedItemId] = useState("");
   const [ingQty, setIngQty] = useState("");
   const [outputUnit, setOutputUnit] = useState("kg");
+  const [outputQty, setOutputQty] = useState("");
   const ingQtyRef = useRef<HTMLInputElement>(null);
 
   const [state, formAction, isPending] = useActionState<RecipeFormState, FormData>(
@@ -76,7 +78,10 @@ function RecipeForm({
     setIngredients((prev) => prev.filter((i) => i.item_id !== item_id));
   }
 
-  const totalWeight = ingredients.reduce((s, i) => s + i.qty_per_batch, 0);
+  const totalWeight = recipeIngredientTotal(ingredients);
+  const batchSize = parseFloat(outputQty);
+  // Mass balance: the batch size must equal the ingredient total (checked again on the server and in the database).
+  const balanced = batchSize > 0 && isRecipeBalanced(ingredients, batchSize);
 
   return (
     <form key={formKey} action={formAction} className="space-y-4 pt-1">
@@ -108,9 +113,11 @@ function RecipeForm({
             min="0.001"
             step="0.001"
             placeholder="100"
+            value={outputQty}
+            onChange={(e) => setOutputQty(e.target.value)}
             required
           />
-          <p className="text-xs text-muted-foreground">Total produced per batch</p>
+          <p className="text-xs text-muted-foreground">Must equal the total of the ingredients</p>
         </div>
         <div className="space-y-1.5">
           <Label>Output Unit</Label>
@@ -198,6 +205,11 @@ function RecipeForm({
             <span>Total ingredients weight</span>
             <span className="font-medium tabular-nums">{totalWeight.toFixed(2)}</span>
           </div>
+          {batchSize > 0 && !balanced && (
+            <div className="px-3 py-2 text-xs font-medium text-destructive bg-destructive/5">
+              Ingredients total {totalWeight.toFixed(2)} but the batch size is {batchSize}. They must be equal.
+            </div>
+          )}
         </div>
       )}
 
@@ -218,7 +230,7 @@ function RecipeForm({
       )}
 
       <DialogFooter>
-        <Button type="submit" disabled={isPending || ingredients.length === 0} className="w-full">
+        <Button type="submit" disabled={isPending || ingredients.length === 0 || !balanced} className="w-full">
           {isPending ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
           ) : (

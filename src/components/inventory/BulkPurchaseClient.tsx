@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Plus, Trash2, Search, Check, Calculator, Receipt, Truck, PlusCircle, AlertTriangle, Banknote, Wallet, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { submitBulkPurchase } from "@/app/dashboard/(app)/inventory/purchase/actions";
+import { todayDhaka } from "@/lib/dates";
 
 type InventoryItem = { id: string; name: string; category: string; unit: string };
 type RowMode = "bags" | "loose";
@@ -51,7 +52,7 @@ export function BulkPurchaseClient({ items, lastPrices = {} }: { items: Inventor
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
   const [date, setDate] = useState(today);
   const [supplierName, setSupplierName] = useState("");
   const [transportCost, setTransportCost] = useState("");

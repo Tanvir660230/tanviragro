@@ -115,9 +115,9 @@ export const CattleTableRow = memo(function CattleTableRow({
             <span className="font-semibold text-foreground">
               {c.latestWeight ?? c.initial_weight_kg}
             </span>
-            {c.latestWeight !== null && (
+            {c.weightGain !== null && (
               <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium ml-1">
-                (+{(c.latestWeight - c.initial_weight_kg).toFixed(1)})
+                ({c.weightGain >= 0 ? "+" : ""}{c.weightGain.toFixed(1)})
               </span>
             )}
           </div>

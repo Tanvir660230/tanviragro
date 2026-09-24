@@ -17,6 +17,45 @@ export type BreedingStatus = "open" | "inseminated" | "pregnant" | "calved" | "f
 export type HealthRecordType = "vaccine" | "deworming" | "checkup" | "treatment" | "disease_outbreak" | "surgery" | "other";
 export type InventoryCategory = "feed" | "medicine" | "equipment" | "other" | "roughage";
 export type TransactionType = "purchase" | "consumption";
+/** Meaning of a ledger row; `type` only carries direction (purchase = IN, consumption = OUT). */
+export type MovementType =
+  | "purchase" | "opening_balance" | "own_production" | "feed_mix_output" | "adjustment_in" | "return"
+  | "consumption_reversal"
+  | "consumption" | "feed_mix_input" | "wastage" | "adjustment_out" | "purchase_reversal";
+
+/** How a weight was obtained. Growth is computed from measured weights only. */
+export type WeightType = "measured" | "estimated";
+export type InitialWeightType = WeightType | "unknown";
+
+/** Accounting group of an expense category (decides the account, not the name). */
+export type ExpenseKind = "utility" | "labor" | "rent" | "transport" | "repair" | "veterinary" | "general";
+
+export type ExpenseCategory = {
+  id: string;
+  business_id: string;
+  kind: ExpenseKind;
+  name: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+};
+
+export type CostEntryAudit = {
+  id: string;
+  cost_entry_id: string;
+  business_id: string;
+  action: "insert" | "update" | "soft_delete" | "restore";
+  old_row: Record<string, unknown> | null;
+  new_row: Record<string, unknown> | null;
+  changed_by: string | null;
+  changed_at: string;
+};
+/** Where a row’s unit_cost came from (set by the database trigger for OUT rows). */
+export type CostSource =
+  | "invoice" | "wac" | "mix_inputs" | "zero_confirmed" | "zero_unconfirmed"
+  | "missing" | "manual" | "legacy" | "correction";
 export type CostType = "fixed" | "variable";
 export type CostEntryClass = "expense" | "asset";
 export type PhotoType = "purchase" | "current" | "medical" | "breeding" | "other";
@@ -71,6 +110,8 @@ export type Cattle = {
   purchase_date: string;
   purchase_price: number;
   initial_weight_kg: number;
+  /** measured | estimated | unknown (recorded before the distinction existed) */
+  initial_weight_type: InitialWeightType;
   target_weight_kg: number | null;
   expected_daily_gain_kg: number | null;
   manual_feed_override: { roughageKg?: number } | null;
@@ -229,6 +270,7 @@ export type WeightLog = {
   cattle_id: string;
   recorded_at: string;
   weight_kg: number;
+  weight_type: WeightType;
   girth_cm: number | null;
   length_cm: number | null;
   notes: string | null;
@@ -330,6 +372,8 @@ export type InventoryItem = {
   roughage_active_from: string | null;
   roughage_active_until: string | null;
   is_discontinued: boolean;
+  /** kg in one stock unit; 1 for kg items, NULL = unknown (e.g. hay pieces) — never assumed */
+  kg_per_unit: number | null;
   deleted_at: string | null;
   created_at: string;
 };
@@ -343,6 +387,12 @@ export type InventoryTransaction = {
   cattle_id: string | null;
   recorded_at: string;
   notes: string | null;
+  movement_type: MovementType;
+  idempotency_key: string | null;
+  reverses_id: string | null;
+  cost_source: CostSource;
+  is_estimate: boolean;
+  created_by: string | null;
   created_at: string;
 };
 
@@ -356,6 +406,8 @@ export type CostEntry = {
   recorded_at: string;
   description: string | null;
   cattle_id: string | null;
+  category_id: string | null;
+  attachment_path: string | null;
   deleted_at: string | null;
   created_at: string;
 };
@@ -579,6 +631,7 @@ export type Database = {
           purchase_date?: string | null;
           purchase_price?: number | null;
           initial_weight_kg?: number | null;
+          initial_weight_type?: InitialWeightType;
           status?: CattleStatus;
           notes?: string | null;
           vendor_id?: string | null;
@@ -596,6 +649,7 @@ export type Database = {
           cattle_id: string;
           recorded_at: string;
           weight_kg: number;
+          weight_type?: WeightType;
           girth_cm?: number | null;
           length_cm?: number | null;
           notes?: string | null;
@@ -760,6 +814,7 @@ export type Database = {
           is_active_roughage?: boolean | null;
           roughage_active_from?: string | null;
           is_discontinued?: boolean;
+          kg_per_unit?: number | null;
           created_at?: string;
         };
         Update: Partial<InventoryItem>;
@@ -776,6 +831,12 @@ export type Database = {
           cattle_id?: string | null;
           recorded_at: string;
           notes?: string | null;
+          movement_type?: MovementType;
+          idempotency_key?: string | null;
+          reverses_id?: string | null;
+          cost_source?: CostSource;
+          is_estimate?: boolean;
+          created_by?: string | null;
           created_at?: string;
         };
         Update: Partial<InventoryTransaction>;
@@ -801,9 +862,30 @@ export type Database = {
           recorded_at: string;
           description?: string | null;
           cattle_id?: string | null;
+          category_id?: string | null;
+          attachment_path?: string | null;
           created_at?: string;
         };
         Update: Partial<CostEntry>;
+        Relationships: [];
+      };
+      expense_categories: {
+        Row: ExpenseCategory;
+        Insert: {
+          id?: string;
+          business_id: string;
+          kind: ExpenseKind;
+          name: string;
+          is_active?: boolean;
+          sort_order?: number;
+        };
+        Update: Partial<ExpenseCategory>;
+        Relationships: [];
+      };
+      cost_entry_audit: {
+        Row: CostEntryAudit;
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       sales: {
@@ -912,8 +994,57 @@ export type Database = {
         ];
       };
     };
-    Views: Record<never, never>;
+    Views: {
+      /** feed usage period lines (migration 20260925130000) */
+      v_feed_usage_lines: {
+        Row: {
+          line_id: string; period_id: string; business_id: string; target_type: "item" | "recipe";
+          period_item_id: string | null; recipe_id: string | null; start_date: string; end_date: string | null;
+          status: "open" | "closed" | "unreconciled"; rule_type: "weight_share" | "pct_live_weight" | "per_head"; rule_value: number | null;
+          item_id: string; item_name: string; unit: string; category: InventoryCategory; kg_per_unit: number | null; share: number;
+          closing_qty: number | null; available_qty: number | null; consumed_qty: number | null; gap_qty: number | null;
+          consumed_value: number | null; cost_missing: boolean; days: number; actual_daily_qty: number | null;
+        };
+        Relationships: [];
+      };
+      /** signed stock and value per item (never clamped) — migration 20260925100000 */
+      v_inventory_balance: {
+        Row: {
+          item_id: string; business_id: string; name: string; unit: string; category: InventoryCategory;
+          kg_per_unit: number | null; qty_on_hand: number; value_on_hand: number;
+          rows_missing_cost: number; rows_zero_unconfirmed: number; rows_estimated: number;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
+      open_feed_usage_period: {
+        Args: { p_business_id: string; p_target_type: string; p_target_id: string; p_start: string; p_rule_type?: string; p_rule_value?: number | null; p_notes?: string | null; p_idempotency_key?: string | null };
+        Returns: string;
+      };
+      close_feed_usage_period: {
+        Args: { p_period_id: string; p_end_date: string; p_closing: { item_id: string; qty: number }[]; p_reason?: string | null };
+        Returns: string;
+      };
+      cancel_feed_usage_period: {
+        Args: { p_period_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      record_herd_feeding: {
+        Args: { p_business_id: string; p_date: string; p_lines: { item_id: string; qty: number }[]; p_note?: string | null };
+        Returns: number;
+      };
+      produce_feed_batch: {
+        Args: {
+          p_business_id: string; p_recipe_id: string; p_output_item_id: string;
+          p_output_qty: number; p_date: string; p_batch_id: string;
+        };
+        Returns: number;
+      };
+      inventory_unit_cost_as_of: {
+        Args: { p_item_id: string; p_as_of: string };
+        Returns: number | null;
+      };
       get_user_business_role: {
         Args: { p_user_id: string };
         Returns: { role: string };

@@ -9,6 +9,7 @@ import { ProduceBatchDialog } from "./ProduceBatchDialog";
 import { deleteRecipe, restoreRecipe, permanentlyDeleteRecipe, setActiveRecipe } from "@/app/dashboard/(app)/inventory/recipe-actions";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { todayDhaka } from "@/lib/dates";
 
 type Ingredient = {
   item_id: string;
@@ -43,7 +44,7 @@ export function RecipesSection({
 }) {
   const { t } = useTranslation();
   const tr = t.inventory.recipes;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();

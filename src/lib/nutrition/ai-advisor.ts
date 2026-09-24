@@ -13,7 +13,11 @@ export function generateAiRecommendations(
   const mustardCake = inventory.find((i) => i.name.toLowerCase().includes("mustard"));
   const soybeanMeal = inventory.find((i) => i.name.toLowerCase().includes("soybean"));
 
-  if (mustardCake && soybeanMeal && mustardCake.costPerKgAsFed < soybeanMeal.costPerKgAsFed * 0.75) {
+  if (
+    mustardCake && soybeanMeal &&
+    mustardCake.costPerKgAsFed != null && soybeanMeal.costPerKgAsFed != null &&
+    mustardCake.costPerKgAsFed < soybeanMeal.costPerKgAsFed * 0.75
+  ) {
     recs.push({
       id: "ai-rec-protein-swap",
       title: "Substitute 25% Soybean Meal with Mustard Oil Cake",

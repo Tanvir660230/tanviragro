@@ -8,6 +8,7 @@ export interface RawAnimalTimelineData {
     purchase_date?: string | null;
     purchase_price?: number | null;
     initial_weight_kg?: number | null;
+    initial_weight_type?: string | null;
     created_at?: string;
     status: string;
     breed?: string | null;
@@ -20,6 +21,7 @@ export interface RawAnimalTimelineData {
     girth_cm?: number | null;
     length_cm?: number | null;
     notes?: string | null;
+    weight_type?: string | null;
   }>;
   healthEvents?: Array<{
     id: string;
@@ -101,12 +103,13 @@ export class TimelineEngine {
         category: "financial",
         eventType: "PURCHASE",
         title: `Acquisition (#${cattle.tag_id})`,
-        description: `Acquired for ৳${(cattle.purchase_price ?? 0).toLocaleString()} with baseline weight ${cattle.initial_weight_kg ?? "?"} kg.`,
+        description: `Acquired for ৳${(cattle.purchase_price ?? 0).toLocaleString()} with initial weight ${cattle.initial_weight_kg ?? "?"} kg${cattle.initial_weight_type === "estimated" ? " (ESTIMATED — not weighed)" : cattle.initial_weight_type === "measured" ? " (measured)" : ""}.`,
         timestamp: cattle.purchase_date,
         badgeColor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
         metadata: {
           purchasePrice: cattle.purchase_price,
           initialWeightKg: cattle.initial_weight_kg,
+          initialWeightType: cattle.initial_weight_type ?? "unknown",
         },
       });
     }
@@ -119,11 +122,11 @@ export class TimelineEngine {
           cattleId: cattle.id,
           category: "growth",
           eventType: "WEIGHT_ENTRY",
-          title: `Weight Logged: ${wl.weight_kg} kg`,
-          description: `Live body weight recorded${wl.girth_cm ? ` (Girth: ${wl.girth_cm}cm, Length: ${wl.length_cm ?? "-"}cm)` : ""}.${wl.notes ? ` Note: ${wl.notes}` : ""}`,
+          title: `Weight Logged: ${wl.weight_kg} kg${wl.weight_type === "estimated" ? " (estimated)" : " (measured)"}`,
+          description: `${wl.weight_type === "estimated" ? "Estimated (not weighed)" : "Live body weight measured"}${wl.girth_cm ? ` (Girth: ${wl.girth_cm}cm, Length: ${wl.length_cm ?? "-"}cm)` : ""}.${wl.notes ? ` Note: ${wl.notes}` : ""}`,
           timestamp: wl.recorded_at,
           badgeColor: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-          metadata: { weightKg: wl.weight_kg, girthCm: wl.girth_cm, lengthCm: wl.length_cm },
+          metadata: { weightKg: wl.weight_kg, weightType: wl.weight_type ?? "measured", girthCm: wl.girth_cm, lengthCm: wl.length_cm },
         });
       }
     }

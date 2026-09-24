@@ -34,4 +34,5 @@ export const mixBatchSchema = z.object({
   target_amount:  positiveNumberSchema,
   recorded_at:    dateSchema,
   output_item_id: uuidSchema.nullable().optional(),
+  batch_id:       uuidSchema,
 });

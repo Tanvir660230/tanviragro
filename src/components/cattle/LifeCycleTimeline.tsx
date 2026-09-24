@@ -23,7 +23,9 @@ interface Props {
   purchaseDate: string;
   purchasePrice: number;
   initialWeight: number;
-  weights: Pick<WeightLog, "id" | "recorded_at" | "weight_kg" | "notes">[];
+  /** measured | estimated | unknown */
+  initialWeightType?: string | null;
+  weights: Pick<WeightLog, "id" | "recorded_at" | "weight_kg" | "notes" | "weight_type">[];
   healthEvents: HealthEvent[];
   treatments: CattleTreatment[];
   status?: string;
@@ -34,6 +36,7 @@ export function LifeCycleTimeline({
   purchaseDate,
   purchasePrice,
   initialWeight,
+  initialWeightType,
   weights,
   healthEvents,
   treatments,
@@ -52,7 +55,8 @@ export function LifeCycleTimeline({
       date: purchaseDate,
       type: "purchase",
       title: t.cattle_details.timeline.purchased,
-      description: t.cattle_details.timeline.started_at.replace("{{weight}}", String(initialWeight)),
+      description: t.cattle_details.timeline.started_at.replace("{{weight}}", String(initialWeight))
+        + (initialWeightType === "estimated" ? " (estimated — not weighed)" : ""),
       value: fmtBDT(purchasePrice),
     });
 
@@ -66,7 +70,7 @@ export function LifeCycleTimeline({
         type: "weight",
         title: t.cattle_details.timeline.weight_recorded,
         description: w.notes || undefined,
-        value: `${w.weight_kg} kg`,
+        value: `${w.weight_kg} kg${w.weight_type === "estimated" ? " (estimated)" : ""}`,
       });
     });
 
@@ -116,7 +120,7 @@ export function LifeCycleTimeline({
     // Sort by date ascending (oldest first, like a real timeline)
     list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return list;
-  }, [purchaseDate, purchasePrice, initialWeight, weights, healthEvents, treatments, status, updatedAt, t]);
+  }, [purchaseDate, purchasePrice, initialWeight, initialWeightType, weights, healthEvents, treatments, status, updatedAt, t]);
 
   const filteredEvents = useMemo(() => {
     if (filterType === "all") return events;

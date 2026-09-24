@@ -9,10 +9,12 @@ import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import type { Dictionary } from "@/i18n/getDictionary";
+import { measuredGrowth } from "@/lib/growth/baseline";
+import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 
 export const metadata: Metadata = { title: "Livestock" };
 
-type Row = Pick<Cattle, "id"|"tag_id"|"breed"|"gender"|"dob"|"purchase_date"|"purchase_price"|"initial_weight_kg"|"target_weight_kg"|"expected_daily_gain_kg"|"status"|"notes"|"manual_feed_override"|"is_quarantined"|"is_qurbani_marked">;
+type Row = Pick<Cattle, "id"|"tag_id"|"breed"|"gender"|"dob"|"purchase_date"|"purchase_price"|"initial_weight_kg"|"initial_weight_type"|"target_weight_kg"|"expected_daily_gain_kg"|"status"|"notes"|"manual_feed_override"|"is_quarantined"|"is_qurbani_marked">;
 
 export type CattleRowEnriched = Row & {
   daysInPen: number | null;
@@ -20,6 +22,10 @@ export type CattleRowEnriched = Row & {
   adg: number | null;
   adg14: number | null;
   latestWeight: number | null;
+  /** measured gain since the growth baseline; null until there are two measurements */
+  weightGain: number | null;
+  /** weight growth is measured from (initial if weighed, else first weighing); null if none yet */
+  growthBaselineKg: number | null;
   totalFeedCost: number;
   lastWeighedAt: string | null;
 };
@@ -80,7 +86,7 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
   // 1. Fetch all cattle
   const { data: cattleData } = await supabase
     .from("cattle")
-    .select("id, tag_id, breed, gender, dob, purchase_date, purchase_price, initial_weight_kg, target_weight_kg, expected_daily_gain_kg, status, notes, manual_feed_override, is_quarantined, is_qurbani_marked")
+    .select("id, tag_id, breed, gender, dob, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, target_weight_kg, expected_daily_gain_kg, status, notes, manual_feed_override, is_quarantined, is_qurbani_marked")
     .eq("business_id", businessId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
@@ -97,7 +103,7 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
     activeIds.length > 0
       ? supabase
           .from("weight_logs")
-          .select("cattle_id, weight_kg, recorded_at")
+          .select("cattle_id, weight_kg, recorded_at, weight_type")
           .in("cattle_id", activeIds)
           .is("deleted_at", null)
           .order("recorded_at", { ascending: false })
@@ -105,9 +111,10 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
     activeIds.length > 0
       ? supabase
           .from("inventory_transactions")
-          .select("cattle_id, qty, unit_cost, inventory_items!inner(category, deleted_at)")
-          .eq("type", "consumption")
-          .eq("inventory_items.category", "feed")
+          .select("cattle_id, qty, unit_cost, movement_type, inventory_items!inner(category, deleted_at)")
+          // feed eaten by this animal (net of audited reversals)
+          .in("movement_type", ["consumption", "consumption_reversal"])
+          .in("inventory_items.category", ["feed", "roughage"])
           .is("inventory_items.deleted_at", null)
           .in("cattle_id", activeIds)
       : Promise.resolve({ data: [] }),
@@ -128,7 +135,11 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
   const nowMs = new Date().getTime();
   const cutoff14d = nowMs - 14 * 86400000;
 
-  for (const log of (weightLogsData ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string }[]) {
+  const logsByCattle: Record<string, { weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]> = {};
+  for (const log of (weightLogsData ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]) {
+    (logsByCattle[log.cattle_id] ??= []).push(log);
+    // current weight and short-term ADG use measured weights only
+    if (log.weight_type === "estimated") continue;
     if (!(log.cattle_id in latestWeightMap)) {
       latestWeightMap[log.cattle_id] = log.weight_kg;
       lastWeighedMap[log.cattle_id] = log.recorded_at;
@@ -153,12 +164,16 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
   // Build total feed consumption qty + cost per active cattle
   const consumeMap: Record<string, number> = {};
   const feedCostMap: Record<string, number> = {};
-  for (const row of (consumptionData ?? []) as { cattle_id: string | null; qty: number; unit_cost: number | null }[]) {
+  for (const row of (consumptionData ?? []) as { cattle_id: string | null; qty: number; unit_cost: number | null; movement_type: string }[]) {
     if (row.cattle_id) {
-      consumeMap[row.cattle_id] = (consumeMap[row.cattle_id] ?? 0) + row.qty;
-      feedCostMap[row.cattle_id] = (feedCostMap[row.cattle_id] ?? 0) + row.qty * (row.unit_cost ?? 0);
+      const qty = row.movement_type === "consumption_reversal" ? -Number(row.qty) : Number(row.qty);
+      consumeMap[row.cattle_id] = (consumeMap[row.cattle_id] ?? 0) + qty;
+      feedCostMap[row.cattle_id] = (feedCostMap[row.cattle_id] ?? 0) + qty * (row.unit_cost ?? 0);
     }
   }
+  // plus each animal's share of recorded herd feeding (head-days)
+  const herdFeedShare = await getHerdFeedShareByCattle(supabase, businessId);
+  for (const [id, cost] of Object.entries(herdFeedShare)) feedCostMap[id] = (feedCostMap[id] ?? 0) + cost;
 
   const today = new Date().getTime();
   const sevenDaysAgo = today - 7 * 86400000;
@@ -173,7 +188,9 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
     const lastWeighedAt = lastWeighedMap[c.id] ?? null;
     const totalFeedCost = feedCostMap[c.id] ?? 0;
 
-    const weightGain = latestWeight !== null ? latestWeight - (c.initial_weight_kg ?? 0) : null;
+    // growth between two MEASUREMENTS (an estimated purchase weight is never a baseline)
+    const growth = measuredGrowth(c, logsByCattle[c.id] ?? []);
+    const weightGain = growth ? growth.gainKg : null;
     const consumed = consumeMap[c.id] ?? 0;
     const fcr =
       weightGain !== null && weightGain > 0 && consumed >= 10
@@ -182,18 +199,10 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
 
     // ADG uses last-weigh date as end, not today — avoids deflating ADG
     // for cattle that haven't been weighed recently.
-    const daysToLatestWeigh = lastWeighedAt !== null
-      ? Math.max(1, Math.floor(
-          (new Date(lastWeighedAt).getTime() - new Date(c.purchase_date + "T00:00:00").getTime()) / 86400000
-        ))
-      : daysInPen;
-    const adg =
-      latestWeight !== null && daysToLatestWeigh !== null && daysToLatestWeigh > 0
-        ? (latestWeight - (c.initial_weight_kg ?? 0)) / daysToLatestWeigh
-        : null;
+    const adg = growth ? growth.adg : null;
 
     const adg14 = adg14Map[c.id] ?? null;
-    return { ...c, daysInPen, fcr, adg, adg14, latestWeight, totalFeedCost, lastWeighedAt };
+    return { ...c, daysInPen, fcr, adg, adg14, latestWeight, weightGain, growthBaselineKg: growth?.baseline.weightKg ?? null, totalFeedCost, lastWeighedAt };
   });
 
   const isUnweighed = (c: CattleRowEnriched) =>

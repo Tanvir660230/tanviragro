@@ -4,10 +4,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { calcAccruedInterest } from "@/lib/loan-utils";
-import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { getBusinessContext } from "@/lib/context/business-context";
 import { requireAnyPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
+import { summarizeInventoryLedger, unallocatedInventoryCost } from "@/lib/accounting/inventory-ledger";
+import { accountForCostEntry } from "@/lib/expenses/categories";
+import type { ExpenseKind } from "@/types/database";
 
  
 type Client = SupabaseClient<any>;
@@ -129,16 +131,9 @@ export interface LiabilitySummary {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function mapCostCategory(category: string): { code: string; name: string } {
-  const c = category.toLowerCase();
-  if (/vet|med|vacc|health|drug|dew/.test(c)) return { code: "6100", name: "Veterinary & Medical" };
-  if (/lab|wage|salary|worker|staff|employ/.test(c)) return { code: "6200", name: "Labor & Wages" };
-  if (/elect|water|gas|util|fuel|power/.test(c)) return { code: "6300", name: "Utilities" };
-  if (/rent|lease/.test(c)) return { code: "6400", name: "Rent & Lease" };
-  if (/deprec/.test(c)) return { code: "6500", name: "Depreciation" };
-  if (/transport|deliver|freight|shipping/.test(c)) return { code: "6700", name: "Transport" };
-  if (/repair|maint|fix/.test(c)) return { code: "6800", name: "Repairs & Maintenance" };
-  return { code: "6600", name: "General Expenses" };
+/** Account of a cost entry: its category's kind when linked, else the legacy text rule. */
+function mapCostCategory(category: string, kind?: ExpenseKind | null): { code: string; name: string } {
+  return accountForCostEntry({ category, kind });
 }
 
 function monthsBetween(from: Date, to: Date): number {
@@ -171,12 +166,12 @@ export const getCachedDbData = async (businessId: string) => {
     const [
       cattleRes, salesRes, costsRes,
       invTxRes, partnerTxRes, fixedAssetRes, liabRes, loansRes, treatmentsRes,
-      bizDataRes, rpcFeedRes, recentPurchasesRes, roughagesRes, recipesRes,
+      rpcFeedRes,
     ] = await Promise.all([
       supabaseAdmin.from("cattle").select("id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("sales").select("id, cattle_id, sale_price_total, sold_at, cattle!inner(business_id)").eq("cattle.business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("cost_entries").select("id, category, amount, type, recorded_at, entry_class, cattle_id").eq("business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("inventory_transactions").select("id, type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category)").eq("inventory_items.business_id", businessId),
+      supabaseAdmin.from("cost_entries").select("id, category, amount, type, recorded_at, entry_class, cattle_id, expense_categories(kind)").eq("business_id", businessId).is("deleted_at", null),
+      supabaseAdmin.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category)").eq("inventory_items.business_id", businessId),
       supabaseAdmin.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id)").eq("partners.business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("fixed_assets").select("*").eq("business_id", businessId),
       supabaseAdmin.from("liabilities").select("id, outstanding, settled_at").eq("business_id", businessId).is("deleted_at", null),
@@ -185,17 +180,13 @@ export const getCachedDbData = async (businessId: string) => {
       // parallel to cost_entries with type="variable" and cattle_id. Without this,
       // all veterinary fees logged via the treatment system are invisible in the P&L.
       supabaseAdmin.from("cattle_treatments").select("cattle_id, vet_fee, additional_medical_cost, treated_at, cattle!inner(business_id)").eq("cattle.business_id", businessId),
-      supabaseAdmin.from("businesses").select("default_daily_gain_kg, default_roughage_type").eq("id", businessId).maybeSingle(),
       supabaseAdmin.rpc("get_cattle_consumptions", { p_business_id: businessId }),
-      supabaseAdmin.from("inventory_transactions").select("item_id, unit_cost, inventory_items!inner(business_id)").eq("inventory_items.business_id", businessId).eq("type", "purchase").order("recorded_at", { ascending: false }).limit(300),
-      supabaseAdmin.from("inventory_items").select("id, name, unit, roughage_active_from, roughage_active_until").eq("business_id", businessId).not("roughage_active_from", "is", null),
-      supabaseAdmin.from("feed_recipes").select("id, active_from, active_until, recipe_ingredients(item_id, qty_per_batch)").eq("business_id", businessId).not("active_from", "is", null),
     ]);
 
     type CattleRow = { id: string; purchase_price: number; status: string; purchase_date: string; updated_at: string | null; initial_weight_kg: number | null };
     type SaleRow = { id: string; cattle_id: string; sale_price_total: number; sold_at: string };
-    type CostRow = { id: string; category: string; amount: number; type: string; recorded_at: string; entry_class: string | null; cattle_id: string | null };
-    type InvTxRow = { id: string; type: string; qty: number; unit_cost: number | null; recorded_at: string; cattle_id: string | null; inventory_items?: { category?: string } | null };
+    type CostRow = { id: string; category: string; amount: number; type: string; recorded_at: string; entry_class: string | null; cattle_id: string | null; expense_categories?: { kind: ExpenseKind } | null };
+    type InvTxRow = { id: string; type: string; movement_type: string | null; qty: number; unit_cost: number | null; recorded_at: string; cattle_id: string | null; inventory_items?: { category?: string } | null };
     type PartnerTxRow = { id: string; amount: number; type: string; recorded_at: string };
     type TreatmentRow = { cattle_id: string; vet_fee: number | null; additional_medical_cost: number | null; treated_at: string };
     type LiabilityRow = { id: string; outstanding: number; settled_at: string | null };
@@ -217,11 +208,7 @@ export const getCachedDbData = async (businessId: string) => {
       liabData: (liabRes.data ?? []) as unknown as LiabilityRow[],
       loansData: (loansRes.data ?? []) as unknown as LoanEngineRow[],
       treatments: (treatmentsRes.data ?? []) as unknown as TreatmentRow[],
-      bizData: (bizDataRes.data ?? null) as any,
       rpcFeedData: (rpcFeedRes.data ?? []) as any[],
-      recentPurchasesData: (recentPurchasesRes.data ?? []) as any[],
-      roughagesData: (roughagesRes.data ?? []) as any[],
-      recipesData: (recipesRes.data ?? []) as any[],
     };
   },
   [`accounting-db-${businessId}`],
@@ -251,67 +238,21 @@ export async function getAccountingData(
 
   const {
     cattle, sales, costs, invTx, partnerTx, fixedAssetDb, liabData, loansData, treatments,
-    bizData: cachedBizData, rpcFeedData, recentPurchasesData, roughagesData, recipesData
+    rpcFeedData
   } = await getCachedDbData(businessId);
 
   // Build cattle lookup for COGS
   const cattleMap = new Map<string, number>();
   for (const c of cattle) cattleMap.set(c.id, Number(c.purchase_price));
 
-  // ── Algorithmic Feed Cost per cow ─────────────────────────────
-  const dailyGainKg = cachedBizData?.default_daily_gain_kg ?? 0.6;
-  const bizDefaultRoughage = cachedBizData?.default_roughage_type ?? "straw";
-  const defaultRoughageDm = ROUGHAGE_TYPES.find(r => r.id === bizDefaultRoughage)?.dmPercent ?? 0.90;
-
+  // ── Feed capitalised per animal: RECORDED consumption only ─────
+  // Rows recorded against an animal (cattle_id) are capitalised into it. The ration
+  // formula ESTIMATE is never booked — it used to be capitalised on top of the herd
+  // consumption that was already expensed, counting the same feed twice (P-07).
   const feedCostByCattle: Record<string, number> = {};
   for (const t of rpcFeedData) {
     if (t.cattle_id) {
       feedCostByCattle[t.cattle_id] = (feedCostByCattle[t.cattle_id] ?? 0) + Number(t.total_cost);
-    }
-  }
-
-  const unitCostMap: Record<string, number> = {};
-  for (const p of recentPurchasesData) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) {
-      unitCostMap[p.item_id] = p.unit_cost;
-    }
-  }
-
-  const nowMs = new Date().getTime();
-  let totalAlgorithmicFeedAdded = 0;
-
-  for (const c of cattle) {
-    // Only apply algorithmic fallback if explicit logged consumption is 0
-    if ((feedCostByCattle[c.id] ?? 0) === 0) {
-      const startMs = new Date(c.purchase_date + "T00:00:00").getTime();
-      let endMs = nowMs;
-      if (c.status === "sold" || c.status === "dead") {
-        const saleRec = sales.find(s => s.cattle_id === c.id);
-        endMs = saleRec ? new Date(saleRec.sold_at).getTime() : (c.updated_at ? new Date(c.updated_at).getTime() : nowMs);
-      }
-      
-      const daysInPen = Math.max(0, Math.floor((endMs - startMs) / 86400000));
-      const estimatedFinalWeight = (c.initial_weight_kg ?? 0) + daysInPen * dailyGainKg;
-
-      const { allocatedFeedCost } = calculateAlgorithmicFeedCost({
-        daysInPen,
-        startMs,
-        recipes: recipesData,
-        roughages: roughagesData,
-        unitCostMap,
-        feedData: {
-          initialWeightKg: c.initial_weight_kg ?? 0,
-          latestLoggedWeightKg: estimatedFinalWeight,
-          lastWeighedAt: new Date(endMs).toISOString().slice(0, 10),
-          purchaseDate: c.purchase_date,
-          expectedDailyGainKg: dailyGainKg,
-          roughageDmPercent: defaultRoughageDm,
-        },
-        overrideRoughage: null,
-      });
-
-      feedCostByCattle[c.id] = allocatedFeedCost;
-      totalAlgorithmicFeedAdded += allocatedFeedCost;
     }
   }
 
@@ -370,15 +311,13 @@ export async function getAccountingData(
   // Deceased cattle: purchase price is written off as a non-cash loss (asset → expense).
   // Cash already went out at purchase; this entry reduces retained earnings without
   // affecting cashAndBank again.
-  const allTimePurchaseValue = invTx
-    .filter((t) => t.type === "purchase")
-    .reduce((s, t) => s + Number(t.qty) * Number(t.unit_cost ?? 0), 0);
-  const allTimeInvConsumption = invTx
-    .filter((t) => t.type === "consumption")
-    .reduce((s, t) => s + Math.round(Number(t.qty) * Number(t.unit_cost ?? 0) * 100) / 100, 0);
-  
-  // Deduct the algorithmic feed from the inventory value so the balance sheet balances!
-  const feedInventoryValue = Math.max(0, allTimePurchaseValue - allTimeInvConsumption - totalAlgorithmicFeedAdded);
+  // One accounting path per ledger movement (see lib/accounting/inventory-ledger.ts).
+  const invLedger = summarizeInventoryLedger(invTx.map((t) => ({ ...t, category: t.inventory_items?.category ?? null })));
+  // Only supplier purchases are cash. Opening stock, mixing output and count gains are not.
+  const allTimePurchaseValue = invLedger.cashPurchases;
+  const openingInventoryValue = invLedger.openingBalance;
+  // Signed ledger value — never clamped, never reduced by an estimate.
+  const feedInventoryValue = invLedger.inventoryValue;
 
   const allCostEntries = costs.filter((c) => (c.entry_class ?? "expense") !== "asset");
   
@@ -510,8 +449,8 @@ export async function getAccountingData(
   // Uses totalAccumDep (all-time accumulated) and allTimeInterestExpense for correctness.
   const allTimeCogs = sales.reduce((s, x) => s + (cattleMap.get(x.cattle_id) ?? 0), 0) + capitalizedSoldCosts;
   
-  const allTimeCapitalizedInv = rpcFeedData.reduce((s, r) => s + Number(r.total_cost), 0);
-  const allTimeUnallocatedInv = Math.max(0, allTimeInvConsumption - allTimeCapitalizedInv);
+  // Stock that left inventory without going into an animal, net of stock gains (not clamped).
+  const allTimeUnallocatedInv = unallocatedInventoryCost(invLedger);
 
   const retainedEarnings =
     allTimeSalesRevenue - allTimeCogs - allTimeTotalOpCosts
@@ -536,33 +475,20 @@ export async function getAccountingData(
 
   const costBreakdown: Record<string, number> = {};
   for (const c of periodExpenseCosts) {
-    const { code } = mapCostCategory(c.category);
+    const { code } = mapCostCategory(c.category, c.expense_categories?.kind);
     costBreakdown[code] = (costBreakdown[code] ?? 0) + Number(c.amount);
   }
   const totalCosts = periodExpenseCosts.reduce((s, c) => s + Number(c.amount), 0);
 
-  // Period inventory purchases (cash flow outflow)
-  const invPurchases = periodInvTx
-    .filter((t) => t.type === "purchase")
-    .reduce((s, t) => s + Number(t.qty) * Number(t.unit_cost ?? 0), 0);
-
-  // Period unallocated inventory consumption (feed true-ups, general medicine)
-  let periodUnallocatedInv = 0;
-  for (const t of periodInvTx.filter((tx) => tx.type === "consumption")) {
-    const cat = (t.inventory_items as { category?: string } | null)?.category ?? "feed";
-    const cost = Math.round(Number(t.qty) * Number(t.unit_cost ?? 0) * 100) / 100;
-    if (!t.cattle_id) {
-      periodUnallocatedInv += cost;
-      if (cat === "medicine" || cat === "supplement") {
-        costBreakdown["6100"] = (costBreakdown["6100"] ?? 0) + cost; // vetMedical account
-      } else {
-        // Unallocated feed (true-ups, loss, farm-level feed not tied to specific cows)
-        costBreakdown["6600"] = (costBreakdown["6600"] ?? 0) + cost; // generalExpenses
-      }
-    }
-  }
-  // All algorithmically allocated feed is capitalized. Unallocated feed is now in generalExpenses.
-  const feedExpenses = 0;
+  // Period inventory movements, one path each (see inventory-ledger.ts)
+  const periodLedger = summarizeInventoryLedger(periodInvTx.map((t) => ({ ...t, category: t.inventory_items?.category ?? null })));
+  // Cash flow: supplier purchases only
+  const invPurchases = periodLedger.cashPurchases;
+  // Herd feed eaten (recorded, not tied to one animal) is the period's feed expense.
+  const feedExpenses = periodLedger.feedExpense;
+  costBreakdown["6100"] = (costBreakdown["6100"] ?? 0) + periodLedger.medicineExpense;
+  // Wastage, count differences and mixing variance (may be negative = gain)
+  costBreakdown["6600"] = (costBreakdown["6600"] ?? 0) + periodLedger.otherNet;
 
   // Period depreciation: delta of accumulated depreciation between period boundaries.
   // For all-time (no filter) use all-time accumulated from the pre-computed array.
@@ -709,7 +635,8 @@ export async function getAccountingData(
 
   // Partner Capital = contributed capital only (investments minus capital returns).
   // Profit distributions reduce Retained Earnings, not Contributed Capital.
-  const partnerCapital = allPartnerInvestments - allPartnerCapitalWithdrawals + openingCash;
+  // Opening stock is owned from the start like opening cash: contributed, not bought.
+  const partnerCapital = allPartnerInvestments - allPartnerCapitalWithdrawals + openingCash + openingInventoryValue;
   const totalEquity = partnerCapital + retainedEarnings;
   const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
   const discrepancy = Math.abs(totalAssets - totalLiabilitiesAndEquity);
@@ -803,19 +730,31 @@ export async function getAccountingData(
   dr("1400", allTimeCapitalizedCosts);
   cr("1100", allTimeCapitalizedCosts);
 
-  // Inventory purchases: DR Inventory, CR Cash
+  // Inventory purchases (supplier invoices only): DR Inventory, CR Cash
   dr("1300", allTimePurchaseValue);
   cr("1100", allTimePurchaseValue);
 
-  // Instead of an operating Feed Expense, feed consumption is capitalized: DR Livestock, CR Inventory.
-  // This applies to both actual logged consumptions AND algorithmic fallback.
+  // Opening stock: DR Inventory, CR Partner Capital (owned before the books started)
+  dr("1300", openingInventoryValue);
+  cr("3100", openingInventoryValue);
+
+  // Stock used without an animal: DR expense, CR Inventory
+  dr("5200", invLedger.feedExpense);
+  dr("6100", invLedger.medicineExpense);
+  cr("1300", invLedger.feedExpense + invLedger.medicineExpense);
+  // Wastage / count differences / mixing variance: loss (DR 6600) or gain (CR 6600)
+  if (invLedger.otherNet >= 0) { dr("6600", invLedger.otherNet); cr("1300", invLedger.otherNet); }
+  else { dr("1300", -invLedger.otherNet); cr("6600", -invLedger.otherNet); }
+
+  // Feed recorded against an animal is capitalized: DR Livestock, CR Inventory.
+  // (Recorded rows only; the ration estimate is never booked.)
   const totalCapitalizedFeed = Object.values(feedCostByCattle).reduce((s, val) => s + val, 0);
   dr("1400", totalCapitalizedFeed);
   cr("1300", totalCapitalizedFeed);
 
   // Operating costs (expense entries only — assets are capitalized, not expensed)
   for (const c of allExpenseCosts) {
-    const { code } = mapCostCategory(c.category);
+    const { code } = mapCostCategory(c.category, c.expense_categories?.kind);
     dr(code, Number(c.amount));
     cr("1100", Number(c.amount));
   }

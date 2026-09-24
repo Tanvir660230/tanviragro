@@ -73,7 +73,7 @@ export function ExecuteSessionDialog({
               >
                 {inventoryItems.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name} ({Math.round(item.currentStockKg)} kg available · ৳{item.costPerKgAsFed}/kg)
+                    {item.name} ({Math.round(item.currentStockKg)} kg available · {item.costPerKgAsFed != null ? `৳${item.costPerKgAsFed.toFixed(2)}/kg` : "price: no data"})
                   </option>
                 ))}
               </select>

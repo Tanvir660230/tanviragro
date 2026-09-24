@@ -6,7 +6,6 @@ import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { StockSection } from "@/components/inventory/StockSection";
 import { DailyFeedDeductButton } from "@/components/inventory/DailyFeedDeductButton";
 import { RecipesSection } from "@/components/inventory/RecipesSection";
-import { AutoEngineRunner } from "@/components/inventory/AutoEngineRunner";
 import { ActiveFeedingDashboard } from "@/components/inventory/ActiveFeedingDashboard";
 import { SetupSection } from "@/components/inventory/SetupSection";
 import { InventorySubNav } from "@/components/inventory/InventorySubNav";
@@ -19,6 +18,10 @@ import type { InventoryRow } from "@/components/inventory/InventoryTable";
 import type { ItemStockSummary } from "@/lib/inventory/types";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
+import { todayDhaka } from "@/lib/dates";
+import { scaleRecipe } from "@/lib/inventory/recipe-math";
+import { estimateFeedCost, kgToItemUnits, weightedAverageUnitCost, type ItemCostInfo } from "@/lib/inventory/feed-costing";
+import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 
 type MoveRow = { item_id: string; type: string; qty: number; unit_cost: number | null; recorded_at: string; notes: string | null };
 
@@ -55,7 +58,7 @@ export default async function InventoryPage({
     businessId
       ? supabase
           .from("inventory_items")
-          .select("id, name, category, unit, low_stock_threshold, is_active_roughage, roughage_active_until, roughage_active_from, is_discontinued")
+          .select("id, name, category, unit, kg_per_unit, low_stock_threshold, is_active_roughage, roughage_active_until, roughage_active_from, is_discontinued")
           .eq("business_id", businessId)
           .is("deleted_at", null)
           .order("is_discontinued", { ascending: true })
@@ -74,7 +77,7 @@ export default async function InventoryPage({
           .from("inventory_transactions")
           .select("item_id, qty, unit_cost, recorded_at, inventory_items!inner(business_id)")
           .eq("inventory_items.business_id", businessId)
-          .eq("type", "purchase")
+          .eq("type", "purchase").neq("movement_type", "consumption_reversal") // an undo is not a new price
           .order("recorded_at", { ascending: true })
       : Promise.resolve({ data: [] }),
     businessId
@@ -146,7 +149,7 @@ export default async function InventoryPage({
     if (activeRoughageItem) { activeRoughageName = activeRoughageItem.name; activeRoughageUntil = activeRoughageItem.roughage_active_until ?? null; }
 
     if (activeRecipe || activeRoughageItem) {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = todayDhaka(); // farm calendar day (Asia/Dhaka), not UTC
       const reqRes = await getFarmDailyFeedRequirement(todayStr);
 
       if (reqRes.success && reqRes.data) {
@@ -155,47 +158,35 @@ export default async function InventoryPage({
         todayRoughageKg = totalRoughageKg;
 
         if (activeRecipe && totalConcentrateKg > 0) {
-          const scale = totalConcentrateKg / activeRecipe.output_qty;
-          for (const ing of activeRecipe.recipe_ingredients ?? []) {
-            // REPLACE the historical 30-day average with the forward-looking recipe projection.
-            // Adding on top would double-count (historical avg ≈ same quantity as projection).
-            avgDailyMap[ing.item_id] = ing.qty_per_batch * scale;
+          // REPLACE the historical 30-day average with the forward-looking recipe projection.
+          // Adding on top would double-count (historical avg ≈ same quantity as projection).
+          // Scaled by the ingredient total (mass balance), not by the stored batch size.
+          for (const l of scaleRecipe(activeRecipe.recipe_ingredients ?? [], totalConcentrateKg)) {
+            avgDailyMap[l.item_id] = l.qty;
           }
         }
         if (activeRoughageItem && totalRoughageKg > 0) {
-          // Replace, not add — same reasoning as recipe ingredients above.
-          avgDailyMap[activeRoughageItem.id] = totalRoughageKg;
+          // The plan is in kg; the item may be counted in pieces. Convert only when kg per
+          // unit is known — otherwise keep the recorded 30-day average.
+          const inUnits = kgToItemUnits(totalRoughageKg, activeRoughageItem.unit, activeRoughageItem.kg_per_unit);
+          if (inUnits != null) avgDailyMap[activeRoughageItem.id] = inUnits;
         }
       }
     }
   }
 
-  // FIFO unit cost per item
-  const fifoUnitCostMap: Record<string, number | null> = {};
-  for (const itemRow of (itemsData ?? []) as { id: string }[]) {
-    const purchases = purchasesTxns.filter((tx) => tx.item_id === itemRow.id);
-    const totalConsumed = consumedTotalMap[itemRow.id] ?? 0;
-    const batches = purchases.map((p) => ({ qty: p.qty, unit_cost: p.unit_cost }));
-    let remaining = totalConsumed;
-    for (const b of batches) {
-      if (remaining <= 0) break;
-      const take = Math.min(remaining, b.qty);
-      b.qty -= take;
-      remaining -= take;
-    }
-    let totalValue = 0, totalQty = 0;
-    for (const b of batches) {
-      if (b.qty > 0 && b.unit_cost != null) { totalValue += b.qty * b.unit_cost; totalQty += b.qty; }
-    }
-    fifoUnitCostMap[itemRow.id] = totalQty > 0 ? totalValue / totalQty : null;
-  }
+  // Current unit cost per item from the database (moving average of the stock on hand)
+  const unitCosts = businessId ? await loadUnitCostMap(supabase, businessId) : {};
+  const wacMap: Record<string, number | null> = {};
+  for (const itemRow of (itemsData ?? []) as { id: string }[]) wacMap[itemRow.id] = unitCosts[itemRow.id] ?? null;
 
   const items: InventoryRow[] = (itemsData ?? []).map(
     (item: { id: string; name: string; category: string; unit: string; low_stock_threshold: number | null; is_active_roughage: boolean | null; is_discontinued: boolean }) => ({
       ...item,
-      stock: parseFloat(Math.max(0, stockMap[item.id] ?? 0).toFixed(3)),
+      // Signed: a negative balance means consumption was recorded without matching stock-in.
+      stock: parseFloat((stockMap[item.id] ?? 0).toFixed(3)),
       avgDailyConsumption: avgDailyMap[item.id] ?? null,
-      currentCost: fifoUnitCostMap[item.id] ?? null,
+      currentCost: wacMap[item.id] ?? null,
     })
   );
 
@@ -204,21 +195,26 @@ export default async function InventoryPage({
 
   const cattle: CattleOption[] = (cattleData ?? []) as CattleOption[];
 
-  // Estimated daily feed cost using FIFO costs
-  let estimatedDailyCost = 0;
+  // ESTIMATED daily feed cost of today's ration plan at weighted-average cost.
+  // Roughage priced per piece is converted with kg_per_unit; if that is unknown the
+  // roughage cost is reported as unknown instead of multiplying ৳/piece by kg.
+  const costInfo: Record<string, ItemCostInfo> = {};
+  for (const i of (itemsData ?? []) as { id: string; name: string; unit: string; kg_per_unit: number | null }[]) {
+    costInfo[i.id] = { unit: i.unit, kgPerUnit: i.kg_per_unit, unitCost: wacMap[i.id] ?? null, name: i.name };
+  }
+  const estimateLines: { item_id: string; kg: number }[] = [];
   const activeRecipeForCost = (recipesData ?? []).find((r) => r.is_active);
   if (activeRecipeForCost && todayConcentrateKg > 0) {
-    const scale = todayConcentrateKg / (activeRecipeForCost.output_qty || 1);
-    for (const ing of activeRecipeForCost.recipe_ingredients ?? []) {
-      const cost = fifoUnitCostMap[ing.item_id];
-      if (cost != null) estimatedDailyCost += ing.qty_per_batch * scale * cost;
+    for (const l of scaleRecipe(activeRecipeForCost.recipe_ingredients ?? [], todayConcentrateKg)) {
+      estimateLines.push({ item_id: l.item_id, kg: l.qty });
     }
   }
   const activeRoughageForCost = (itemsData ?? []).find((i: { is_active_roughage: boolean | null }) => i.is_active_roughage) as { id: string } | undefined;
   if (activeRoughageForCost && todayRoughageKg > 0) {
-    const cost = fifoUnitCostMap[activeRoughageForCost.id];
-    if (cost != null) estimatedDailyCost += todayRoughageKg * cost;
+    estimateLines.push({ item_id: activeRoughageForCost.id, kg: todayRoughageKg });
   }
+  const estimate = estimateFeedCost(estimateLines, costInfo);
+  const estimatedDailyCost = estimate.total;
 
   // Feed items that are low on stock (for Today card warning) — active only
   const lowStockFeedItems = activeItems
@@ -261,7 +257,6 @@ export default async function InventoryPage({
 
   return (
     <div className="space-y-4 pb-12">
-      <AutoEngineRunner />
 
       {/* Mobile floating deduct button — quick access without scrolling */}
       {feedItems.length > 0 && cattle.length > 0 && (
@@ -293,6 +288,7 @@ export default async function InventoryPage({
         feedItems={feedItems}
         cattleCount={cattle.length}
         estimatedDailyCost={estimatedDailyCost}
+        estimatedCostUnknownItems={estimate.unknownItems}
         lowStockFeedItems={lowStockFeedItems}
       />
 

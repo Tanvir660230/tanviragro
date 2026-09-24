@@ -78,13 +78,13 @@ export async function BudgetForecastPanel({ days = 90 }: { days?: number }) {
       .eq("inventory_items.business_id", businessId)
       .gte("recorded_at", thirtyStr),
     supabase.from("cattle")
-      .select("id, initial_weight_kg, purchase_date")
+      .select("id, initial_weight_kg, initial_weight_type, purchase_date")
       .eq("business_id", businessId)
       .eq("status", "active")
       .is("deleted_at", null),
   ]);
 
-  type CattleRow = { id: string; initial_weight_kg: number; purchase_date: string };
+  type CattleRow = { id: string; initial_weight_kg: number; initial_weight_type: "measured" | "estimated" | "unknown"; purchase_date: string };
   const activeCattleList = (activeCattleData ?? []) as CattleRow[];
   const activeCattle = activeCattleList.length;
 
@@ -95,6 +95,7 @@ export async function BudgetForecastPanel({ days = 90 }: { days?: number }) {
       ? supabase.from("weight_logs")
           .select("cattle_id, weight_kg, recorded_at")
           .in("cattle_id", cattleIds)
+          .eq("weight_type", "measured") // estimates are not weights for growth
           .is("deleted_at", null)
           .order("recorded_at", { ascending: false })
       : Promise.resolve({ data: [] as { cattle_id: string; weight_kg: number; recorded_at: string }[] })
@@ -120,7 +121,8 @@ export async function BudgetForecastPanel({ days = 90 }: { days?: number }) {
   const confirmedADGs: number[] = [];
   for (const c of activeCattleList) {
     const latestWeight = latestLogMap[c.id];
-    if (latestWeight != null && latestWeight > c.initial_weight_kg) {
+    // an estimated purchase weight is not a growth baseline
+    if (c.initial_weight_type !== "estimated" && latestWeight != null && latestWeight > c.initial_weight_kg) {
       const daysSince = Math.max(1, Math.round(
         (todayMs - new Date(c.purchase_date + "T00:00:00").getTime()) / 86_400_000
       ));
@@ -146,7 +148,7 @@ export async function BudgetForecastPanel({ days = 90 }: { days?: number }) {
 
     if (latestWeight != null) {
       // Tier 1 — actual log exists
-      const adg = latestWeight > c.initial_weight_kg
+      const adg = c.initial_weight_type !== "estimated" && latestWeight > c.initial_weight_kg
         ? (latestWeight - c.initial_weight_kg) / daysSince
         : farmAvgADG;
       totalCurrentWeight += latestWeight;

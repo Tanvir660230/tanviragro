@@ -58,11 +58,15 @@ export async function recordGrowthWeightAction(
       return { error: "Cannot add weight logs to sold or deceased cattle" };
     }
 
-    // Fetch previous weight log to calculate incremental ADG
+    // "Visual" is a guess, not a measurement
+    const weightType = weighingMethod === "estimated" ? "estimated" : "measured";
+
+    // Previous MEASURED weight for incremental ADG (estimates are never compared)
     const { data: prevLog } = await supabase
       .from("weight_logs")
       .select("weight_kg, recorded_at")
       .is("deleted_at", null)
+      .eq("weight_type", "measured")
       .eq("cattle_id", cattleId)
       .lte("recorded_at", recordedAt)
       .order("recorded_at", { ascending: false })
@@ -72,7 +76,7 @@ export async function recordGrowthWeightAction(
     let adgSinceLast: number | undefined;
     let daysSinceLast: number | undefined;
 
-    if (prevLog && prevLog.recorded_at !== recordedAt) {
+    if (weightType === "measured" && prevLog && prevLog.recorded_at !== recordedAt) {
       daysSinceLast = daysBetween(prevLog.recorded_at, recordedAt);
       adgSinceLast = calculateAdgBetween(prevLog.weight_kg, weightKg, prevLog.recorded_at, recordedAt);
     }
@@ -80,6 +84,7 @@ export async function recordGrowthWeightAction(
     const insertPayload: any = {
       cattle_id: cattleId,
       weight_kg: weightKg,
+      weight_type: weightType,
       recorded_at: recordedAt,
       notes: notes || null,
       heart_girth_cm: girthCm || null,

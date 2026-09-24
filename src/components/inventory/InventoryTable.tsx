@@ -15,8 +15,10 @@ export interface InventoryRow {
   category: string;
   unit: string;
   low_stock_threshold: number | null;
+  /** signed stock on hand; negative = consumption recorded without matching stock-in */
   stock: number;
   avgDailyConsumption: number | null;
+  kg_per_unit?: number | null;
   currentCost?: number | null;
   is_active_roughage?: boolean | null;
   is_discontinued?: boolean;
@@ -44,7 +46,7 @@ export function InventoryTable({
     (state, { id, delta }: { id: string; delta: number }) =>
       state.map((item) =>
         item.id === id
-          ? { ...item, stock: parseFloat(Math.max(0, item.stock - delta).toFixed(3)) }
+          ? { ...item, stock: parseFloat((item.stock - delta).toFixed(3)) }
           : item
       )
   );
@@ -253,6 +255,11 @@ export function InventoryTable({
                           {item.unit}
                         </span>
                       </span>
+                      {item.stock < 0 && (
+                        <span className="mt-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                          Negative stock — a purchase or count is missing
+                        </span>
+                      )}
                       {item.low_stock_threshold !== null && item.low_stock_threshold > 0 && (
                         <div className="w-16 h-1 bg-muted rounded-full overflow-hidden mt-1">
                           <div
@@ -276,14 +283,14 @@ export function InventoryTable({
                     </div>
                   </td>
 
-                  {/* FIFO Unit Cost */}
+                  {/* Weighted-average unit cost */}
                   <td className="px-3 py-3.5 text-right">
                     {item.currentCost != null ? (
                       <span className="text-xs font-medium text-foreground tabular-nums">
                         {fmtCost(item.currentCost, item.unit)}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground/60">—</span>
+                      <span className="text-xs text-amber-700 dark:text-amber-400">Cost unknown</span>
                     )}
                   </td>
 

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
+import { recipeValidationError } from "@/lib/inventory/recipe-math";
+import { recordFeedBatch } from "@/lib/inventory/feed-batch";
 
 export type RecipeFormState = { error?: string; success?: boolean; id?: string } | undefined;
 export type ProduceBatchState = { error?: string; success?: boolean; produced?: number } | undefined;
@@ -47,11 +49,9 @@ export async function createRecipe(
   } catch {
     return { error: "Invalid ingredients data" };
   }
-  if (!ingredients.length) return { error: "Add at least one ingredient" };
-  for (const ing of ingredients) {
-    if (!ing.item_id) return { error: "Each ingredient must have an item" };
-    if (!(ing.qty_per_batch > 0)) return { error: "Each ingredient qty must be > 0" };
-  }
+  // Mass balance: Σ ingredients must equal the batch size (the database enforces it for active recipes).
+  const invalid = recipeValidationError(ingredients, output_qty);
+  if (invalid) return { error: invalid };
 
   const { data: recipe, error: recipeErr } = await supabase
     .from("feed_recipes")
@@ -169,7 +169,9 @@ export async function restoreRecipe(id: string): Promise<{ error?: string }> {
 }
 
 // ── Produce Batch ─────────────────────────────────────────────────
-// Deducts ingredients proportionally and creates consumption transactions
+// Mixing is an internal transformation recorded by the database in one transaction
+// (produce_feed_batch): ingredients scale by the recipe's ingredient total, the output is
+// valued at the inputs' cost, and nothing is booked as a purchase or cash.
 export async function produceBatch(
   _prev: ProduceBatchState,
   formData: FormData
@@ -187,118 +189,31 @@ export async function produceBatch(
   const qty_to_produce = parseFloat(formData.get("qty_to_produce") as string);
   const recorded_at = formData.get("recorded_at") as string;
   const output_item_id = (formData.get("output_item_id") as string) || null;
+  const batch_id = (formData.get("batch_id") as string) || crypto.randomUUID();
 
   if (!recipe_id) return { error: "Recipe is required" };
   if (isNaN(qty_to_produce) || qty_to_produce <= 0) return { error: "Quantity must be > 0" };
   if (!recorded_at) return { error: "Date is required" };
+  // Without an output item the mixed feed would vanish from stock and its cost would be lost.
+  if (!output_item_id) return { error: "Choose the inventory item that receives the mixed feed" };
+  if (!UUID_RE.test(batch_id)) return { error: "Invalid batch id" };
 
-  // Fetch recipe + verify ownership
-  const { data: recipe } = await supabase
-    .from("feed_recipes")
-    .select("id, business_id, output_qty, name")
-    .eq("id", recipe_id)
-    .maybeSingle();
-  if (!recipe || recipe.business_id !== bizId) return { error: "Recipe not found" };
-
-  // Fetch ingredients
-  const { data: ingredients } = await supabase
-    .from("recipe_ingredients")
-    .select("item_id, qty_per_batch")
-    .eq("recipe_id", recipe_id);
-
-  if (!ingredients?.length) return { error: "Recipe has no ingredients" };
-
-  const scale = qty_to_produce / recipe.output_qty;
-
-  // Check stock for each ingredient
-  const itemIds = ingredients.map((i) => i.item_id);
-  const { data: txns } = await supabase
-    .from("inventory_transactions")
-    .select("item_id, type, qty, unit_cost, recorded_at")
-    .in("item_id", itemIds)
-    .order("recorded_at", { ascending: true });
-
-  const stockMap: Record<string, number> = {};
-  for (const tx of txns ?? []) {
-    stockMap[tx.item_id] = (stockMap[tx.item_id] ?? 0) + (tx.type === "purchase" ? tx.qty : -tx.qty);
-  }
-
-  for (const ing of ingredients as { item_id: string; qty_per_batch: number }[]) {
-    const need = ing.qty_per_batch * scale;
-    const have = stockMap[ing.item_id] ?? 0;
-    if (have < need - 0.001) {
-      return { error: `Insufficient stock for ingredient (need ${need.toFixed(2)}, have ${have.toFixed(2)})` };
-    }
-  }
-
-  // Create consumption transactions for each ingredient
-  const consumptions = (ingredients as { item_id: string; qty_per_batch: number }[]).map((ing) => ({
-    item_id: ing.item_id,
-    type: "consumption" as const,
-    qty: parseFloat((ing.qty_per_batch * scale).toFixed(4)),
-    recorded_at,
-    notes: `Batch production: ${recipe.name} ×${qty_to_produce}`,
-  }));
-
-  const { error: txnErr } = await supabase.from("inventory_transactions").insert(consumptions);
-  if (txnErr) return { error: "Failed to record ingredient consumption" };
-
-  // If user selected an output item, add it as a purchase (stock in)
-  // Compute true FIFO-weighted ingredient cost per unit of output
-  if (output_item_id) {
-    let totalIngCost = 0;
-    for (const ing of ingredients as { item_id: string; qty_per_batch: number }[]) {
-      const ingQty = ing.qty_per_batch * scale;
-      const allIngTxns = ((txns ?? []) as { item_id: string; type: string; qty: number; unit_cost: number | null; recorded_at: string }[])
-        .filter((t) => t.item_id === ing.item_id);
-
-      // FIFO: burn off already-consumed qty from oldest purchase batches
-      const purchases = allIngTxns
-        .filter((t) => t.type === "purchase")
-        .map((p) => ({ qty: p.qty, unit_cost: p.unit_cost }));
-      const prevConsumed = allIngTxns
-        .filter((t) => t.type === "consumption")
-        .reduce((s, t) => s + t.qty, 0);
-
-      let rem = prevConsumed;
-      for (const b of purchases) {
-        if (rem <= 0) break;
-        const take = Math.min(rem, b.qty);
-        b.qty -= take;
-        rem -= take;
-      }
-
-      let ingCost = 0;
-      let coveredQty = 0;
-      let leftToCover = ingQty;
-      for (const b of purchases) {
-        if (leftToCover <= 0) break;
-        if (b.qty <= 0) continue;
-        const take = Math.min(leftToCover, b.qty);
-        if (b.unit_cost != null) { ingCost += take * b.unit_cost; coveredQty += take; }
-        leftToCover -= take;
-      }
-      const fifoUnitCost = coveredQty > 0 ? ingCost / coveredQty : 0;
-      totalIngCost += ingQty * fifoUnitCost;
-    }
-    const outputUnitCost = qty_to_produce > 0 ? totalIngCost / qty_to_produce : null;
-
-    const { error: outputErr } = await supabase.from("inventory_transactions").insert({
-      item_id: output_item_id,
-      type: "purchase",
-      qty: qty_to_produce,
-      unit_cost: outputUnitCost ?? null,
-      recorded_at,
-      notes: `Produced from recipe: ${recipe.name}`,
-    });
-    if (outputErr) {
-      return { error: "Ingredients consumed but output stock could not be added. Please manually record the produced batch in inventory." };
-    }
-  }
+  const result = await recordFeedBatch(supabase, {
+    businessId: bizId,
+    recipeId: recipe_id,
+    outputItemId: output_item_id,
+    outputQty: qty_to_produce,
+    date: recorded_at,
+    batchId: batch_id,
+  });
+  if (result.error) return { error: result.error };
 
   revalidatePath("/dashboard/inventory");
+  revalidateTag("accounting", { expire: 0 });
   return { success: true, produced: qty_to_produce };
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── Supplement Rules ──────────────────────────────────────────────
 export type SupplementRuleState = { error?: string; success?: boolean } | undefined;
@@ -429,6 +344,22 @@ export async function setActiveRecipe(
   const bizId = await getBizId(supabase, user.id);
   if (!bizId) return { error: "Business not found" };
 
+  // Refuse to activate an unbalanced recipe BEFORE deactivating the current one, so the
+  // farm is never left without an active recipe (the database rejects it as well).
+  if (id) {
+    const { data: target } = await supabase
+      .from("feed_recipes")
+      .select("business_id, output_qty, recipe_ingredients(item_id, qty_per_batch)")
+      .eq("id", id)
+      .maybeSingle();
+    if (!target || target.business_id !== bizId) return { error: "Recipe not found" };
+    const invalid = recipeValidationError(
+      (target.recipe_ingredients ?? []) as { item_id: string; qty_per_batch: number }[],
+      Number(target.output_qty)
+    );
+    if (invalid) return { error: `This recipe cannot be activated: ${invalid}` };
+  }
+
   // First, unset all active recipes for this business, preserving active_from and setting active_until to now
   const nowStr = new Date().toISOString();
   await supabase
@@ -447,10 +378,7 @@ export async function setActiveRecipe(
       .eq("business_id", bizId);
 
     if (error) return { error: "Failed to set active recipe" };
-
-    // Trigger auto-engine immediately — it will catch up from active_from
-    const { runAutoFeedDeductions } = await import("./actions");
-    await runAutoFeedDeductions();
+    // Activating a recipe only changes the PLAN. It never creates consumption.
   }
 
   revalidatePath("/dashboard/inventory");
@@ -474,10 +402,7 @@ export async function updateRecipeActiveFrom(activeFrom: string | null): Promise
     .eq("is_active", true);
 
   if (error) return { error: "Failed to update start date" };
-
-  // Re-run engine from the new start date
-  const { runAutoFeedDeductions } = await import("./actions");
-  await runAutoFeedDeductions();
+  // Changing the start date only changes the PLAN. It never creates back-dated consumption.
 
   revalidatePath("/dashboard/inventory");
   return {};

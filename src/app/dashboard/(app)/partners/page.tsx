@@ -6,11 +6,11 @@ import type { Partner, PartnerTransaction, ManagementFeeRate } from "@/types/dat
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { buildWeightPredictions } from "@/lib/cattle-weight";
-import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Users } from "lucide-react";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 
 export const metadata: Metadata = { title: "Partners" };
 
@@ -156,16 +156,15 @@ export default async function PartnersPage() {
     businessId
       ? supabase
           .from("inventory_transactions")
-          .select("item_id, unit_cost, inventory_items!inner(business_id)")
+          .select("item_id, qty, unit_cost, inventory_items!inner(business_id)")
           .eq("inventory_items.business_id", businessId)
           .eq("type", "purchase")
           .order("recorded_at", { ascending: false })
-          .limit(300)
       : Promise.resolve({ data: [] }),
     businessId
       ? supabase
           .from("inventory_items")
-          .select("id, name, unit, roughage_active_from, roughage_active_until")
+          .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
           .eq("business_id", businessId)
           .not("roughage_active_from", "is", null)
       : Promise.resolve({ data: [] }),
@@ -266,18 +265,8 @@ export default async function PartnersPage() {
     }
   }
 
-  const bizDefaultRoughage = bizData?.default_roughage_type ?? "straw";
-  const defaultRoughageDm = ROUGHAGE_TYPES.find(r => r.id === bizDefaultRoughage)?.dmPercent ?? 0.90;
-
-  const unitCostMap: Record<string, number> = {};
-  for (const p of ((recentPurchasesData ?? []) as any[])) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) {
-      unitCostMap[p.item_id] = p.unit_cost; 
-    }
-  }
-  const roughages = (roughagesData ?? []) as { id: string; roughage_active_from: string; roughage_active_until: string | null }[];
-  const recipes = (recipesData ?? []) as { active_from: string; active_until: string | null; recipe_ingredients: { item_id: string; qty_per_batch: number }[] }[];
-
+  // Actual herd feeding allocated to each animal (see lib/inventory/herd-feed-share.ts)
+  const herdFeedShare = await getHerdFeedShareByCattle(supabase, businessId);
   const cattleValuationRows = activeCattle.map((c) => {
     const startMs = new Date(c.purchase_date + "T00:00:00").getTime();
     const daysInPen = Math.max(0, Math.floor((today.getTime() - startMs) / 86400000));
@@ -288,25 +277,8 @@ export default async function PartnersPage() {
       pred?.source === "weighed" || pred?.source === "weighed+predicted" ? "weighed" : "estimated";
 
     // Algorithmic Feed Cost fallback for valuation
-    if ((feedCostByCattle[c.id] ?? 0) === 0) {
-      const { allocatedFeedCost } = calculateAlgorithmicFeedCost({
-        daysInPen,
-        startMs,
-        recipes,
-        roughages,
-        unitCostMap,
-        feedData: {
-          initialWeightKg: c.initial_weight_kg ?? 0,
-          latestLoggedWeightKg: estimatedWeight,
-          lastWeighedAt: null,
-          purchaseDate: c.purchase_date,
-          expectedDailyGainKg: dailyGainKg,
-          roughageDmPercent: defaultRoughageDm,
-        },
-        overrideRoughage: null,
-      });
-      feedCostByCattle[c.id] = allocatedFeedCost;
-    }
+    // Recorded herd feeding shared by head-days (actual), never a ration estimate
+    feedCostByCattle[c.id] = (feedCostByCattle[c.id] ?? 0) + (herdFeedShare[c.id] ?? 0);
 
     const estimatedMarketValue = marketPricePerKg > 0 ? estimatedWeight * marketPricePerKg : 0;
     const costBasis = Number(c.purchase_price) + (feedCostByCattle[c.id] ?? 0) + (costsByCattle[c.id] ?? 0);

@@ -139,6 +139,7 @@ export function Animal360Hero({
               purchase_date: c.purchase_date ?? "",
               purchase_price: c.purchase_price ?? 0,
               initial_weight_kg: c.initial_weight_kg ?? 0,
+              initial_weight_type: c.initial_weight_type,
               target_weight_kg: c.target_weight_kg ?? null,
               expected_daily_gain_kg: c.expected_daily_gain_kg ?? null,
               notes: c.notes,

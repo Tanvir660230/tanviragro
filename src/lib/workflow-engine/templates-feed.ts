@@ -40,9 +40,9 @@ export const FEEDING_TEMPLATE: WorkflowTemplate = {
           type: "select",
           required: true,
           options: [
-            { label: "Silage (Corn/Napier) - Stock: 4,200 kg", value: "item_silage" },
-            { label: "Total Mixed Ration (TMR) - Stock: 1,850 kg", value: "item_tmr" },
-            { label: "Wheat Bran (Choker) - Stock: 920 kg", value: "item_bran" },
+            { label: "Silage (Corn/Napier)", value: "item_silage" },
+            { label: "Total Mixed Ration (TMR)", value: "item_tmr" },
+            { label: "Wheat Bran (Choker)", value: "item_bran" },
           ],
         },
         {

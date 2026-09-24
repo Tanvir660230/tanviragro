@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { todayDhaka } from "@/lib/dates";
 
 type Props = {
   itemId: string;
@@ -63,7 +64,7 @@ function AdjustmentForm({ itemId, itemName, currentStock, unit, onSuccess }: Pro
 
   const delta = parseFloat(newQty) - currentStock;
   const isPositive = delta > 0;
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

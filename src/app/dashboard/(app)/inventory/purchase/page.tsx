@@ -29,7 +29,7 @@ export default async function BulkPurchasePage() {
   const { data: purchaseTxs } = await supabase
     .from("inventory_transactions")
     .select("item_id, unit_cost")
-    .eq("type", "purchase")
+    .eq("movement_type", "purchase")
     .order("recorded_at", { ascending: false });
 
   const lastPrices: Record<string, number> = {};

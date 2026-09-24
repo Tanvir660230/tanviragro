@@ -117,7 +117,7 @@ export class CostingEngine {
       .reduce((sum, t) => sum + (t.qty || 0), 0);
 
     const totalPurchased = purchases.reduce((sum, t) => sum + (t.qty || 0), 0);
-    const stockOnHand = Math.max(0, totalPurchased - totalConsumed);
+    const stockOnHand = totalPurchased - totalConsumed;   // signed: never hide a negative balance
 
     // Build remaining active batch layers
     let burn = totalConsumed;

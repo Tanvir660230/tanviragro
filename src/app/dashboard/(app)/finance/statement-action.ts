@@ -90,7 +90,7 @@ export async function getStatementData(
       .from("inventory_transactions")
       .select("id, qty, unit_cost, recorded_at, inventory_items!inner(business_id, name)")
       .eq("inventory_items.business_id", businessId)
-      .eq("type", "purchase")
+      .eq("movement_type", "purchase")
       .not("unit_cost", "is", null)
       .order("recorded_at", { ascending: true }),
 

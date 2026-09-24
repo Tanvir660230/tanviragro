@@ -41,7 +41,7 @@ export function InventoryTab({ inventoryItems }: InventoryTabProps) {
             </thead>
             <tbody className="divide-y divide-border/60">
               {inventoryItems.map((item) => {
-                const isLow = item.currentStockKg <= item.lowStockThresholdKg;
+                const isLow = item.lowStockThresholdKg != null && item.currentStockKg <= item.lowStockThresholdKg;
                 const isOut = item.currentStockKg <= 0;
                 return (
                   <tr key={item.id} className="hover:bg-muted/30 transition-colors">
@@ -60,16 +60,17 @@ export function InventoryTab({ inventoryItems }: InventoryTabProps) {
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-[11px]">
                       {(item.dmPercent * 100).toFixed(0)}% DM · {item.cpPercentDm}% CP · {item.tdnPercentDm}% TDN
+                      {item.nutrientSource === "reference" && <span className="block text-[10px] text-muted-foreground">typical values, not measured</span>}
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
                       {Math.round(item.currentStockKg)} kg
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-semibold">
-                      ৳{item.costPerKgAsFed}/kg
+                      {item.costPerKgAsFed != null ? `৳${item.costPerKgAsFed.toFixed(2)}/kg` : <span className="text-muted-foreground font-normal">No data</span>}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {isOut ? (
-                        <Badge variant="destructive" className="text-[10px]">Stockout (0 kg)</Badge>
+                        <Badge variant="destructive" className="text-[10px]">{item.currentStockKg < 0 ? "Negative stock" : "Stockout (0 kg)"}</Badge>
                       ) : isLow ? (
                         <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/40">
                           Low Stock (&lt;{item.lowStockThresholdKg}kg)

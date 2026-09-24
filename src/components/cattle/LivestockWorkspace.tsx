@@ -200,7 +200,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts }
         width: 130,
         cell: ({ row }) => {
           const current = row.latestWeight ?? row.initial_weight_kg;
-          const gain = row.latestWeight !== null ? row.latestWeight - (row.initial_weight_kg ?? 0) : null;
+          const gain = row.weightGain; // measured growth only
           return (
             <div className="text-right">
               <div className="font-mono font-bold text-foreground">

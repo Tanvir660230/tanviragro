@@ -12,7 +12,6 @@ import { CattleDomainService } from "@/lib/services/cattle.service";
 import { LivestockEventBus } from "@/lib/livestock/events";
 import type { Cattle } from "@/types/database";
 import { todayDhaka } from "@/lib/dates";
-import { computeFIFOUnitCost } from "@/lib/inventory-fifo";
 
 export type WeightLogFormState =
   | { error?: string; success?: boolean }
@@ -45,9 +44,12 @@ export async function createWeightLog(
 
     CattleDomainService.validateWeightLog(weight_kg, recorded_at);
 
+    // measured unless the user says it was a guess; estimates are never used for growth
+    const weight_type = formData.get("weight_type") === "estimated" ? "estimated" : "measured";
     const { data: insertedLog, error } = await supabase.from("weight_logs").insert({
       cattle_id,
       weight_kg,
+      weight_type,
       recorded_at,
       notes,
       girth_cm,
@@ -294,13 +296,12 @@ export async function logFeedConsumption(
     await assertResourceOwnership<Cattle>(supabase, "cattle", cattle_id, ctx.businessId);
     await assertResourceOwnership(supabase, "inventory_items", item_id, ctx.businessId);
 
-    // Value the consumption at insert (BUG-04: rows without unit_cost counted as zero cost).
-    const unitCost = await computeFIFOUnitCost(supabase, item_id, qty);
+    // Valued by the database at insert: weighted-average cost as of recorded_at (BUG-04).
     const { error } = await supabase.from("inventory_transactions").insert({
       item_id,
       type: "consumption",
+      movement_type: "consumption",
       qty,
-      unit_cost: unitCost ?? undefined,
       recorded_at,
       cattle_id,
     });
@@ -333,12 +334,11 @@ export async function logManualFeed(
     await assertResourceOwnership<Cattle>(supabase, "cattle", cattleId, ctx.businessId);
     await assertResourceOwnership(supabase, "inventory_items", itemId, ctx.businessId);
 
-    const unitCost = await computeFIFOUnitCost(supabase, itemId, qty);
     const { error } = await supabase.from("inventory_transactions").insert({
       item_id: itemId,
       type: "consumption",
+      movement_type: "consumption",
       qty,
-      unit_cost: unitCost ?? undefined,
       recorded_at: todayDhaka(),
       cattle_id: cattleId,
       notes: "Manual Cow-Level Feed Log",

@@ -40,7 +40,7 @@ export default async function ActivityLogPage() {
       ? supabase.from("cost_entries").select("id, category, amount, recorded_at, description").eq("business_id", businessId).is("deleted_at", null).neq("category", "Medical/Vet Fee").order("recorded_at", { ascending: false }).limit(50)
       : Promise.resolve({ data: [] }),
     businessId
-      ? supabase.from("inventory_transactions").select("id, qty, unit_cost, recorded_at, inventory_items!inner(name, unit, business_id)").eq("inventory_items.business_id", businessId).eq("type", "purchase").order("recorded_at", { ascending: false }).limit(50)
+      ? supabase.from("inventory_transactions").select("id, qty, unit_cost, recorded_at, inventory_items!inner(name, unit, business_id)").eq("inventory_items.business_id", businessId).eq("movement_type", "purchase").order("recorded_at", { ascending: false }).limit(50)
       : Promise.resolve({ data: [] }),
     businessId
       ? supabase.from("cattle_treatments").select("id, cattle_id, vet_fee, additional_medical_cost, diagnosis, treated_at, cattle!inner(business_id)").eq("cattle.business_id", businessId).order("treated_at", { ascending: false }).limit(50)

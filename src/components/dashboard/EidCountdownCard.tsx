@@ -30,12 +30,13 @@ function getNextEid(): Date {
 
 function linearADG(
   logs: { cattle_id: string; weight_kg: number; recorded_at: string }[],
-  initialWeight: number,
+  /** null when the purchase weight was only an estimate (then it is not a data point) */
+  initialWeight: number | null,
   purchaseDate: string
 ): number {
   const base = new Date(purchaseDate + "T00:00:00").getTime();
   const points = [
-    { x: 0, y: initialWeight },
+    ...(initialWeight !== null ? [{ x: 0, y: initialWeight }] : []),
     ...logs.map((l) => ({
       x: Math.max(0, Math.floor((new Date(l.recorded_at).getTime() - base) / 86400000)),
       y: l.weight_kg,
@@ -75,7 +76,7 @@ export async function EidCountdownCard() {
   // Step 1: get active cattle (IDs needed to scope weight_logs without unsafe join)
   const { data: activeCattle } = await supabase
     .from("cattle")
-    .select("id, tag_id, breed, gender, purchase_date, initial_weight_kg, purchase_price")
+    .select("id, tag_id, breed, gender, purchase_date, initial_weight_kg, initial_weight_type, purchase_price")
     .eq("business_id", businessId)
     .eq("status", "active");
 
@@ -85,7 +86,8 @@ export async function EidCountdownCard() {
   const { data: weightLogs } = activeIds.length > 0
     ? await supabase
         .from("weight_logs")
-        .select("cattle_id, weight_kg, recorded_at")
+        .select("cattle_id, weight_kg, recorded_at, weight_type")
+        .eq("weight_type", "measured") // growth is fitted to measured weights only
         .in("cattle_id", activeIds)
         .is("deleted_at", null)
         .order("recorded_at", { ascending: true })
@@ -98,6 +100,7 @@ export async function EidCountdownCard() {
     gender: string;
     purchase_date: string;
     initial_weight_kg: number;
+    initial_weight_type: "measured" | "estimated" | "unknown";
     purchase_price: number;
   };
   type LogRow = { cattle_id: string; weight_kg: number; recorded_at: string };
@@ -119,7 +122,7 @@ export async function EidCountdownCard() {
     const daysInPen = Math.floor(
       (today.getTime() - new Date(c.purchase_date + "T00:00:00").getTime()) / 86400000
     );
-    const adg = linearADG(cattleLogs, c.initial_weight_kg, c.purchase_date);
+    const adg = linearADG(cattleLogs, c.initial_weight_type === "estimated" ? null : c.initial_weight_kg, c.purchase_date);
     const projectedWt = Math.min(650, Math.max(0, latestWt + adg * daysToEid));
     const isReady = projectedWt >= 250 && daysInPen + daysToEid >= 90;
     return { id: c.id, tag: c.tag_id, currentWt: latestWt, projectedWt, adg, daysInPen, isReady };

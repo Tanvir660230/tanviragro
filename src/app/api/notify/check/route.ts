@@ -12,6 +12,7 @@ import {
 } from "@/lib/notifications";
 import { authenticateApiRoute } from "@/lib/auth/api-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { measuredGrowth } from "@/lib/growth/baseline";
 
 // Runs daily at 08:00 UTC via Netlify Scheduled Function
 // Monday runs include weekly checks: missing weight, sell window, digest
@@ -205,14 +206,14 @@ export async function GET(request: NextRequest) {
     // Alert: active cattle in pen 90+ days with 30%+ weight gain
 
     const { data: cattleForSell } = await (cronBusinessId
-      ? supabase.from("cattle").select("id, tag_id, purchase_date, initial_weight_kg").eq("status", "active").eq("business_id", cronBusinessId)
-      : supabase.from("cattle").select("id, tag_id, purchase_date, initial_weight_kg").eq("status", "active"));
+      ? supabase.from("cattle").select("id, tag_id, purchase_date, initial_weight_kg, initial_weight_type").eq("status", "active").eq("business_id", cronBusinessId)
+      : supabase.from("cattle").select("id, tag_id, purchase_date, initial_weight_kg, initial_weight_type").eq("status", "active"));
 
     const sellCattleIds = (cattleForSell ?? []).map((c: { id: string }) => c.id);
     const { data: allWeightLogs } = sellCattleIds.length > 0
       ? await supabase
           .from("weight_logs")
-          .select("cattle_id, weight_kg, recorded_at")
+          .select("cattle_id, weight_kg, recorded_at, weight_type")
           .in("cattle_id", sellCattleIds)
           .is("deleted_at", null)
           .order("recorded_at", { ascending: false })
@@ -226,18 +227,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const logsByCattle: Record<string, { weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]> = {};
+    for (const wl of (allWeightLogs ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]) {
+      (logsByCattle[wl.cattle_id] ??= []).push(wl);
+    }
     for (const c of (cattleForSell ?? []) as {
-      id: string; tag_id: string; purchase_date: string; initial_weight_kg: number;
+      id: string; tag_id: string; purchase_date: string; initial_weight_kg: number; initial_weight_type: "measured" | "estimated" | "unknown";
     }[]) {
       const daysInPen = Math.floor(
         (now.getTime() - new Date(c.purchase_date + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24)
       );
-      const currentWeightKg = latestWeightByCattle[c.id] ?? c.initial_weight_kg;
-      const weightGainPct = c.initial_weight_kg > 0
-        ? (currentWeightKg - c.initial_weight_kg) / c.initial_weight_kg
-        : 0;
-      // Use daysInPen for notification purposes (rough estimate is acceptable here)
-      const adgKg = daysInPen > 0 ? (currentWeightKg - c.initial_weight_kg) / daysInPen : 0;
+      // measured growth only — an estimated purchase weight is not a baseline
+      const growth = measuredGrowth(c, logsByCattle[c.id] ?? []);
+      if (!growth) continue;
+      const currentWeightKg = growth.latestKg;
+      const weightGainPct = growth.gainKg / growth.baseline.weightKg;
+      const adgKg = growth.adg;
 
       if (daysInPen >= 90 && weightGainPct >= 0.30) {
         sellReadyCattle.push({ tag: c.tag_id, daysInPen, currentWeightKg, adgKg });

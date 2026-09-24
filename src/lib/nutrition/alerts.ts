@@ -27,7 +27,7 @@ export function evaluateAlerts(
         recommendedAction: "Procure or substitute ingredient immediately.",
         actionHref: `/dashboard/inventory/purchase`,
       });
-    } else if (item.currentStockKg <= item.lowStockThresholdKg) {
+    } else if (item.lowStockThresholdKg != null && item.currentStockKg <= item.lowStockThresholdKg) {
       alerts.push({
         id: `alert-lowstock-${item.id}`,
         type: "low_feed_stock",

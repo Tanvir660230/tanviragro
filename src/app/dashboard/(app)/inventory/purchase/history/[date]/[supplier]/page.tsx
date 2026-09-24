@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ReceiptText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EditPurchaseMemoClient } from "@/components/inventory/EditPurchaseMemoClient";
+import { undonePurchaseIds } from "@/lib/inventory/purchase-rows";
 
 export const metadata = {
   title: "Edit Purchase Memo | Tanvir Agro",
@@ -35,12 +36,14 @@ export default async function EditPurchaseMemoPage({
   // Fetch transactions for this date
   const { data: txns } = await supabase
     .from("inventory_transactions")
-    .select("id, item_id, qty, unit_cost, notes")
-    .eq("type", "purchase")
+    .select("id, item_id, qty, unit_cost, notes, inventory_items!inner(business_id)")
+    .eq("inventory_items.business_id", businessId)
+    .eq("movement_type", "purchase")
     .eq("recorded_at", date);
+  const undone = await undonePurchaseIds(supabase, (txns ?? []).map((t) => t.id));
 
   // Filter in JS to perfectly match the supplier from notes
-  const memoTxns = (txns || []).filter((tx) => {
+  const memoTxns = (txns || []).filter((tx) => !undone.has(tx.id)).filter((tx) => {
     const supplierMatch = tx.notes?.match(/Supplier:\s*(.*?)(?:\. | \| |\.?$|$)/);
     if (supplierMatch && supplierMatch[1]) {
       let extracted = supplierMatch[1].trim();

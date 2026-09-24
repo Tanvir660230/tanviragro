@@ -5,6 +5,7 @@ import type {
   StockTransactionType,
 } from "./types";
 import { InsufficientStockError, NegativeStockError } from "./errors";
+import { weightedAverageUnitCost } from "./feed-costing";
 
 export interface RawInventoryItemRow {
   id: string;
@@ -22,6 +23,8 @@ export interface RawInventoryTxnRow {
   id: string;
   item_id: string;
   type: "purchase" | "consumption";
+  /** meaning of the row (purchase, opening_balance, feed_mix_output, …); type is direction only */
+  movement_type?: string | null;
   qty: number;
   unit_cost: number | null;
   cattle_id?: string | null;
@@ -61,7 +64,9 @@ export class StockLedgerEngine {
         balance -= qty;
       }
     }
-    return parseFloat(Math.max(0, balance).toFixed(4));
+    // Signed: a negative balance is real information (consumption recorded without stock-in)
+    // and must be shown, never hidden as 0.
+    return parseFloat(balance.toFixed(4));
   }
 
   /**
@@ -129,7 +134,9 @@ export class StockLedgerEngine {
   public static compileInventoryPortfolio(
     items: RawInventoryItemRow[],
     transactions: RawInventoryTxnRow[],
-    reservationsMap: Record<string, number> = {}
+    reservationsMap: Record<string, number> = {},
+    /** current unit cost per item from the database; when given it is used instead of an average of IN rows */
+    unitCostMap?: Record<string, number>
   ): ItemStockSummary[] {
     // Group transactions by item_id
     const txByItem = new Map<string, RawInventoryTxnRow[]>();
@@ -147,18 +154,20 @@ export class StockLedgerEngine {
 
       const totalIn = purchases.reduce((s, t) => s + (t.qty || 0), 0);
       const totalOut = consumptions.reduce((s, t) => s + (t.qty || 0), 0);
-      const currentStock = Math.max(0, totalIn - totalOut);
+      // Signed balances: negative stock stays visible.
+      const currentStock = totalIn - totalOut;
       const reservedStock = reservationsMap[item.id] || 0;
-      const availableStock = Math.max(0, currentStock - reservedStock);
+      const availableStock = currentStock - reservedStock;
 
-      // Latest purchase info
-      const latestPurchase = purchases.sort(
-        (a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
-      )[0];
+      // Latest real purchase (not opening stock, own production, mixing output, a count adjustment or an undo)
+      const latestPurchase = purchases
+        .filter((t) => (t.movement_type ?? "purchase") === "purchase")
+        .sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())[0];
 
-      // Valuation (Weighted Average from active stock)
-      const totalPurchasedCost = purchases.reduce((s, p) => s + p.qty * (p.unit_cost || 0), 0);
-      const avgCost = totalIn > 0 ? totalPurchasedCost / totalIn : null;
+      // Weighted-average cost of IN rows with a KNOWN cost (a missing price is not ৳0)
+      const avgCost = unitCostMap
+        ? unitCostMap[item.id] ?? null
+        : weightedAverageUnitCost(purchases.filter((t) => t.movement_type !== "consumption_reversal"));
       const totalValuation = avgCost != null ? currentStock * avgCost : 0;
 
       const isLowStock =

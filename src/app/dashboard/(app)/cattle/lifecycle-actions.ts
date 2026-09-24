@@ -277,13 +277,13 @@ export async function getAnimalUnifiedTimelineAction(
     ] = await Promise.all([
       supabase
         .from("cattle")
-        .select("id, tag_id, dob, purchase_date, purchase_price, initial_weight_kg, created_at, status, breed, gender")
+        .select("id, tag_id, dob, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, created_at, status, breed, gender")
         .eq("id", cattleId)
         .eq("business_id", businessId)
         .single(),
       supabase
         .from("weight_logs")
-        .select("id, recorded_at, weight_kg, girth_cm, length_cm, notes")
+        .select("id, recorded_at, weight_kg, girth_cm, length_cm, notes, weight_type")
         .eq("cattle_id", cattleId)
         .is("deleted_at", null)
         .order("recorded_at", { ascending: false }),

@@ -42,11 +42,10 @@ export async function updatePurchaseMemo(
   const lockError = await checkFinancialLock(supabase, businessId, date);
   if (lockError) return { error: lockError };
 
-  // Fetch existing transactions to check stock and calculate original bill
-  const { data: existingTxns } = await supabase
-    .from("inventory_transactions")
-    .select("id, item_id, qty, unit_cost")
-    .in("id", existingTxnIds);
+  // Existing rows must be active purchase rows of THIS business (never trust client ids)
+  const existing = await loadActivePurchaseRows(supabase, businessId, existingTxnIds);
+  if ("error" in existing) return { error: existing.error };
+  const existingTxns = existing.rows;
 
   let originalTotalBill = 0;
   const existingMap = new Map();
@@ -100,85 +99,34 @@ export async function updatePurchaseMemo(
   const updatedIds = itemsToUpdate.map(it => it.id!);
   const idsToDelete = existingTxnIds.filter(id => !updatedIds.includes(id));
 
-  // --- Pre-flight Stock Validation ---
-  const allAffectedItemIds = [...new Set([...finalItems.map(it => it.itemId), ...(existingTxns || []).map(tx => tx.item_id)])];
-  const { data: currentStockRows } = await supabase
-    .from("inventory_transactions")
-    .select("item_id, type, qty")
-    .in("item_id", allAffectedItemIds);
+  // History is never edited or deleted: a changed or removed row is UNDONE by a
+  // purchase_reversal (same qty and cost, audited) and the corrected row is added as new.
+  const changed = itemsToUpdate.filter((it) => {
+    const ex = existingMap.get(it.id);
+    const unit_cost = parseFloat((it.landedCost / it.qty).toFixed(6));
+    return !ex || ex.item_id !== it.itemId || Number(ex.qty) !== it.qty || Math.abs(Number(ex.unit_cost ?? 0) - unit_cost) > 0.000001;
+  });
+  const toUndo = [...idsToDelete, ...changed.map((it) => it.id!)];
+  const toAdd = [...itemsToInsert, ...changed];
 
-  const stockMap = new Map();
-  if (currentStockRows) {
-    for (const row of currentStockRows) {
-      const isAddition = row.type === "purchase";
-      const change = isAddition ? row.qty : -row.qty;
-      stockMap.set(row.item_id, (stockMap.get(row.item_id) || 0) + change);
-    }
-  }
-
-  // Check deletions
-  for (const delId of idsToDelete) {
-    const exTx = existingMap.get(delId);
-    if (exTx) {
-      const currentStock = stockMap.get(exTx.item_id) || 0;
-      if (currentStock < exTx.qty) {
-         return { error: `Cannot remove an item because you only have ${currentStock} left in stock (trying to remove ${exTx.qty}).` };
-      }
-    }
-  }
-
-  // Check updates (reductions)
-  for (const it of itemsToUpdate) {
-    const exTx = existingMap.get(it.id);
-    if (exTx && it.qty < exTx.qty) {
-      const currentStock = stockMap.get(exTx.item_id) || 0;
-      const reduction = exTx.qty - it.qty;
-      if (currentStock < reduction) {
-        return { error: `Cannot reduce item quantity. You only have ${currentStock} left in stock, but trying to reduce by ${reduction}.` };
-      }
-    }
-  }
-
-  // 1. Delete removed items
-  if (idsToDelete.length > 0) {
-    const { error: delErr } = await supabase
-      .from("inventory_transactions")
-      .delete()
-      .in("id", idsToDelete);
-      
-    if (delErr) return { error: "Failed to delete removed items." };
-  }
-
-  // 2. Update existing items
-  for (const it of itemsToUpdate) {
-    const unit_cost = parseFloat((it.landedCost / it.qty).toFixed(4));
-    const notesString = `Invoice Memo. Supplier: ${supplierName}. | Transport: ${transportCost} | Mode: ${it.mode || "loose"} | Bags: ${it.bags || ""} | KgPerBag: ${it.kgPerBag || ""}` + (extraNotes ? ` | ${extraNotes}` : "");
-    const { error: upErr } = await supabase
-      .from("inventory_transactions")
-      .update({
-        qty: it.qty,
-        unit_cost: unit_cost,
-        notes: notesString
-      })
-      .eq("id", it.id!);
-      
-    if (upErr) return { error: "Failed to update item." };
-  }
-
-  // 3. Insert new items
-  if (itemsToInsert.length > 0) {
-    const txnsToInsert = itemsToInsert.map(it => ({
+  // 1. add the corrected rows first (so undoing an old row never leaves a temporary shortfall)
+  if (toAdd.length > 0) {
+    const txnsToInsert = toAdd.map(it => ({
       item_id: it.itemId,
       type: "purchase" as const,
+      movement_type: "purchase" as const,
       qty: it.qty,
-      unit_cost: parseFloat((it.landedCost / it.qty).toFixed(4)),
+      unit_cost: parseFloat((it.landedCost / it.qty).toFixed(6)),
       recorded_at: date,
       notes: `Invoice Memo. Supplier: ${supplierName}. | Transport: ${transportCost} | Mode: ${it.mode || "loose"} | Bags: ${it.bags || ""} | KgPerBag: ${it.kgPerBag || ""}` + (extraNotes ? ` | ${extraNotes}` : ""),
     }));
-
     const { error: insErr } = await supabase.from("inventory_transactions").insert(txnsToInsert);
-    if (insErr) return { error: "Failed to add new items." };
+    if (insErr) return { error: "Failed to add the corrected items." };
   }
+
+  // 2. undo the replaced / removed rows
+  const undoErr = await undoPurchaseRows(supabase, toUndo.map((id) => existingMap.get(id)), "Memo corrected");
+  if (undoErr) return { error: undoErr };
 
   // --- Liability Adjustment ---
   const difference = newTotalBill - originalTotalBill;
@@ -227,22 +175,69 @@ export async function deletePurchaseMemo(date: string, supplierName: string, exi
 
   if (!existingTxnIds || existingTxnIds.length === 0) return { error: "No transactions to delete." };
 
-  // Delete transactions
-  const { error: delErr } = await supabase
-    .from("inventory_transactions")
-    .delete()
-    .in("id", existingTxnIds);
-
-  if (delErr) {
-    if (delErr.message?.includes("negative")) {
-      return { error: "Cannot delete this memo because some items have already been consumed (stock would go negative)." };
-    }
-    return { error: "Failed to delete memo." };
-  }
+  // The rows stay in history; each one is undone by an audited purchase_reversal.
+  const existing = await loadActivePurchaseRows(supabase, businessId, existingTxnIds);
+  if ("error" in existing) return { error: existing.error };
+  const undoErr = await undoPurchaseRows(supabase, existing.rows, "Memo deleted");
+  if (undoErr) return { error: undoErr };
 
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/inventory/purchase/history");
   revalidateTag("accounting", { expire: 0 });
 
   return { success: true };
+}
+
+type PurchaseRow = { id: string; item_id: string; qty: number; unit_cost: number | null; recorded_at: string };
+
+/** Active (not yet undone) purchase rows among `ids` that belong to the business. */
+async function loadActivePurchaseRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  ids: string[]
+): Promise<{ rows: PurchaseRow[] } | { error: string }> {
+  if (!ids.length) return { rows: [] };
+  const { data, error } = await supabase
+    .from("inventory_transactions")
+    .select("id, item_id, qty, unit_cost, recorded_at, movement_type, inventory_items!inner(business_id)")
+    .in("id", ids)
+    .eq("inventory_items.business_id", businessId);
+  if (error) return { error: "Could not load the memo." };
+  const rows = (data ?? []) as (PurchaseRow & { movement_type: string })[];
+  if (rows.length !== new Set(ids).size || rows.some((r) => r.movement_type !== "purchase")) {
+    return { error: "This memo contains rows that are not purchases of this business." };
+  }
+  const { data: undone } = await supabase
+    .from("inventory_transactions")
+    .select("reverses_id")
+    .eq("movement_type", "purchase_reversal")
+    .in("reverses_id", ids);
+  const undoneIds = new Set((undone ?? []).map((u: { reverses_id: string | null }) => u.reverses_id));
+  return { rows: rows.filter((r) => !undoneIds.has(r.id)) };
+}
+
+/** Undo purchase rows with audited purchase_reversal rows (same qty, same cost, same business date). */
+async function undoPurchaseRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: (PurchaseRow | undefined)[],
+  reason: string
+): Promise<string | null> {
+  const valid = rows.filter((r): r is PurchaseRow => !!r);
+  if (!valid.length) return null;
+  const { error } = await supabase.from("inventory_transactions").insert(
+    valid.map((r) => ({
+      item_id: r.item_id,
+      type: "consumption" as const,
+      movement_type: "purchase_reversal" as const,
+      qty: r.qty,
+      recorded_at: r.recorded_at,
+      reverses_id: r.id,
+      idempotency_key: `purchase-undo:${r.id}`,
+      notes: `${reason}: purchase row ${r.id} undone`,
+    }))
+  );
+  if (!error) return null;
+  if (error.code === "23514") return "Some of this stock has already been used, so the purchase cannot be undone. Record a stock count adjustment instead.";
+  if (error.code === "23505") return "This purchase was already corrected. Refresh the page.";
+  return "Failed to correct the memo.";
 }

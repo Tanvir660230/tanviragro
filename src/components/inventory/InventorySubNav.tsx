@@ -14,10 +14,12 @@ import {
   History,
   FlaskConical,
   ReceiptText,
+  CalendarRange,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/dashboard/inventory", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/inventory/usage", label: "Feed Usage", icon: CalendarRange },
   { href: "/dashboard/inventory/products", label: "Products", icon: Package },
   { href: "/dashboard/inventory/warehouse", label: "Warehouses", icon: Warehouse },
   { href: "/dashboard/inventory/movements", label: "Movements", icon: ArrowRightLeft },

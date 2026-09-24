@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cattle, WeightLog, Sale, CostEntry } from "@/types/database";
 import { fmtBDT } from "@/lib/format";
 import type { Dictionary } from "@/i18n/getDictionary";
-import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
+import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 
 // Use SupabaseClient without generic so TypeScript doesn't try to infer
 // column picks from our manually-written Database type (which lacks the
@@ -88,14 +88,13 @@ export async function getDashboardStats(
       .neq("entry_class", "asset"),
     supabase
       .from("inventory_transactions")
-      .select("item_id, unit_cost, inventory_items!inner(business_id)")
+      .select("item_id, qty, unit_cost, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", businessId)
       .eq("type", "purchase")
-      .order("recorded_at", { ascending: false })
-      .limit(300),
+      .order("recorded_at", { ascending: false }),
     supabase
       .from("inventory_items")
-      .select("id, name, unit, roughage_active_from, roughage_active_until")
+      .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
       .eq("business_id", businessId)
       .not("roughage_active_from", "is", null),
     supabase
@@ -111,8 +110,6 @@ export async function getDashboardStats(
 
   const sales = (salesData ?? []) as any[];
   const dailyGainKg = bizData?.default_daily_gain_kg ?? 0.6;
-  const bizDefaultRoughage = bizData?.default_roughage_type ?? "straw";
-  const defaultRoughageDm = ROUGHAGE_TYPES.find(r => r.id === bizDefaultRoughage)?.dmPercent ?? 0.90;
 
   // Build Cost Maps
   const feedCostByCattle: Record<string, number> = {};
@@ -134,19 +131,11 @@ export async function getDashboardStats(
     }
   }
 
-  const unitCostMap: Record<string, number> = {};
-  for (const p of (recentPurchasesData ?? []) as any[]) {
-    if (p.unit_cost != null && !unitCostMap[p.item_id]) {
-      unitCostMap[p.item_id] = p.unit_cost;
-    }
-  }
-
-  const roughages = (roughagesData ?? []) as any[];
-  const recipes = (recipesData ?? []) as any[];
-
   let totalSales = 0;
   let totalSoldCostBasis = 0;
 
+  // Actual herd feeding allocated to each animal (see lib/inventory/herd-feed-share.ts)
+  const herdFeedShare = await getHerdFeedShareByCattle(supabase, businessId);
   for (const s of sales) {
     totalSales += Number(s.sale_price_total ?? 0);
     const c = s.cattle;
@@ -158,26 +147,8 @@ export async function getDashboardStats(
     const daysInPen = Math.max(0, Math.floor((endMs - startMs) / 86400000));
     
     // Algorithmic feed fallback if no feed logged
-    if ((feedCostByCattle[s.cattle_id] ?? 0) === 0) {
-      const estimatedFinalWeight = c.initial_weight_kg + daysInPen * dailyGainKg;
-      const { allocatedFeedCost } = calculateAlgorithmicFeedCost({
-        daysInPen,
-        startMs,
-        recipes,
-        roughages,
-        unitCostMap,
-        feedData: {
-          initialWeightKg: c.initial_weight_kg ?? 0,
-          latestLoggedWeightKg: estimatedFinalWeight,
-          lastWeighedAt: s.sold_at,
-          purchaseDate: c.purchase_date,
-          expectedDailyGainKg: dailyGainKg,
-          roughageDmPercent: defaultRoughageDm,
-        },
-        overrideRoughage: null,
-      });
-      feedCostByCattle[s.cattle_id] = allocatedFeedCost;
-    }
+    // Recorded herd feeding shared by head-days (actual), never a ration estimate
+    feedCostByCattle[s.cattle_id] = (feedCostByCattle[s.cattle_id] ?? 0) + (herdFeedShare[s.cattle_id] ?? 0);
 
     const costBasis = purchasePrice + (feedCostByCattle[s.cattle_id] ?? 0) + (costsByCattle[s.cattle_id] ?? 0);
     totalSoldCostBasis += costBasis;
@@ -228,7 +199,7 @@ export async function getRecentActivity(
       .from("inventory_transactions")
       .select("id, qty, unit_cost, recorded_at, inventory_items!inner(name, unit, business_id)")
       .eq("inventory_items.business_id", businessId)
-      .eq("type", "purchase")
+      .eq("movement_type", "purchase")
       .order("recorded_at", { ascending: false })
       .limit(4),
     supabase

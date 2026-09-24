@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, History, ReceiptText, Calendar, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { format } from "date-fns";
+import { undonePurchaseIds } from "@/lib/inventory/purchase-rows";
 
 export const metadata = {
   title: "Purchase History | Tanvir Agro",
@@ -23,6 +24,8 @@ type PurchaseTx = {
 
 type MemoGroup = {
   date: string;
+  /** when the memo was typed in (may be days after the purchase date) */
+  enteredOn: string;
   supplier: string;
   itemCount: number;
   totalCost: number;
@@ -48,14 +51,17 @@ export default async function PurchaseHistoryPage() {
       inventory_items!inner(business_id, name, unit)
     `)
     .eq("inventory_items.business_id", businessId)
-    .eq("type", "purchase")
+    .eq("movement_type", "purchase")
     .order("recorded_at", { ascending: false })
     .order("created_at", { ascending: false });
+
+  // Undone (corrected) purchase rows stay in the ledger but are not part of a memo any more
+  const undone = await undonePurchaseIds(supabase, (txns ?? []).map((t) => t.id));
 
   // Group transactions into memos
   const memosMap = new Map<string, MemoGroup>();
 
-  (txns || []).forEach((tx) => {
+  (txns || []).filter((tx) => !undone.has(tx.id)).forEach((tx) => {
     // Extract supplier from notes
     // Notes format: "Invoice Memo. Supplier: Supplier Name." or "Invoice Memo. Supplier: Supplier Name. | Extra"
     let supplierName = "Unknown Supplier";
@@ -73,6 +79,7 @@ export default async function PurchaseHistoryPage() {
     if (!memosMap.has(groupKey)) {
       memosMap.set(groupKey, {
         date: tx.recorded_at,
+        enteredOn: tx.created_at.slice(0, 10),
         supplier: supplierName,
         itemCount: 0,
         totalCost: 0,
@@ -126,8 +133,13 @@ export default async function PurchaseHistoryPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {format(new Date(memo.date), "MMM d, yyyy")}
+                        Bought {format(new Date(memo.date), "MMM d, yyyy")}
                       </span>
+                      {memo.enteredOn !== memo.date.slice(0, 10) && (
+                        <span title="Late entries are normal: stock and cost use the purchase date">
+                          · entered {format(new Date(memo.enteredOn), "MMM d")}
+                        </span>
+                      )}
                       <span>•</span>
                       <span>{memo.itemCount} items</span>
                     </div>

@@ -4,12 +4,15 @@ import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient, type ServerClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
-import { computeFIFOUnitCost, getItemStock as getItemStockShared } from "@/lib/inventory-fifo";
+import { getItemStock as getItemStockShared } from "@/lib/inventory-fifo";
 import { AdjustmentEngine } from "@/lib/inventory/adjustment-engine";
 import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
-import { addDays, todayDhaka } from "@/lib/dates";
+import { todayDhaka } from "@/lib/dates";
+import { feedLedgerErrorMessage } from "@/lib/inventory/feed-batch";
+import { scaleRecipe } from "@/lib/inventory/recipe-math";
+import type { CostSource, MovementType } from "@/types/database";
 
 export type InventoryFormState =
   | { error?: string; success?: boolean; warning?: string }
@@ -20,6 +23,35 @@ export type InventoryFormState =
 /** Current stock on hand — extracted to src/lib/inventory-fifo.ts */
 async function getItemStock(supabase: ServerClient, item_id: string): Promise<number> {
   return getItemStockShared(supabase, item_id);
+}
+
+/**
+ * A ৳0 price is only "free" when the user says so; otherwise the database labels it
+ * zero_unconfirmed so reports can show it for review (never silently treated as free).
+ */
+function zeroPriceSource(unitCost: number | null, formData: FormData): CostSource | undefined {
+  return unitCost === 0 && formData.get("zero_confirmed") === "on" ? "zero_confirmed" : undefined;
+}
+
+type StockInMovement = "purchase" | "opening_balance" | "own_production";
+const STOCK_IN_NOTE: Record<StockInMovement, string> = {
+  purchase: "Purchased when item was created",
+  opening_balance: "Initial stock (opening balance)",
+  own_production: "Harvested from own / leased land (not a purchase)",
+};
+/** Which kind of stock-in the form describes; anything unexpected falls back to the default. */
+function stockInMovement(formData: FormData, fallback: StockInMovement): StockInMovement {
+  const v = formData.get("stock_source");
+  return v === "purchase" || v === "opening_balance" || v === "own_production" ? v : fallback;
+}
+
+/** kg in one stock unit. kg items are 1 by definition; for other units NULL means unknown. */
+function parseKgPerUnit(unit: string, formData: FormData): number | null | "invalid" {
+  if (unit.trim().toLowerCase() === "kg") return 1;
+  const raw = (formData.get("kg_per_unit") as string | null)?.trim();
+  if (!raw) return null;
+  const n = parseFloat(raw);
+  return n > 0 ? n : "invalid";
 }
 
 export async function createInventoryItem(
@@ -41,6 +73,8 @@ export async function createInventoryItem(
   if (!name) return { error: "Item name is required" };
   if (!category) return { error: "Category is required" };
   if (!unit) return { error: "Unit is required" };
+  const kg_per_unit = parseKgPerUnit(unit, formData);
+  if (kg_per_unit === "invalid") return { error: "kg per unit must be greater than 0 (or leave it empty if unknown)" };
 
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Failed to set up business account" };
@@ -51,6 +85,7 @@ export async function createInventoryItem(
     category: category as "feed" | "medicine" | "equipment" | "other",
     unit,
     low_stock_threshold,
+    kg_per_unit,
   }).select("id").single();
 
   if (error) {
@@ -68,14 +103,21 @@ export async function createInventoryItem(
     const unitCost = unitCostRaw ? parseFloat(unitCostRaw) : null;
     const purchaseDate = (formData.get("purchase_date") as string) || new Date().toISOString();
     const notes = (formData.get("notes") as string)?.trim() || null;
+    // Stock already on the farm is an OPENING BALANCE (inventory, not a cash purchase).
+    // Harvest from own/leased land is OWN PRODUCTION (৳0 — the land cost is an expense).
+    // Only stock bought now is a purchase that reduces cash.
+    const movement_type = stockInMovement(formData, "opening_balance");
+    const isOwn = movement_type === "own_production";
 
     const { error: txError } = await supabase.from("inventory_transactions").insert({
       item_id: newItem.id,
       type: "purchase",
+      movement_type,
       qty,
-      unit_cost: unitCost,
+      unit_cost: isOwn ? null : unitCost,
+      cost_source: isOwn ? undefined : zeroPriceSource(unitCost, formData),
       recorded_at: purchaseDate,
-      notes: notes || "Initial stock added during creation",
+      notes: notes || STOCK_IN_NOTE[movement_type],
     });
     
     if (txError) {
@@ -108,20 +150,37 @@ export async function adjustStock(
   if (!item_id) return { error: "Item ID is required" };
   if (isNaN(adjustedQty) || adjustedQty < 0) return { error: "Valid adjusted quantity is required" };
 
-  const currentStock = await CentralInventoryRepository.getItemStockOnHand(supabase, item_id);
-  const estimatedCost = await CentralInventoryRepository.getEstimatedFifoUnitCost(supabase, item_id, 1);
+  const businessId = await getCurrentBusinessId(supabase);
+  if (!businessId) return { error: "Business not found" };
+  const { data: itemRow } = await supabase
+    .from("inventory_items")
+    .select("business_id")
+    .eq("id", item_id)
+    .maybeSingle();
+  if (!itemRow || itemRow.business_id !== businessId) return { error: "Unauthorized" };
 
+  const currentStock = await CentralInventoryRepository.getItemStockOnHand(supabase, item_id);
+
+  // Cost is not taken from the client: the database values the difference at WAC as of the date.
   const adjustment = AdjustmentEngine.processAdjustment(
     { itemId: item_id, adjustedQty, reason: reason as any, recordedAt: recorded_at, notes: notes || undefined },
     currentStock,
-    estimatedCost
+    null
   );
+  if (adjustment.adjustmentQty < 0.0001) return { error: "The count matches the stock on hand. Nothing to adjust." };
+
+  // A higher count adds stock (adjustment_in). A lower count is a loss: waste-type reasons
+  // are wastage, everything else adjustment_out. Neither is a purchase or cash.
+  const movement_type: MovementType =
+    adjustment.direction === "IN"
+      ? "adjustment_in"
+      : ["spoilage", "damage", "waste"].includes(reason) ? "wastage" : "adjustment_out";
 
   const { error } = await supabase.from("inventory_transactions").insert({
     item_id,
     type: adjustment.transactionType,
+    movement_type,
     qty: adjustment.adjustmentQty,
-    unit_cost: adjustment.unitCost,
     recorded_at,
     notes: adjustment.notes,
   });
@@ -166,13 +225,17 @@ export async function addStock(
   const lockError = await checkFinancialLock(supabase, businessId, recorded_at);
   if (lockError) return { error: lockError };
 
+  const movement_type = stockInMovement(formData, "purchase");
+  const isOwn = movement_type === "own_production";
   const { error } = await supabase.from("inventory_transactions").insert({
     item_id,
     type: "purchase",
+    movement_type,
     qty,
-    unit_cost,
+    unit_cost: isOwn ? null : unit_cost,
+    cost_source: isOwn ? undefined : zeroPriceSource(unit_cost, formData),
     recorded_at,
-    notes,
+    notes: notes || (isOwn ? STOCK_IN_NOTE.own_production : null),
   });
 
   if (error) return { error: "Failed to save transaction" };
@@ -183,9 +246,6 @@ export async function addStock(
   revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
-
-// computeFIFOCost extracted to src/lib/inventory-fifo.ts
-const computeFIFOCost = computeFIFOUnitCost;
 
 export async function logConsumption(
   _prevState: InventoryFormState,
@@ -228,16 +288,12 @@ export async function logConsumption(
     };
   }
 
-  let fifo_unit_cost: number | null = null;
-  try {
-    fifo_unit_cost = await computeFIFOCost(supabase, item_id, qty);
-  } catch { /* non-fatal — proceed without cost */ }
-
+  // unit_cost is set by the database (weighted-average cost as of recorded_at)
   const { error } = await supabase.from("inventory_transactions").insert({
     item_id,
     type: "consumption" as const,
+    movement_type: "consumption",
     qty,
-    unit_cost: fifo_unit_cost,
     cattle_id: cattle_id || null,
     recorded_at,
     notes,
@@ -264,14 +320,20 @@ export async function logConsumption(
   return { success: true };
 }
 
-export interface DailyDeductionEntry {
+export interface DailyFeedingLine {
   item_id: string;
-  qty_per_head: number;
+  /** total quantity ACTUALLY fed on the date, in the item's own stock unit */
+  qty: number;
 }
 
-export async function dailyFeedDeduction(
-  entries: DailyDeductionEntry[],
-  cattle_count: number,
+/**
+ * Records what the herd was actually fed on one date. The user confirms every quantity;
+ * nothing is generated from the ration formula. The database writes one consumption row
+ * per item (valued at weighted-average cost) and rejects a second recording for the same
+ * business, date and item, so a double submit can never deduct twice.
+ */
+export async function recordDailyFeeding(
+  lines: DailyFeedingLine[],
   recorded_at: string
 ): Promise<{ error?: string; count?: number }> {
   const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
@@ -279,66 +341,42 @@ export async function dailyFeedDeduction(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
-  if (!entries.length) return { error: "No items selected" };
-  if (cattle_count <= 0) return { error: "No active cattle" };
+
+  if (!/^d{4}-d{2}-d{2}$/.test(recorded_at)) return { error: "Invalid date" };
+  if (recorded_at > todayDhaka()) return { error: "Feeding cannot be recorded for a future date" };
+
+  // one line per item (two lines for the same item would violate the one-row-per-day rule)
+  const byItem = new Map<string, number>();
+  for (const l of lines) {
+    if (!l.item_id || !Number.isFinite(l.qty) || l.qty <= 0) continue;
+    byItem.set(l.item_id, (byItem.get(l.item_id) ?? 0) + l.qty);
+  }
+  if (!byItem.size) return { error: "Enter at least one quantity" };
 
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
 
-  // Verify all caller-supplied item IDs belong to this business
-  const itemIds = entries.map((e) => e.item_id);
-  const { data: ownedItems } = await supabase
-    .from("inventory_items")
-    .select("id")
-    .eq("business_id", businessId)
-    .in("id", itemIds);
-  const ownedSet = new Set((ownedItems ?? []).map((i) => i.id));
-  if (itemIds.some((id) => !ownedSet.has(id))) return { error: "Unauthorized item" };
+  const lockError = await checkFinancialLock(supabase, businessId, recorded_at);
+  if (lockError) return { error: lockError };
 
-  const qtys = entries.map((e) =>
-    parseFloat((e.qty_per_head * cattle_count).toFixed(3))
-  );
-
-  // Stock check for every item before inserting anything
-  const stocks = await Promise.all(
-    entries.map((e) => getItemStock(supabase, e.item_id))
-  );
-  const shortfall = entries
-    .map((e, i) => ({ item_id: e.item_id, need: qtys[i], have: stocks[i] }))
-    .find((x) => x.need > x.have);
-
-  if (shortfall) {
-    return {
-      error: `Insufficient stock for item ${shortfall.item_id}. Need ${shortfall.need.toFixed(2)}, have ${shortfall.have.toFixed(2)}.`,
-    };
+  const { data, error } = await supabase.rpc("record_herd_feeding", {
+    p_business_id: businessId,
+    p_date: recorded_at,
+    p_lines: [...byItem].map(([item_id, qty]) => ({ item_id, qty: parseFloat(qty.toFixed(4)) })),
+    p_note: null,
+  });
+  if (error) {
+    if (error.code === "23505") {
+      return { error: `Feeding for ${recorded_at} is already recorded for one of these items. Nothing was deducted twice.` };
+    }
+    return { error: feedLedgerErrorMessage(error) };
   }
 
-  const fifoCosts = await Promise.all(
-    entries.map((e, i) =>
-      computeFIFOCost(supabase, e.item_id, qtys[i]).catch(() => null)
-    )
-  );
-
-  const rows = entries.map((e, i) => ({
-    item_id: e.item_id,
-    type: "consumption" as const,
-    qty: qtys[i],
-    unit_cost: fifoCosts[i],
-    cattle_id: null,
-    recorded_at,
-    notes: `Daily batch deduction — ${cattle_count} head @ ${e.qty_per_head}/head`,
-  }));
-
-  const { error } = await supabase.from("inventory_transactions").insert(rows);
-  if (error) return { error: "Failed to save deduction" };
-
-  // Supplement auto-deduction logic removed as per user request
-
   revalidatePath("/dashboard/inventory");
-    revalidatePath("/dashboard");
-    revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/finance");
   revalidateTag("accounting", { expire: 0 });
-  return { count: rows.length };
+  return { count: data ?? 0 };
 }
 
 export async function archiveInventoryItem(
@@ -463,6 +501,8 @@ export async function updateInventoryItem(
   if (!name) return { error: "Item name is required" };
   if (!category) return { error: "Category is required" };
   if (!unit) return { error: "Unit is required" };
+  const kg_per_unit = parseKgPerUnit(unit, formData);
+  if (kg_per_unit === "invalid") return { error: "kg per unit must be greater than 0 (or leave it empty if unknown)" };
 
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
@@ -485,6 +525,7 @@ export async function updateInventoryItem(
       category: category as "feed" | "medicine" | "equipment" | "other",
       unit,
       low_stock_threshold,
+      kg_per_unit,
     })
     .eq("id", id);
 
@@ -498,10 +539,10 @@ export async function updateInventoryItem(
   revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
-export async function getFarmDailyFeedRequirement(
-  dateStr: string,
-  roughageActiveFromCached?: string | null   // pre-fetched by caller to avoid N queries in loops
-) {
+/** A suggested quantity for the feeding form. It is a PLAN: only recordDailyFeeding writes stock. */
+export type PlannedFeedLine = { item_id: string; qty: number | null; unit: string; note?: string };
+
+export async function getFarmDailyFeedRequirement(dateStr: string) {
   const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_VIEW);
   if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
@@ -522,25 +563,31 @@ export async function getFarmDailyFeedRequirement(
 
   if (error || !cattle) return { error: "Failed to fetch cattle" };
 
-  // Roughage activation date + type for correct DM% calculation.
-  let roughageActiveFrom: string | null;
-  let roughageDmPercent = 0.90; // default: straw
-  if (roughageActiveFromCached !== undefined) {
-    roughageActiveFrom = roughageActiveFromCached;
-  } else {
-    const { data: activeRoughageItem } = await supabase
+  // Active roughage item (its unit and kg-per-unit decide how the kg plan is shown) and the
+  // business's roughage type (dry-matter %). inventory_items has no roughage_type column.
+  const [{ data: activeRoughageItem }, { data: bizRow }, { data: activeRecipe }] = await Promise.all([
+    supabase
       .from("inventory_items")
-      .select("roughage_active_from, roughage_type")
+      .select("id, name, unit, kg_per_unit, roughage_active_from")
       .eq("business_id", businessId)
       .eq("is_active_roughage", true)
-      .maybeSingle();
-    roughageActiveFrom = (activeRoughageItem as { roughage_active_from?: string | null } | null)?.roughage_active_from ?? null;
-    const roughageType = (activeRoughageItem as { roughage_type?: string | null } | null)?.roughage_type;
-    if (roughageType) {
-      const { ROUGHAGE_TYPES } = await import("@/utils/feed-calculator");
-      const found = ROUGHAGE_TYPES.find((r) => r.id === roughageType);
-      if (found) roughageDmPercent = found.dmPercent;
-    }
+      .maybeSingle(),
+    supabase.from("businesses").select("default_roughage_type").eq("id", businessId).maybeSingle(),
+    supabase
+      .from("feed_recipes")
+      .select("id, name, recipe_ingredients(item_id, qty_per_batch)")
+      .eq("business_id", businessId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .maybeSingle(),
+  ]);
+  const roughageActiveFrom = activeRoughageItem?.roughage_active_from ?? null;
+  let roughageDmPercent = 0.90; // default: straw
+  const roughageType = (bizRow as { default_roughage_type?: string | null } | null)?.default_roughage_type;
+  if (roughageType) {
+    const { ROUGHAGE_TYPES } = await import("@/utils/feed-calculator");
+    const found = ROUGHAGE_TYPES.find((r) => r.id === roughageType);
+    if (found) roughageDmPercent = found.dmPercent;
   }
   const roughageAppliesOnDate = !roughageActiveFrom || dateStr >= roughageActiveFrom;
 
@@ -624,12 +671,35 @@ export async function getFarmDailyFeedRequirement(
     totalRoughageKg += finalRoughage;
   }
 
+  // Suggested lines (PLAN). Concentrate is split by the active recipe's proportions
+  // (qty_i / Σ ingredients). Roughage is converted to the item's own unit only when its
+  // kg-per-unit is known — otherwise the quantity is left for the user to enter.
+  const plan: PlannedFeedLine[] = [];
+  const ingredients = (activeRecipe?.recipe_ingredients ?? []) as { item_id: string; qty_per_batch: number }[];
+  if (totalConcentrateKg > 0 && ingredients.length) {
+    for (const l of scaleRecipe(ingredients, totalConcentrateKg)) {
+      plan.push({ item_id: l.item_id, qty: parseFloat(l.qty.toFixed(2)), unit: "kg" });
+    }
+  }
+  if (activeRoughageItem && totalRoughageKg > 0) {
+    const kgPerUnit = activeRoughageItem.kg_per_unit ?? null;
+    plan.push({
+      item_id: activeRoughageItem.id,
+      unit: activeRoughageItem.unit,
+      qty: kgPerUnit ? parseFloat((totalRoughageKg / kgPerUnit).toFixed(2)) : null,
+      note: kgPerUnit
+        ? undefined
+        : `${totalRoughageKg.toFixed(1)} kg planned. kg per ${activeRoughageItem.unit} is not set, so enter the actual ${activeRoughageItem.unit} count.`,
+    });
+  }
+
   return {
     success: true,
     data: {
       totalConcentrateKg: parseFloat(totalConcentrateKg.toFixed(2)),
       totalRoughageKg: parseFloat(totalRoughageKg.toFixed(2)),
-      cattleCount: cattle.length
+      cattleCount: cattle.length,
+      plan,
     }
   };
 }
@@ -662,9 +732,7 @@ export async function setActiveRoughage(id: string | null, activeUntil?: string 
       .update({ is_active_roughage: false, roughage_active_until: nowStr })
       .eq("business_id", bizId)
       .neq("id", id);
-
-    // Trigger auto-engine immediately so the user doesn't have to hard refresh
-    await runAutoFeedDeductions();
+    // Changing the active roughage only changes the PLAN. It never creates consumption.
   } else {
     // Explicitly clearing — no replacement, so just unset all
     const nowStr = new Date().toISOString();
@@ -702,7 +770,7 @@ export async function updateRoughageActiveUntil(activeUntil: string | null): Pro
   return {};
 }
 
-// ── Autonomous Engine True-Up ──────────────────────────────────────
+// ── Physical stock finished (true-up) ─────────────────────────────
 export async function markInventoryItemEmpty(
   itemId: string,
   finishDate: string
@@ -724,52 +792,37 @@ export async function markInventoryItemEmpty(
 
   if (!item || item.business_id !== bizId) return { error: "Unauthorized" };
 
-  // Calculate current stock + FIFO unit cost of remaining
-  const { data: txns } = await supabase
-    .from("inventory_transactions")
-    .select("type, qty, unit_cost, recorded_at")
+  // If this feed is in an open usage period, "finished" ends that period with 0 left:
+  // the stock used is FEED CONSUMPTION (Feed Expenses), reconciled by the database.
+  const { data: openLine } = await supabase
+    .from("v_feed_usage_lines")
+    .select("period_id, status")
     .eq("item_id", itemId)
-    .order("recorded_at", { ascending: true });
+    .eq("status", "open")
+    .maybeSingle();
+  if (openLine?.period_id) {
+    const { data: lines } = await supabase.from("v_feed_usage_lines").select("item_id").eq("period_id", openLine.period_id);
+    const closing = (lines ?? []).map((l: { item_id: string }) => ({ item_id: l.item_id, qty: 0 }));
+    if (closing.length > 1) return { error: "This feed is part of a recipe usage period. End it on the Feed Usage page with the remaining quantity of each ingredient." };
+    const { error: closeErr } = await supabase.rpc("close_feed_usage_period", { p_period_id: openLine.period_id, p_end_date: finishDate.slice(0, 10), p_closing: closing });
+    if (closeErr) return { error: closeErr.message ?? "Could not end the usage period" };
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/inventory/usage");
+    revalidateTag("accounting", { expire: 0 });
+    return { cattleCount: 0 };
+  }
 
-  type TxnRow = { type: string; qty: number; unit_cost: number | null; recorded_at: string };
-  const allTxns = (txns ?? []) as TxnRow[];
-
-  let stock = 0;
-  for (const t of allTxns) stock += (t.type === "purchase" ? t.qty : -t.qty);
-
+  // No usage period: a physical count of zero is a stock-count adjustment.
+  const stock = await getItemStock(supabase, itemId);
   if (Math.abs(stock) < 0.01) return { error: "Stock is already at 0" };
 
-  // FIFO cost of remaining stock
-  const purchases = allTxns.filter((t) => t.type === "purchase");
-  const totalConsumed = allTxns
-    .filter((t) => t.type !== "purchase")
-    .reduce((s, t) => s + t.qty, 0);
-
-  const batches = purchases.map((p) => ({ qty: p.qty, unit_cost: p.unit_cost }));
-  let toSkip = totalConsumed;
-  for (const b of batches) {
-    if (toSkip <= 0) break;
-    const take = Math.min(toSkip, b.qty);
-    b.qty -= take;
-    toSkip -= take;
-  }
-  let totalValue = 0;
-  let totalQty = 0;
-  for (const b of batches) {
-    if (b.qty > 0 && b.unit_cost != null) {
-      totalValue += b.qty * b.unit_cost;
-      totalQty += b.qty;
-    }
-  }
-  const fifoUnitCost = totalQty > 0 ? totalValue / totalQty : null;
-
-  // Insert true-up transaction on the specified finish date
-  const adjustType = stock > 0 ? "consumption" : "purchase";
+  // A physical count of zero. The difference is a stock adjustment (not consumption by
+  // cattle, not a purchase); the database values it at WAC as of the finish date.
   const { error: txnErr } = await supabase.from("inventory_transactions").insert({
     item_id: itemId,
-    type: adjustType,
+    type: stock > 0 ? "consumption" : "purchase",
+    movement_type: stock > 0 ? "adjustment_out" : "adjustment_in",
     qty: Math.abs(stock),
-    unit_cost: fifoUnitCost,
     recorded_at: finishDate,
     notes: `True-Up: Physical stock finished. ${stock.toFixed(2)} ${item.unit} adjusted.`,
   });
@@ -784,145 +837,6 @@ export async function markInventoryItemEmpty(
   return { cattleCount: 0 };
 }
 
-// ── Autonomous Auto-Feed Engine ────────────────────────────────────
-export async function runAutoFeedDeductions(): Promise<{ error?: string, executedDays?: number }> {
-  const permissionDenied = await actionPermissionError(PERMISSIONS.INVENTORY_CONSUME);
-  if (permissionDenied) return { error: permissionDenied };
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  const bizId = await getCurrentBusinessId(supabase);
-  if (!bizId) return { error: "Business not found" };
-
-  // 1. Get active recipe and active roughage
-  const { data: activeRecipe } = await supabase
-    .from("feed_recipes")
-    .select("id, output_qty, active_from, recipe_ingredients(item_id, qty_per_batch)")
-    .eq("business_id", bizId)
-    .eq("is_active", true)
-    .maybeSingle();
-
-  const { data: activeRoughage } = await supabase
-    .from("inventory_items")
-    .select("id, roughage_active_from")
-    .eq("business_id", bizId)
-    .eq("is_active_roughage", true)
-    .maybeSingle();
-
-  if (!activeRecipe && !activeRoughage) {
-    return { error: "No active recipe or roughage set" };
-  }
-
-  // 2. Find the last day we ran the auto-engine (scoped to this business via ingredient join)
-  const { data: lastAutoTx } = await supabase
-    .from("inventory_transactions")
-    .select("recorded_at, inventory_items!inner(business_id)")
-    .eq("inventory_items.business_id", bizId)
-    .ilike("notes", "Auto-Feed Deduction%")
-    .order("recorded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // Calendar dates as YYYY-MM-DD on the farm (Asia/Dhaka) calendar. UTC dates are still
-  // "yesterday" in Dhaka before 06:00, which skipped or shifted a day of deductions (BUG-08).
-  const todayStr = todayDhaka();
-
-  let startDateStr: string;
-  if (lastAutoTx && lastAutoTx.recorded_at) {
-    startDateStr = addDays(String(lastAutoTx.recorded_at).slice(0, 10), 1);
-  } else {
-    // Start from the earliest cattle purchase date
-    const { data: earliestCattle } = await supabase
-      .from("cattle")
-      .select("purchase_date")
-      .eq("business_id", bizId)
-      .eq("status", "active")
-      .is("deleted_at", null)
-      .order("purchase_date", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    startDateStr = earliestCattle?.purchase_date
-      ? String(earliestCattle.purchase_date).slice(0, 10)
-      : addDays(todayStr, -1); // fallback to yesterday
-  }
-
-  // Never process days before the recipe's explicit start date.
-  // This prevents catch-up deductions for periods before this recipe was in use.
-  const recipeFrom = (activeRecipe as { active_from?: string | null } | null)?.active_from;
-  if (recipeFrom && startDateStr < recipeFrom.slice(0, 10)) {
-    startDateStr = recipeFrom.slice(0, 10);
-  }
-
-  // Pre-fetch roughage_active_from once — passed to getFarmDailyFeedRequirement
-  // to avoid one extra DB query per day in the loop.
-  const roughageActiveFromCached = (activeRoughage as { roughage_active_from?: string | null } | null)?.roughage_active_from ?? null;
-
-  // Batch-fetch all dates that already have auto-deductions in the catchup range.
-  // This replaces one DB query per day in the loop with a single query — O(1) instead of O(days).
-  const { data: existingBatch } = await supabase
-    .from("inventory_transactions")
-    .select("recorded_at, inventory_items!inner(business_id)")
-    .eq("inventory_items.business_id", bizId)
-    .gte("recorded_at", startDateStr)
-    .lte("recorded_at", todayStr + "T23:59:59")
-    .ilike("notes", "Auto-Feed Deduction%");
-  const datesAlreadyDeducted = new Set(
-    (existingBatch ?? []).map((t: { recorded_at: string }) => t.recorded_at.slice(0, 10))
-  );
-
-  let executedDays = 0;
-
-  for (let dateStr = startDateStr; dateStr <= todayStr; dateStr = addDays(dateStr, 1)) {
-
-    if (datesAlreadyDeducted.has(dateStr)) continue;
-
-    const reqRes = await getFarmDailyFeedRequirement(dateStr, roughageActiveFromCached);
-    if (!reqRes.success || !reqRes.data) continue;
-
-    const { totalConcentrateKg } = reqRes.data;
-
-    const dayRows: {
-      item_id: string; type: "consumption"; qty: number;
-      unit_cost: number | null; recorded_at: string; notes: string;
-    }[] = [];
-
-    // Deduct Concentrate — compute FIFO unit_cost per ingredient so feed expense
-    // appears correctly in the income statement.
-    // IMPORTANT: Insert each day's rows before computing the next day's FIFO so that
-    // FIFO costs see the correct cumulative consumed quantity (not stale batch state).
-    if (activeRecipe && totalConcentrateKg > 0) {
-      const scale = totalConcentrateKg / activeRecipe.output_qty;
-      for (const ing of activeRecipe.recipe_ingredients) {
-        const qtyToDeduct = parseFloat((ing.qty_per_batch * scale).toFixed(4));
-        let unit_cost: number | null = null;
-        try { unit_cost = await computeFIFOCost(supabase, ing.item_id, qtyToDeduct); } catch { /* non-fatal */ }
-        dayRows.push({
-          item_id: ing.item_id,
-          type: "consumption",
-          qty: qtyToDeduct,
-          unit_cost,
-          recorded_at: dateStr,
-          notes: `Auto-Feed Deduction: ${dateStr}`,
-        });
-      }
-    }
-
-    if (dayRows.length > 0) {
-      const { error } = await supabase.from("inventory_transactions").insert(dayRows);
-      if (error) return { error: "Failed to log auto-deductions" };
-    }
-
-    // Roughage is strictly manually deducted as per user request.
-    executedDays++;
-  }
-
-  if (executedDays > 0) {
-    revalidatePath("/dashboard/inventory");
-    revalidatePath("/dashboard/finance");
-  }
-  revalidateTag("accounting", { expire: 0 });
-
-  return { executedDays };
-}
+// The page-load "auto-feed engine" was removed: page rendering and configuration changes
+// must never create inventory or financial transactions. Feeding is recorded explicitly
+// with recordDailyFeeding.

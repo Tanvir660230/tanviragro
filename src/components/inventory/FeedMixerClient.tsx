@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { produceMixedBatch } from "@/app/dashboard/(app)/inventory/mix-feed/actions";
 import { cn } from "@/lib/utils";
+import { isRecipeBalanced, recipeIngredientTotal } from "@/lib/inventory/recipe-math";
+import { todayDhaka } from "@/lib/dates";
 
 export type RecipeOption = {
   id: string;
@@ -53,24 +55,22 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
   const [selectedRecipeId, setSelectedRecipeId] = useState(recipes[0]?.id ?? "");
   const [targetAmount, setTargetAmount] = useState<string>("");
   const [outputItemId, setOutputItemId] = useState("");
   const [date, setDate] = useState(today);
   const [batchResult, setBatchResult] = useState<{ produced?: number; error?: string; success?: boolean } | null>(null);
+  // One id per intended batch: a double click or retry re-sends the same id and the
+  // database rejects the duplicate instead of deducting the ingredients twice.
+  const [batchId, setBatchId] = useState(() => crypto.randomUUID());
 
   const selectedRecipe = recipes.find((r) => r.id === selectedRecipeId) ?? recipes[0] ?? null;
   const target = parseFloat(targetAmount) || 0;
-  const scale = selectedRecipe && target > 0 && selectedRecipe.output_qty > 0
-    ? target / selectedRecipe.output_qty
-    : 0;
-
-
-
-  const totalBaseWeight = selectedRecipe
-    ? selectedRecipe.ingredients.reduce((s, i) => s + i.qty_per_batch, 0)
-    : 1;
+  // Scale by the ingredient total (mass balance), never by the stored batch size.
+  const totalBaseWeight = selectedRecipe ? recipeIngredientTotal(selectedRecipe.ingredients) : 0;
+  const scale = target > 0 && totalBaseWeight > 0 ? target / totalBaseWeight : 0;
+  const recipeBalanced = !!selectedRecipe && isRecipeBalanced(selectedRecipe.ingredients, selectedRecipe.output_qty);
 
   // Real-time ingredient requirements
   type IngredientStatus = {
@@ -106,6 +106,7 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
     !!selectedRecipe &&
     target > 0 &&
     !!date &&
+    !!outputItemId &&
     !anyIngredientShort;
 
   function handleProduce(e: React.FormEvent) {
@@ -117,6 +118,7 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
     fd.set("target_amount", String(target));
     fd.set("recorded_at", date);
     fd.set("output_item_id", outputItemId);
+    fd.set("batch_id", batchId);
 
     setBatchResult(null);
 
@@ -128,6 +130,7 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
       } else if (result?.success) {
         toast.success(`Produced ${result.produced} kg of ${selectedRecipe.name}`);
         setTargetAmount("");
+        setBatchId(crypto.randomUUID());
         router.refresh();
       }
     });
@@ -172,6 +175,12 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
             {selectedRecipe?.notes && (
               <p className="text-xs text-muted-foreground">{selectedRecipe.notes}</p>
             )}
+            {selectedRecipe && !recipeBalanced && (
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                Ingredients add up to {totalBaseWeight.toFixed(2)} kg but the batch size says {selectedRecipe.output_qty} kg.
+                Quantities below are scaled by the ingredient total.
+              </p>
+            )}
           </div>
 
           <div className="p-5 space-y-2">
@@ -193,7 +202,7 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
             </div>
             {selectedRecipe && target > 0 && (
               <p className="text-xs text-muted-foreground">
-                Scale: ×{scale.toFixed(3)} of base recipe ({selectedRecipe.output_qty} {selectedRecipe.output_unit})
+                Scale: ×{scale.toFixed(3)} of base recipe ({totalBaseWeight.toFixed(2)} {selectedRecipe.output_unit} of ingredients)
               </p>
             )}
           </div>
@@ -262,15 +271,14 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
         <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
           <div className="p-5 space-y-2">
             <label className="text-sm font-semibold">
-              Add to Inventory Item{" "}
-              <span className="font-normal text-muted-foreground">(optional)</span>
+              Mixed feed goes into <span className="text-red-500">*</span>
             </label>
             <select
               value={outputItemId}
               onChange={(e) => setOutputItemId(e.target.value)}
               className="w-full rounded-xl border border-input bg-background/50 backdrop-blur-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              <option value="">— Don&apos;t add to stock —</option>
+              <option value="">— Choose the mixed-feed item —</option>
               {allItems
                 .filter((i) => i.category === "feed")
                 .map((i) => (
@@ -280,7 +288,7 @@ export function FeedMixerClient({ recipes, allItems }: Props) {
                 ))}
             </select>
             <p className="text-xs text-muted-foreground">
-              If selected, the produced amount will be added as a purchase to this feed item with a FIFO-weighted cost.
+              The mixed feed is added to this item at the cost of its ingredients. It is not a purchase and not a cash payment.
             </p>
           </div>
 

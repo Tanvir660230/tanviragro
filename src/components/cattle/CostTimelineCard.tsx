@@ -117,7 +117,7 @@ export function CostTimelineCard({
       sortDate: new Date().toISOString().slice(0, 10),
       displayDate: t.cattle_details.smart.to_date_label,
       label: t.cattle_details.smart.auto_feed_label,
-      sublabel: `${allocatedConcentrateKg.toFixed(1)} kg Dry, ${allocatedRoughageKg.toFixed(1)} ${activeRoughage?.unit || "kg"} ${t.cattle_details.feed_card.roughage}`,
+      sublabel: `${allocatedConcentrateKg.toFixed(1)} kg Dry, ${allocatedRoughageKg.toFixed(1)} kg ${t.cattle_details.feed_card.roughage}`,
       amount: allocatedFeedCost,
       icon: "feed" as const,
     });

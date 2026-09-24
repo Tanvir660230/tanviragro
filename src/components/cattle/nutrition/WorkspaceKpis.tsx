@@ -75,7 +75,7 @@ export function WorkspaceKpis({
         </div>
         <div className="text-2xl font-bold font-mono">{inventoryItems.length}</div>
         <p className="text-[11px] text-muted-foreground">
-          {inventoryItems.filter((i) => i.currentStockKg <= i.lowStockThresholdKg).length} Low Stock
+          {inventoryItems.filter((i) => i.lowStockThresholdKg != null && i.currentStockKg <= i.lowStockThresholdKg).length} Low Stock
         </p>
       </div>
 

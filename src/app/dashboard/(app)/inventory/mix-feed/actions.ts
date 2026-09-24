@@ -8,16 +8,14 @@ import { assertResourceOwnership } from "@/lib/auth/ownership";
 import { PERMISSIONS } from "@/constants/roles";
 import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { mixBatchSchema } from "@/lib/validation";
-import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
-import { StockLedgerEngine } from "@/lib/inventory/stock-ledger";
-import { CostingEngine } from "@/lib/inventory/costing-engine";
+import { recordFeedBatch } from "@/lib/inventory/feed-batch";
 import { InventoryEventBus } from "@/lib/inventory/events";
 
 export type MixBatchState = { error?: string; success?: boolean; produced?: number } | undefined;
 
 /**
- * Produce a scaled batch of mixed feed from a recipe.
- * Atomically deducts all ingredients, then optionally stocks the mixed feed output item.
+ * Produce a batch of mixed feed from a recipe (internal transformation, not a purchase).
+ * Ingredients and output are written atomically by the database; see recordFeedBatch.
  */
 export async function produceMixedBatch(
   _prev: MixBatchState,
@@ -32,119 +30,47 @@ export async function produceMixedBatch(
     const rawTargetAmount = parseFloat(formData.get("target_amount") as string);
     const rawRecordedAt = (formData.get("recorded_at") as string)?.trim();
     const rawOutputItemId = (formData.get("output_item_id") as string)?.trim() || null;
+    const rawBatchId = (formData.get("batch_id") as string)?.trim() || crypto.randomUUID();
 
     const parsed = mixBatchSchema.safeParse({
       recipe_id: rawRecipeId,
       target_amount: rawTargetAmount,
       recorded_at: rawRecordedAt,
       output_item_id: rawOutputItemId,
+      batch_id: rawBatchId,
     });
 
     if (!parsed.success) {
       return { error: parsed.error.issues?.[0]?.message ?? "Invalid input" };
     }
 
-    const { recipe_id, target_amount, recorded_at, output_item_id } = parsed.data;
+    const { recipe_id, target_amount, recorded_at, output_item_id, batch_id } = parsed.data;
 
     const lockErr = await verifyFinancialLock(supabase, ctx.businessId, recorded_at);
     if (lockErr) return { error: lockErr };
 
-    // Fetch recipe + ownership check
+    // Without an output item the mixed feed would vanish from stock and its cost would be lost.
+    if (!output_item_id) return { error: "Choose the inventory item that receives the mixed feed" };
+
     const recipe = await assertResourceOwnership<{ id: string; business_id: string; output_qty: number; name: string }>(
       supabase,
       "feed_recipes",
       recipe_id,
       ctx.businessId
     );
+    await assertResourceOwnership(supabase, "inventory_items", output_item_id, ctx.businessId);
 
-    const scale = target_amount / recipe.output_qty;
-
-    // Fetch recipe ingredients
-    const { data: ingredients } = await supabase
-      .from("recipe_ingredients")
-      .select("item_id, qty_per_batch")
-      .eq("recipe_id", recipe_id);
-    if (!ingredients?.length) return { error: "Recipe has no ingredients" };
-
-    // Verify all ingredient items belong to this business
-    const itemIds = (ingredients as { item_id: string }[]).map((i) => i.item_id);
-    const { data: ownedItems } = await supabase
-      .from("inventory_items")
-      .select("id, name, unit")
-      .in("id", itemIds)
-      .eq("business_id", ctx.businessId);
-
-    const ownedMap = new Map((ownedItems ?? []).map((i: { id: string; name: string; unit: string }) => [i.id, i]));
-    for (const id of itemIds) {
-      if (!ownedMap.has(id)) return { error: "Unauthorized inventory item in recipe" };
-    }
-
-    // Stock preflight check for all ingredients
-    for (const ing of ingredients as { item_id: string; qty_per_batch: number }[]) {
-      const need = ing.qty_per_batch * scale;
-      const have = await CentralInventoryRepository.getItemStockOnHand(supabase, ing.item_id);
-      const itemInfo = ownedMap.get(ing.item_id);
-      const label = itemInfo ? `${itemInfo.name} (${itemInfo.unit})` : ing.item_id;
-
-      if (have < need - 0.001) {
-        return { error: `Insufficient stock: ${label} — need ${need.toFixed(2)}, have ${have.toFixed(2)}` };
-      }
-    }
-
-    // Verify output item ownership BEFORE consuming any ingredients
-    if (output_item_id) {
-      await assertResourceOwnership(supabase, "inventory_items", output_item_id, ctx.businessId);
-    }
-
-    // Build ingredient consumption rows
-    const consumptionRows = await Promise.all(
-      (ingredients as { item_id: string; qty_per_batch: number }[]).map(async (ing) => {
-        const qty = parseFloat((ing.qty_per_batch * scale).toFixed(4));
-        let unit_cost: number | null = null;
-        if (!output_item_id) {
-          try {
-            unit_cost = await CentralInventoryRepository.getEstimatedFifoUnitCost(supabase, ing.item_id, qty);
-          } catch { /* non-fatal */ }
-        }
-        return {
-          item_id: ing.item_id,
-          type: "consumption" as const,
-          qty,
-          unit_cost,
-          recorded_at,
-          notes: `Feed mix: ${recipe.name} ×${target_amount} kg`,
-        };
-      })
-    );
-
-    // Insert consumption rows
-    const { error: txnErr } = await supabase.from("inventory_transactions").insert(consumptionRows);
-    if (txnErr) return { error: "Failed to record ingredient consumption" };
-
-    // If output item is specified, add output batch with FIFO weighted cost
-    if (output_item_id) {
-      let totalIngCost = 0;
-      for (const ing of ingredients as { item_id: string; qty_per_batch: number }[]) {
-        const qty = parseFloat((ing.qty_per_batch * scale).toFixed(4));
-        try {
-          const uc = await CentralInventoryRepository.getEstimatedFifoUnitCost(supabase, ing.item_id, qty);
-          if (uc != null) totalIngCost += qty * uc;
-        } catch { /* non-fatal */ }
-      }
-      const outputUnitCost = target_amount > 0 ? totalIngCost / target_amount : null;
-
-      const { error: outputErr } = await supabase.from("inventory_transactions").insert({
-        item_id: output_item_id,
-        type: "purchase" as const,
-        qty: target_amount,
-        unit_cost: outputUnitCost ?? null,
-        recorded_at,
-        notes: `Mixed feed produced from recipe: ${recipe.name}`,
-      });
-      if (outputErr) {
-        return { error: "Ingredients consumed but output stock could not be added. Please manually record the produced batch in inventory." };
-      }
-    }
+    // One database transaction: ingredients out (feed_mix_input, at WAC), mixed feed in
+    // (feed_mix_output, at input cost). Scaled by the ingredient total, never a purchase.
+    const result = await recordFeedBatch(supabase, {
+      businessId: ctx.businessId,
+      recipeId: recipe_id,
+      outputItemId: output_item_id,
+      outputQty: target_amount,
+      date: recorded_at,
+      batchId: batch_id,
+    });
+    if (result.error) return { error: result.error };
 
     await InventoryEventBus.publish(
       "FeedMixed",

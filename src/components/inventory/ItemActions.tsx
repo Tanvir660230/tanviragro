@@ -33,6 +33,8 @@ import {
 } from "@/app/dashboard/(app)/inventory/actions";
 import { enqueue } from "@/lib/offlineQueue";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { ZeroPriceConfirm } from "./ledger-fields";
+import { todayDhaka } from "@/lib/dates";
 
 export interface CattleOption {
   id: string;
@@ -62,8 +64,10 @@ function AddStockForm({
   const router = useRouter();
   const { t } = useTranslation();
   const tr = t.inventory.actions;
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
   const [state, formAction, isPending] = useActionState<InventoryFormState, FormData>(addStock, undefined);
+  const [unitCost, setUnitCost] = useState("");
+  const [stockSource, setStockSource] = useState<"purchase" | "own_production">("purchase");
 
   useEffect(() => {
     if (state?.success) {
@@ -77,6 +81,24 @@ function AddStockForm({
   return (
     <form key={formKey} action={formAction} className="space-y-4 pt-1">
       <input type="hidden" name="item_id" value={item.id} />
+      <input type="hidden" name="stock_source" value={stockSource} />
+
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        {([
+          ["purchase", "Bought", "Purchase — reduces cash"],
+          ["own_production", "Harvested from own land", "৳0 — land rent is an expense"],
+        ] as const).map(([value, title, sub]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setStockSource(value)}
+            className={cn("rounded-lg border px-3 py-2 text-left", stockSource === value ? "border-primary bg-primary/5" : "border-border")}
+          >
+            <span className="block font-semibold">{title}</span>
+            <span className="text-muted-foreground">{sub}</span>
+          </button>
+        ))}
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -106,6 +128,7 @@ function AddStockForm({
         </div>
       </div>
 
+      {stockSource === "purchase" && (<>
       <div className="space-y-1.5">
         <Label htmlFor="stk_cost">{tr.unit_cost_label.replace("{{unit}}", item.unit)}</Label>
         <Input
@@ -115,8 +138,15 @@ function AddStockForm({
           min="0"
           step="0.01"
           placeholder="e.g. 45.50 (optional)"
+          value={unitCost}
+          onChange={(e) => setUnitCost(e.target.value)}
         />
+        {unitCost.trim() === "" && (
+          <p className="text-xs text-muted-foreground">No price entered: saved as <strong>cost missing</strong>, not as free.</p>
+        )}
       </div>
+      <ZeroPriceConfirm unitCost={unitCost} idPrefix="stk" />
+      </>)}
 
       <div className="space-y-1.5">
         <Label htmlFor="stk_notes">{tr.notes_label}</Label>
@@ -195,7 +225,7 @@ function LogConsumptionForm({
   const router = useRouter();
   const { t } = useTranslation();
   const tr = t.inventory.actions;
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
   const [cattleId, setCattleId] = useState("");
   const [state, formAction, isPending] = useActionState<InventoryFormState, FormData>(logConsumption, undefined);
 
@@ -457,7 +487,7 @@ export function ItemActions({
                 type="date"
                 value={roughageUntilDate}
                 onChange={(e) => setRoughageUntilDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 10)}
+                min={todayDhaka()}
                 className="text-xs rounded border border-border bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
               />
               <Button type="button" size="sm" className="h-7 text-xs px-2" onClick={confirmSetRoughage} disabled={isPending}>

@@ -42,6 +42,8 @@ export async function createCattle(
   });
   if (!parsed.success) return { error: parsed.error.issues?.[0]?.message ?? "Invalid input" };
   const { tag_id, breed, gender, dob, purchase_date, purchase_price, initial_weight_kg, transport_cost, haat_hasil, notes } = parsed.data;
+  // Was the purchase weight weighed or guessed? A guess is kept but never used as a growth baseline.
+  const initial_weight_type = formData.get("initial_weight_type") === "estimated" ? "estimated" : "measured";
 
   let businessId: string | null = null;
   try {
@@ -65,6 +67,7 @@ export async function createCattle(
       purchase_date,
       purchase_price,
       initial_weight_kg,
+      initial_weight_type,
       status: "active",
       notes,
     })
@@ -358,6 +361,8 @@ export async function updateCattle(
   const purchase_date = (formData.get("purchase_date") as string)?.trim();
   const purchase_price = parseFloat(formData.get("purchase_price") as string);
   const initial_weight_kg = parseFloat(formData.get("initial_weight_kg") as string);
+  const iwt = formData.get("initial_weight_type");
+  const initial_weight_type = iwt === "measured" || iwt === "estimated" || iwt === "unknown" ? iwt : undefined;
   const target_weight_raw = formData.get("target_weight_kg") as string;
   const target_weight_kg = target_weight_raw ? parseFloat(target_weight_raw) : null;
   const adg_raw = formData.get("expected_daily_gain_kg") as string;
@@ -394,7 +399,7 @@ export async function updateCattle(
 
   const { error } = await supabase
     .from("cattle")
-    .update({ tag_id, gender, breed, dob, purchase_date, purchase_price, initial_weight_kg, target_weight_kg, expected_daily_gain_kg, notes })
+    .update({ tag_id, gender, breed, dob, purchase_date, purchase_price, initial_weight_kg, target_weight_kg, expected_daily_gain_kg, notes, ...(initial_weight_type ? { initial_weight_type } : {}) })
     .eq("id", id);
 
   if (error) return { error: "Failed to update. Please try again." };

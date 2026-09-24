@@ -367,6 +367,12 @@ export function CattleForm({ existingTagIds, existingBreeds, onAddAnother, onDon
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
             />
+          <select id="initial_weight_type" name="initial_weight_type" defaultValue="measured"
+            className="mt-1.5 w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+            aria-label="How was the initial weight obtained">
+            <option value="measured">Weighed (scale or tape)</option>
+            <option value="estimated">Estimated (not weighed)</option>
+          </select>
           </div>
         </div>
         

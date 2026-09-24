@@ -24,7 +24,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       .from("inventory_transactions")
       .select("id, item_id, qty, unit_cost, recorded_at, notes")
       .eq("item_id", id)
-      .eq("type", "purchase")
+      .eq("movement_type", "purchase")
       .order("recorded_at", { ascending: true }),
   ]);
 

@@ -9,7 +9,6 @@ import { type FeedActionResult } from "./feed-session-actions";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
-import { computeFIFOUnitCost } from "@/lib/inventory-fifo";
 
 export async function quickDispenseFeedAction(
   cattleIds: string[],
@@ -47,43 +46,24 @@ export async function quickDispenseFeedAction(
 
     if (!item) return { error: "Feed item not found" };
 
-    const { data: lastPurchase } = await supabase
-      .from("inventory_transactions")
-      .select("unit_cost")
-      .eq("item_id", feedItemId)
-      .eq("type", "purchase")
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    const unitCost = lastPurchase?.unit_cost ?? 0;
-
+    // Valued by the database at weighted-average cost as of the date (not the latest price).
+    // No cost_entries row: the ledger row is the only record of this feed cost.
     const txns = cattleIds.map((cid) => ({
       item_id: feedItemId,
       cattle_id: cid,
       type: "consumption" as const,
+      movement_type: "consumption" as const,
       qty: dispenseKgPerHead,
-      unit_cost: unitCost > 0 ? unitCost : undefined,
       recorded_at: recordedAt,
       notes: `Quick Dispense (${slot.toUpperCase()}) | Feeder: ${feederName}`,
     }));
 
-    const { error: txnErr } = await supabase.from("inventory_transactions").insert(txns);
+    const { data: saved, error: txnErr } = await supabase
+      .from("inventory_transactions")
+      .insert(txns)
+      .select("qty, unit_cost");
     if (txnErr) return { error: txnErr.message };
-
-    if (unitCost > 0) {
-      const costs = cattleIds.map((cid) => ({
-        business_id: businessId,
-        cattle_id: cid,
-        category: "Feed & Nutrition",
-        amount: Math.round(dispenseKgPerHead * unitCost * 100) / 100,
-        type: "variable" as const,
-        entry_class: "expense" as const,
-        recorded_at: recordedAt,
-        description: `Quick Feed (${slot}) - ${item.name} (${dispenseKgPerHead} kg)`,
-      }));
-      await supabase.from("cost_entries").insert(costs);
-    }
+    const totalCostBdt = (saved ?? []).reduce((s, r) => s + r.qty * (r.unit_cost ?? 0), 0);
 
     revalidatePath("/dashboard/cattle");
     revalidatePath("/dashboard/cattle/feed");
@@ -92,7 +72,7 @@ export async function quickDispenseFeedAction(
     return {
       success: true,
       totalKgDispensed: cattleIds.length * dispenseKgPerHead,
-      totalCostBdt: Math.round(cattleIds.length * dispenseKgPerHead * unitCost * 100) / 100,
+      totalCostBdt: Math.round(totalCostBdt * 100) / 100,
       recordsCount: cattleIds.length,
     };
   } catch (err: unknown) {
@@ -131,13 +111,16 @@ export async function recordFeedWasteAction(
 
     if (!item) return { error: "Feed item not found" };
 
-    const unitCost = await computeFIFOUnitCost(supabase, feedItemId, wasteKg);
+    const lockErr = await checkFinancialLock(supabase, businessId, recordedAt);
+    if (lockErr) return { error: lockErr };
+
+    // Wastage is a stock loss, not feed eaten by cattle; valued by the database at WAC.
     const { error: txnErr } = await supabase.from("inventory_transactions").insert({
       item_id: feedItemId,
       cattle_id: cattleId || undefined,
       type: "consumption",
+      movement_type: "wastage",
       qty: wasteKg,
-      unit_cost: unitCost ?? undefined,
       recorded_at: recordedAt,
       notes: `[FEED WASTE / ${wasteReason.toUpperCase()}] ${notes || ""}`,
     });

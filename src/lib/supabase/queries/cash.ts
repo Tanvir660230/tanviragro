@@ -62,7 +62,7 @@ export async function getCashBalance(
       .from("inventory_transactions")
       .select("qty, unit_cost, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", businessId)
-      .eq("type", "purchase")
+      .eq("movement_type", "purchase")
       .not("unit_cost", "is", null),
 
     supabase

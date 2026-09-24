@@ -101,6 +101,7 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
       return {
         item_id: it.itemId,
         type: "purchase" as const,
+        movement_type: "purchase" as const,   // a supplier invoice: the only movement that is a cash purchase
         qty: it.qty,
         unit_cost: costed.unitCost,
         recorded_at: date,

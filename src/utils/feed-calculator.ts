@@ -162,16 +162,23 @@ export interface FeedCostParams {
   daysInPen: number;
   startMs: number;
   recipes: { active_from: string; active_until: string | null; recipe_ingredients: { item_id: string; qty_per_batch: number }[] }[];
-  roughages: { id: string; roughage_active_from: string; roughage_active_until: string | null }[];
+  /** unit + kg_per_unit decide how a per-unit roughage price becomes a per-kg price */
+  roughages: { id: string; roughage_active_from: string; roughage_active_until: string | null; unit?: string; kg_per_unit?: number | null }[];
+  /** item_id → weighted-average unit cost (see buildWacUnitCostMap) */
   unitCostMap: Record<string, number>;
   feedData: CattleFeedData;
   overrideRoughage: number | null;
 }
 
 /**
- * Calculates the algorithmic feed cost over the days a cattle has been in the pen.
- * It uses the daily requirement formulas and historical recipes/roughages to estimate
- * the total cost of feed consumed.
+ * ESTIMATED feed cost over the days a cattle has been in the pen: ration formula ×
+ * weighted-average unit cost. This is a plan-based estimate, NOT recorded consumption, and
+ * must be labelled as such wherever it is shown. It must never be added to the actual
+ * (ledger) feed cost of the same animal.
+ *
+ * Roughage kg are priced per kg: a per-piece price is converted with kg_per_unit. When the
+ * conversion (or any price) is unknown, that part is left out and reported via
+ * roughageCostUnknown / costComplete — never priced as ৳/piece × kg or as ৳0.
  */
 export function calculateAlgorithmicFeedCost(params: FeedCostParams) {
   const { daysInPen, startMs, recipes, roughages, unitCostMap, feedData, overrideRoughage } = params;
@@ -179,9 +186,11 @@ export function calculateAlgorithmicFeedCost(params: FeedCostParams) {
   let allocatedFeedCost = 0;
   let allocatedConcentrateKg = 0;
   let allocatedRoughageKg = 0;
+  let roughageCostUnknown = false;
+  let concentrateCostUnknown = false;
 
   if (daysInPen <= 0 || startMs <= 0) {
-    return { allocatedFeedCost, allocatedConcentrateKg, allocatedRoughageKg };
+    return { allocatedFeedCost, allocatedConcentrateKg, allocatedRoughageKg, roughageCostUnknown, costComplete: true };
   }
 
   function getCostsForDate(dateStr: string) {
@@ -191,12 +200,15 @@ export function calculateAlgorithmicFeedCost(params: FeedCostParams) {
     }
     
     let mixFeedUnitCost = 0;
+    let mixCostKnown = true;
     if (activeRecipe) {
       let totalCost = 0;
       let totalQty = 0;
       for (const ing of activeRecipe.recipe_ingredients) {
         totalQty += ing.qty_per_batch;
-        totalCost += ing.qty_per_batch * (unitCostMap[ing.item_id] || 0);
+        const c = unitCostMap[ing.item_id];
+        if (c == null) mixCostKnown = false;
+        totalCost += ing.qty_per_batch * (c ?? 0);
       }
       if (totalQty > 0) mixFeedUnitCost = totalCost / totalQty;
     }
@@ -205,17 +217,26 @@ export function calculateAlgorithmicFeedCost(params: FeedCostParams) {
     if (!activeRoughage && roughages.length > 0) {
       activeRoughage = [...roughages].sort((a, b) => b.roughage_active_from.localeCompare(a.roughage_active_from)).find(r => r.roughage_active_from <= dateStr) || roughages[0];
     }
-    const roughageUnitCost = activeRoughage ? (unitCostMap[activeRoughage.id] || 0) : 0;
+    // ৳ per KG of roughage (null = unknown: no price, or kg per piece not set)
+    const roughageCostPerKg = activeRoughage
+      ? roughagePricePerKg(unitCostMap[activeRoughage.id], activeRoughage.unit, activeRoughage.kg_per_unit)
+      : 0;
 
-    return { mixFeedUnitCost, roughageUnitCost };
+    return { mixFeedUnitCost, mixCostKnown, roughageCostPerKg };
+  }
+
+  function addCost(concKg: number, roughKg: number, dateStr: string, count: number) {
+    const { mixFeedUnitCost, mixCostKnown, roughageCostPerKg } = getCostsForDate(dateStr);
+    if (!mixCostKnown && concKg > 0) concentrateCostUnknown = true;
+    if (roughageCostPerKg == null && roughKg > 0) roughageCostUnknown = true;
+    allocatedFeedCost += (concKg * mixFeedUnitCost + roughKg * (roughageCostPerKg ?? 0)) * count;
   }
 
   function accumDay(req: FeedRequirement, dateStr: string, count = 1) {
-    const { mixFeedUnitCost, roughageUnitCost } = getCostsForDate(dateStr);
     const rkg = overrideRoughage !== null ? overrideRoughage : req.roughageKg;
     allocatedConcentrateKg += req.actualConcentrateKg * count;
     allocatedRoughageKg    += rkg * count;
-    allocatedFeedCost      += (req.actualConcentrateKg * mixFeedUnitCost + rkg * roughageUnitCost) * count;
+    addCost(req.actualConcentrateKg, rkg, dateStr, count);
   }
 
   // Phase 1 — acclimatization (days 0–13): compute exactly, ≤14 iterations
@@ -243,12 +264,26 @@ export function calculateAlgorithmicFeedCost(params: FeedCostParams) {
       const roughE = overrideRoughage !== null ? overrideRoughage : rE.roughageKg;
       const avgRough = (roughS + roughE) / 2;
       const midDate = new Date(startMs + (dayStart + segLen / 2) * 86400000).toISOString().slice(0, 10);
-      const { mixFeedUnitCost, roughageUnitCost } = getCostsForDate(midDate);
       allocatedConcentrateKg += avgConc  * segLen;
       allocatedRoughageKg    += avgRough * segLen;
-      allocatedFeedCost      += (avgConc * mixFeedUnitCost + avgRough * roughageUnitCost) * segLen;
+      addCost(avgConc, avgRough, midDate, segLen);
     }
   }
 
-  return { allocatedFeedCost, allocatedConcentrateKg, allocatedRoughageKg };
+  return {
+    allocatedFeedCost,
+    allocatedConcentrateKg,
+    allocatedRoughageKg,
+    /** roughage kg could not be priced (unknown kg per piece or no price) — excluded from the cost */
+    roughageCostUnknown,
+    /** false when any part of the estimate had no known price (the cost is then a lower bound) */
+    costComplete: !roughageCostUnknown && !concentrateCostUnknown,
+  };
+}
+
+/** ৳/kg of a roughage priced per its own unit; null when unknown. */
+function roughagePricePerKg(unitCost: number | undefined, unit: string | undefined, kgPerUnit: number | null | undefined): number | null {
+  if (unitCost == null) return null;
+  if ((unit ?? "").trim().toLowerCase() === "kg") return unitCost;
+  return kgPerUnit && kgPerUnit > 0 ? unitCost / kgPerUnit : null;
 }

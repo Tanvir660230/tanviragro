@@ -65,8 +65,8 @@ export function CattleCards({ cattle, allTagIds, allBreeds }: { cattle: CattleRo
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {cattle.map((c) => {
         const tier = adgTier(c.adg);
-        const weightGain =
-          c.latestWeight !== null ? c.latestWeight - c.initial_weight_kg : null;
+        const weightGain = c.weightGain; // measured growth only (null until weighed twice)
+        const startKg = c.growthBaselineKg ?? c.initial_weight_kg;
         const displayWeight = c.latestWeight ?? c.initial_weight_kg;
 
         const unweighed = c.status === "active" && isUnweighedRecently(c.lastWeighedAt);
@@ -164,6 +164,7 @@ export function CattleCards({ cattle, allTagIds, allBreeds }: { cattle: CattleRo
                       purchase_date: c.purchase_date,
                       purchase_price: c.purchase_price,
                       initial_weight_kg: c.initial_weight_kg,
+                      initial_weight_type: c.initial_weight_type,
                       target_weight_kg: c.target_weight_kg ?? null,
                       expected_daily_gain_kg: c.expected_daily_gain_kg ?? null,
                       notes: c.notes ?? null,
@@ -237,19 +238,19 @@ export function CattleCards({ cattle, allTagIds, allBreeds }: { cattle: CattleRo
               </div>
 
               {/* ── Target weight progress (if set) ── */}
-              {c.target_weight_kg !== null && c.target_weight_kg > c.initial_weight_kg && (
+              {c.target_weight_kg !== null && c.target_weight_kg > startKg && (
                 <div className="px-4 py-2.5 border-b border-border/50">
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-muted-foreground text-[11px]">{c.initial_weight_kg}kg start</span>
+                    <span className="text-muted-foreground text-[11px]">{startKg}kg start</span>
                     <span className="font-bold text-foreground text-[11px]">
-                      {Math.min(Math.round(Math.max(((displayWeight - c.initial_weight_kg) / (c.target_weight_kg - c.initial_weight_kg)) * 100, 0)), 100)}% ({displayWeight}/{c.target_weight_kg}kg)
+                      {Math.min(Math.round(Math.max(((displayWeight - startKg) / (c.target_weight_kg - startKg)) * 100, 0)), 100)}% ({displayWeight}/{c.target_weight_kg}kg)
                     </span>
                   </div>
                   <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                     <div
                       className="h-full rounded-full bg-emerald-500 transition-all duration-300"
                       style={{
-                        width: `${Math.min(Math.max(((displayWeight - c.initial_weight_kg) / (c.target_weight_kg - c.initial_weight_kg)) * 100, 0), 100)}%`,
+                        width: `${Math.min(Math.max(((displayWeight - startKg) / (c.target_weight_kg - startKg)) * 100, 0), 100)}%`,
                       }}
                     />
                   </div>

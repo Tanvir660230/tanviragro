@@ -9,6 +9,7 @@ import { useTranslation } from "@/i18n/I18nProvider";
 import { DailyFeedDeductButton } from "./DailyFeedDeductButton";
 import type { InventoryRow } from "./InventoryTable";
 import { cn } from "@/lib/utils";
+import { todayDhaka } from "@/lib/dates";
 
 type LowStockFeedItem = { name: string; daysLeft: number | null };
 
@@ -22,7 +23,10 @@ type ActiveDietProps = {
   dailyRoughageKg: number;
   feedItems: InventoryRow[];
   cattleCount: number;
+  /** ESTIMATE from today's ration plan (not recorded consumption) */
   estimatedDailyCost: number;
+  /** items whose cost could not be estimated (no price, or unknown kg per piece) */
+  estimatedCostUnknownItems?: string[];
   lowStockFeedItems: LowStockFeedItem[];
 };
 
@@ -94,6 +98,7 @@ export function ActiveFeedingDashboard({
   feedItems,
   cattleCount,
   estimatedDailyCost,
+  estimatedCostUnknownItems = [],
   lowStockFeedItems,
 }: ActiveDietProps) {
   const router = useRouter();
@@ -146,7 +151,16 @@ export function ActiveFeedingDashboard({
                 ({tr.est_cost_head.replace("{{amount}}", perHead.toLocaleString())})
               </span>
             )}
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Estimate (plan)
+            </span>
           </div>
+        )}
+        {estimatedCostUnknownItems.length > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Not priced in this kg-based plan: {estimatedCostUnknownItems.join(", ")}. Items counted per piece are costed
+            from the pieces you record (pieces × cost per piece); items without a price are costed once a price is recorded.
+          </p>
         )}
       </div>
 
@@ -244,7 +258,7 @@ export function ActiveFeedingDashboard({
                             <input
                               type="date"
                               defaultValue={activeRecipeFrom ?? ""}
-                              max={new Date().toISOString().slice(0, 10)}
+                              max={todayDhaka()}
                               onChange={(e) => saveRecipeFrom(e.target.value || null)}
                               className="text-xs rounded-md border border-border bg-card px-2 py-0.5 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-xs cursor-pointer"
                               title="শুরুর তারিখ পরিবর্তন করলে engine সেই তারিখ থেকে recalculate করবে"
