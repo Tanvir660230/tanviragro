@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const messages: string[] = [];
   const todayStr = new Date().toISOString().split("T")[0];
 
-  // 1. Low Stock � compute from transactions (no current_stock column)
+  // 1. Low Stock — compute from transactions (no current_stock column)
   const [{ data: allTxns }, { data: items }] = await Promise.all([
     cronBusinessId
       ? supabase.from("inventory_transactions").select("item_id, type, qty, recorded_at, inventory_items!inner(business_id)").eq("inventory_items.business_id", cronBusinessId)
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 3. Overdue/today health events � use completed_at IS NULL (not status column)
+  // 3. Overdue/today health events — use completed_at IS NULL (not status column)
   const { data: pendingEvents } = await supabase
     .from("health_events")
     .select("title, event_type, scheduled_at, cattle(tag_id)")
@@ -105,8 +105,8 @@ export async function GET(request: NextRequest) {
   }
 
   if (messages.length > 0) {
-    const finalMessage = "?? *Chowdhury Agro Daily Report*\n\n" + messages.join("\n\n");
-    await sendWhatsAppWithFallback(finalMessage, "Chowdhury Agro Daily Report");
+    const finalMessage = "📋 *Tanvir Agro Daily Report*\n\n" + messages.join("\n\n");
+    await sendWhatsAppWithFallback(finalMessage, "Tanvir Agro Daily Report");
     return NextResponse.json({ success: true, alerted: true });
   }
 

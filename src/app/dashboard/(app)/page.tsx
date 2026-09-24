@@ -39,12 +39,14 @@ export default async function DashboardPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] text-center space-y-4">
         <h2 className="text-2xl font-bold tracking-tight">No Business Found</h2>
-        <p className="text-muted-foreground">Please create or join a business to view the dashboard.</p>
+        <p className="text-muted-foreground">
+          Your account is not linked to a farm yet. Ask the farm owner to invite you from Settings → Team.
+        </p>
         <Link
-          href="/onboarding"
+          href="/login"
           className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90 transition-all"
         >
-          Go to Onboarding
+          Back to login
         </Link>
       </div>
     );

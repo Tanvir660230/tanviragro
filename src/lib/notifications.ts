@@ -1,6 +1,7 @@
 // ── Notification helpers ──────────────────────────────────────────
 
 import { notificationEngine } from "./notifications/engine";
+import { publicAppUrl } from "@/lib/app-url";
 
 export interface NotificationPayload {
   title: string;
@@ -95,7 +96,7 @@ export async function sendAlertEmail(subject: string, body: string): Promise<boo
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Chowdhury Agro Alerts <backup@chowdhury-agro.com>",
+        from: process.env.EMAIL_FROM ?? "Tanvir Agro Alerts <backup@chowdhury-agro.com>",
         to: [to],
         subject,
         text: body,
@@ -131,9 +132,9 @@ export async function sendLowStockAlert(
   currentStock: number,
   unit: string
 ): Promise<void> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+  const appUrl = publicAppUrl();
   const message =
-    `⚠️ *Chowdhury Agro — Low Stock Alert*\n\n` +
+    `⚠️ *Tanvir Agro — Low Stock Alert*\n\n` +
     `📦 আইটেম: *${itemName}*\n` +
     `📊 বর্তমান স্টক: ${currentStock.toFixed(1)} ${unit}\n` +
     `⏰ আর মাত্র *${daysLeft} দিন* বাকি\n\n` +
@@ -148,12 +149,12 @@ export async function sendExpiringStockAlert(
   items: { name: string; expiryDate: string; qty: number; unit: string }[]
 ): Promise<void> {
   if (items.length === 0) return;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+  const appUrl = publicAppUrl();
   const lines = items
     .map((i) => `- ${i.name}: ${i.qty.toFixed(1)} ${i.unit} (expires ${i.expiryDate})`)
     .join("\n");
   const message =
-    `⏳ *Chowdhury Agro — Expiring Soon*\n\n` +
+    `⏳ *Tanvir Agro — Expiring Soon*\n\n` +
     `${lines}\n\n` +
     `👉 Check stock: ${appUrl}/dashboard/inventory`;
 
@@ -167,9 +168,9 @@ export async function sendHealthEventAlert(
   eventTitle: string,
   scheduledAt: string
 ): Promise<void> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+  const appUrl = publicAppUrl();
   const message =
-    `🐄 *Chowdhury Agro — Health Alert*\n\n` +
+    `🐄 *Tanvir Agro — Health Alert*\n\n` +
     `গরু: *${cattleTag}*\n` +
     `ইভেন্ট: *${eventTitle}*\n` +
     `নির্ধারিত ছিল: ${new Date(scheduledAt).toLocaleDateString("bn-BD")}\n` +
@@ -186,9 +187,9 @@ export async function sendUpcomingHealthAlert(
   eventTitle: string,
   scheduledAt: string
 ): Promise<void> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+  const appUrl = publicAppUrl();
   const message =
-    `📅 *Chowdhury Agro — আগামীকাল Health Event*\n\n` +
+    `📅 *Tanvir Agro — আগামীকাল Health Event*\n\n` +
     `গরু: *${cattleTag}*\n` +
     `ইভেন্ট: *${eventTitle}*\n` +
     `তারিখ: ${new Date(scheduledAt).toLocaleDateString("bn-BD")}\n\n` +
@@ -203,10 +204,10 @@ export async function sendUpcomingHealthAlert(
 export async function sendMissingWeightAlert(tags: string[]): Promise<void> {
   if (tags.length === 0) return;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+  const appUrl = publicAppUrl();
   const list = tags.map((t) => `• ${t}`).join("\n");
   const message =
-    `⚖️ *Chowdhury Agro — ওজন নেওয়া হয়নি*\n\n` +
+    `⚖️ *Tanvir Agro — ওজন নেওয়া হয়নি*\n\n` +
     `নিচের *${tags.length}টি গরু*র ওজন গত ৭ দিনে নেওয়া হয়নি:\n\n` +
     `${list}\n\n` +
     `📊 সঠিক ADG ট্র্যাক করতে নিয়মিত ওজন নিন।\n` +
@@ -236,9 +237,9 @@ export async function sendSellWindowAlert(
     )
     .join("\n");
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+  const appUrl = publicAppUrl();
   const message =
-    `💰 *Chowdhury Agro — Sell Window Alert*\n\n` +
+    `💰 *Tanvir Agro — Sell Window Alert*\n\n` +
     `নিচের *${cattle.length}টি গরু* বিক্রির উপযুক্ত সময়ে এসে গেছে:\n\n` +
     `${list}\n\n` +
     `📈 ৯০+ দিন পেনে এবং ৩০%+ ওজন বৃদ্ধি হয়েছে।\n` +
@@ -261,12 +262,12 @@ export interface WeeklyDigestStats {
 export async function sendWeeklyDigest(
   stats: WeeklyDigestStats
 ): Promise<void> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+  const appUrl = publicAppUrl();
   const statusLine = (count: number, ok: string, warn: string) =>
     count === 0 ? `✅ ${ok}` : `⚠️ ${warn}: ${count}টি`;
 
   const message =
-    `📊 *Chowdhury Agro — সাপ্তাহিক সারসংক্ষেপ*\n` +
+    `📊 *Tanvir Agro — সাপ্তাহিক সারসংক্ষেপ*\n` +
     `${new Date().toLocaleDateString("bn-BD", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n\n` +
     `🐄 সক্রিয় গরু: *${stats.activeCattle}টি*\n` +
     `💰 বিক্রির উপযুক্ত: *${stats.sellReady}টি*\n\n` +
@@ -278,7 +279,7 @@ export async function sendWeeklyDigest(
       : ``) +
     `👉 Dashboard: ${appUrl}/dashboard`;
 
-  await sendWhatsAppWithFallback(message, "Chowdhury Agro — Weekly Digest");
+  await sendWhatsAppWithFallback(message, "Tanvir Agro — Weekly Digest");
 }
 
 export { notificationEngine } from "./notifications/engine";

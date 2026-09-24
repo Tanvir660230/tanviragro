@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
 import { ResetPasswordForm } from "./ResetPasswordForm";
 
-export const metadata: Metadata = { title: "Reset Password � Chowdhury Agro ERP" };
+export const metadata: Metadata = { title: "Reset Password — Tanvir Agro ERP" };
 
 export default function ResetPasswordPage() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-sidebar p-4">
       <div className="mb-8 flex flex-col items-center gap-2 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary shadow-lg">
-          <span className="text-2xl">??</span>
+          <span className="text-2xl" aria-hidden="true">🐄</span>
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-sidebar-foreground">
-          Chowdhury Agro ERP
+          Tanvir Agro ERP
         </h1>
         <p className="text-sm text-sidebar-foreground/60">
           Cattle Fattening Management

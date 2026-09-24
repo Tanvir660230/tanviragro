@@ -15,6 +15,14 @@ export function getAppUrl(): string | null {
   }
 }
 
+/** Production URL documented in .env.example; used only when no env var is configured. */
+export const DEFAULT_APP_URL = "https://tanviragro.com";
+
+/** App URL for links in emails/alerts/metadata: configured URL, else the production default. */
+export function publicAppUrl(): string {
+  return getAppUrl() ?? DEFAULT_APP_URL;
+}
+
 /**
  * Returns `path` only if it is a same-site relative path ("/dashboard/cattle?x=1").
  * Rejects absolute URLs, protocol-relative ("//evil.com"), backslash tricks ("/\evil.com"),

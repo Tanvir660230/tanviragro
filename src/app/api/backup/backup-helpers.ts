@@ -31,7 +31,7 @@ export async function sendBackupEmail(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "Chowdhury Agro Backup <backup@chowdhury-agro.com>",
+      from: process.env.EMAIL_FROM ?? "Tanvir Agro Backup <backup@chowdhury-agro.com>",
       to: [to],
       subject,
       text,
@@ -136,8 +136,8 @@ export async function runCronBackup(supabaseUrl: string, serviceKey: string, bac
   if (backupEmail) {
     emailSent = await sendBackupEmail(
       backupEmail,
-      `Chowdhury Agro — Weekly Backup (Week ${weekNum}, ${dateStr})`,
-      `Weekly data backup from Chowdhury Agro ERP.\n\nGenerated: ${now.toUTCString()}\n\nStorage: ${storedCount}/${csvFiles.length} files saved to Supabase.\n\nAttached files:\n${csvFiles.map((f) => "• " + f.filename).join("\n")}`,
+      `Tanvir Agro — Weekly Backup (Week ${weekNum}, ${dateStr})`,
+      `Weekly data backup from Tanvir Agro ERP.\n\nGenerated: ${now.toUTCString()}\n\nStorage: ${storedCount}/${csvFiles.length} files saved to Supabase.\n\nAttached files:\n${csvFiles.map((f) => "• " + f.filename).join("\n")}`,
       csvFiles
     );
   }

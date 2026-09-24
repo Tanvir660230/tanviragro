@@ -1,5 +1,5 @@
 /**
- * Chowdhury Agro ERP — Centralized Design Tokens
+ * Tanvir Agro ERP — Centralized Design Tokens
  * Single source of truth for all design values.
  * Mirrors CSS custom properties in globals.css.
  */

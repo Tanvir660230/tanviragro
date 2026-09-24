@@ -7,6 +7,7 @@
 import { sendWhatsAppWithFallback, sendAlertEmail, sendWhatsApp, sendPushToUser } from "@/lib/notifications";
 import { ActionType, DeliveryTarget } from "../workflows/types";
 import { EventPriority } from "../events/types";
+import { publicAppUrl } from "@/lib/app-url";
 
 export interface DeliveryMessage {
   title: string;
@@ -76,7 +77,7 @@ export class DeliveryService {
         }
 
         case "send_push": {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app";
+          const baseUrl = publicAppUrl();
           const userId = message.target?.userId ?? "all";
           await sendPushToUser(
             userId,

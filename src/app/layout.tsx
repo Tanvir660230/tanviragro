@@ -26,31 +26,31 @@ const hindSiliguri = Hind_Siliguri({
 
 export const metadata: Metadata = {
   title: {
-    default: "Chowdhury Agro ERP",
-    template: "%s | Chowdhury Agro",
+    default: "Tanvir Agro ERP",
+    template: "%s | Tanvir Agro",
   },
   description: "Professional Agro Business ERP — Cattle Fattening Management System for Bangladesh.",
-  applicationName: "Chowdhury Agro ERP",
+  applicationName: "Tanvir Agro ERP",
   keywords: ["cattle ERP", "agro ERP", "গরু ফার্ম", "cattle fattening", "farm management", "Bangladesh agro"],
-  authors: [{ name: "Chowdhury Agro" }],
+  authors: [{ name: "Tanvir Agro" }],
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Agro",
   },
   formatDetection: { telephone: false },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app"),
+  metadataBase: new URL(publicAppUrl()),
   openGraph: {
-    title: "Chowdhury Agro ERP",
+    title: "Tanvir Agro ERP",
     description: "Professional cattle fattening management — track weights, feed, health, and profit.",
-    url: process.env.NEXT_PUBLIC_APP_URL ?? "https://caagro.netlify.app",
-    siteName: "Chowdhury Agro ERP",
+    url: publicAppUrl(),
+    siteName: "Tanvir Agro ERP",
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "Chowdhury Agro ERP",
+    title: "Tanvir Agro ERP",
     description: "Cattle fattening management system — weights, feed, health, profit.",
   },
   robots: {
@@ -69,6 +69,7 @@ export const viewport: Viewport = {
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { getDictionary } from "@/i18n/getDictionary";
 import { cookies } from "next/headers";
+import { publicAppUrl } from "@/lib/app-url";
 
 export const dynamic = "force-dynamic";
 

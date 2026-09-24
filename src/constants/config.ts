@@ -1,3 +1,7 @@
+/** Product name shown in titles, emails and alerts. */
+export const APP_NAME = "Tanvir Agro";
+export const APP_FULL_NAME = `${APP_NAME} ERP`;
+
 /**
  * Farm operational defaults, biometrics & system thresholds
  */
