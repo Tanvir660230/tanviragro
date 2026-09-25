@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { SellTodaySummary } from "@/components/finance/SellTodaySummary";
-import { FinanceHero, FinanceHeroSkeleton } from "@/components/finance/FinanceHero";
+import { AddCostDialog } from "@/components/finance/AddCostDialog";
 import { CapitalSummaryCard } from "@/components/finance/CapitalSummaryCard";
 import { createClient } from "@/lib/supabase/server";
 import { CostList, type CostEntry, type InventoryPurchaseEntry } from "@/components/finance/CostList";
@@ -21,8 +21,6 @@ import type { LoanRow } from "@/components/finance/LoanDashboard";
 import { getCurrentBusiness } from "@/lib/supabase/get-business";
 import { buildWeightPredictions } from "@/lib/cattle-weight";
 import { MarketPriceCard } from "@/components/finance/MarketPriceCard";
-import { EnterpriseLivestockFinancialWorkspace } from "@/components/finance/EnterpriseLivestockFinancialWorkspace";
-import { LivestockProfitabilityEngine } from "@/lib/financial";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
@@ -97,11 +95,6 @@ export default async function FinancePage(props: {
     { data: treatmentsData },
     { data: deadCattleData },
     { data: recentPurchasesData },
-    { data: roughagesData },
-    { data: recipesData },
-    { data: periodLocksData },
-    { data: costAllocationsData },
-    { data: biologicalValuationsData },
   ] = await Promise.all([
     businessId
       ? supabase
@@ -194,42 +187,6 @@ export default async function FinancePage(props: {
           .eq("inventory_items.business_id", businessId)
           .eq("type", "purchase")
           .order("recorded_at", { ascending: false })
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? supabase
-          .from("inventory_items")
-          .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
-          .eq("business_id", businessId)
-          .not("roughage_active_from", "is", null)
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? supabase
-          .from("feed_recipes")
-          .select("id, active_from, active_until, recipe_ingredients(item_id, qty_per_batch)")
-          .eq("business_id", businessId)
-          .not("active_from", "is", null)
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? (supabase as any)
-          .from("financial_period_locks")
-          .select("id, lock_name, start_date, end_date, is_locked")
-          .eq("business_id", businessId)
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? (supabase as any)
-          .from("cost_allocations")
-          .select("id, allocation_batch_number, source_category, allocation_method, total_amount, recipients_count, applied_date")
-          .eq("business_id", businessId)
-          .order("applied_date", { ascending: false })
-          .limit(50)
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? (supabase as any)
-          .from("biological_asset_valuations")
-          .select("id, valuation_number, valuation_date, market_rate_per_kg, total_head_count, new_fair_value, unrealized_gain_loss")
-          .eq("business_id", businessId)
-          .order("valuation_date", { ascending: false })
-          .limit(50)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -470,114 +427,26 @@ export default async function FinancePage(props: {
     };
   });
 
-  // ── Period stats for FinanceHero ────────────────────────────
-  const periodRevenueFH    = filteredSales.reduce((s, r) => s + Number(r.sale_price_total), 0);
-  const periodFeedInvCosts = filteredMonthly.reduce((s, m) => s + Number(m.total_cost), 0);
-  const periodOpCosts      = totalFixedCosts + totalVariableCosts + periodFeedInvCosts;
-  const periodNetPLFH      = periodRevenueFH - periodOpCosts;
-  const activePeriodStr    = fp ?? "this-month";
-
-  const totalAllSalesRevenue = sales.reduce((s, r) => s + Number(r.sale_price_total), 0);
-
-  const workspaceAnimalLedgers = [
-    ...activeCattleList.map((c) =>
-      LivestockProfitabilityEngine.calculateAnimalUnitEconomics({
-        cattleId: c.id,
-        businessId: businessId ?? "",
-        tagId: c.tag_id,
-        purchaseCost: Number(c.purchase_price) || 0,
-        purchaseWeightKg: Number(c.initial_weight_kg) || 200,
-        currentWeightKg: weightPredictions[c.id]?.predictedWeight ?? (Number(c.initial_weight_kg) || 250),
-        feedCost: feedCostByCattle[c.id] ?? 0,
-        medicineCost: directCostByCattle[c.id] ?? 0,
-        overheadAllocated: 0,
-        currentBiologicalValue: (weightPredictions[c.id]?.predictedWeight ?? 250) * (defaultMarketPricePerKg || 450),
-        status: "active",
-      })
-    ),
-    ...sales.map((s) =>
-      LivestockProfitabilityEngine.calculateAnimalUnitEconomics({
-        cattleId: s.cattle_id,
-        businessId: businessId ?? "",
-        tagId: s.cattle_tag,
-        purchaseCost: Number(s.purchase_price) || 0,
-        purchaseWeightKg: Number(s.initial_weight_kg) || 200,
-        finalWeightKg: s.weight_at_sale_kg ?? (Number(s.initial_weight_kg) || 250),
-        feedCost: feedCostByCattle[s.cattle_id] ?? 0,
-        medicineCost: directCostByCattle[s.cattle_id] ?? 0,
-        saleRevenue: s.sale_price_total,
-        status: "sold",
-      })
-    ),
-  ];
-
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <Link
           href="/dashboard/finance/utilities"
-          className="inline-flex h-8 items-center rounded-lg border border-border/70 bg-card px-3 text-xs font-medium hover:bg-muted"
+          className="inline-flex h-9 items-center rounded-lg border border-border/70 bg-card px-3 text-xs font-medium hover:bg-muted"
         >
-          Utility expenses (electricity, internet, gas…) →
+          Utility expenses →
         </Link>
+        <Link
+          href="/dashboard/finance/bulk-add"
+          className="inline-flex h-9 items-center rounded-lg border border-border/70 bg-card px-3 text-xs font-medium hover:bg-muted"
+        >
+          Add several →
+        </Link>
+        <AddCostDialog />
       </div>
       <Suspense fallback={null}>
         <CapitalSummaryCard />
       </Suspense>
-      {/* ── Enterprise Livestock Financial Workspace ── */}
-      <EnterpriseLivestockFinancialWorkspace
-        businessId={businessId ?? ""}
-        businessName={bizName}
-        cashPosition={{
-          balance: totalAllSalesRevenue - (totalFixedCosts + totalVariableCosts + totalFeedCosts),
-          inflow: totalAllSalesRevenue,
-          outflow: totalFixedCosts + totalVariableCosts + totalFeedCosts,
-        }}
-        animalLedgers={workspaceAnimalLedgers}
-        recentCosts={entries.map((e) => ({
-          id: e.id,
-          category: e.category,
-          amount: Number(e.amount),
-          recordedAt: e.recorded_at,
-          type: e.type,
-          description: e.description ?? null,
-          cattleId: e.cattle_id ?? null,
-        }))}
-        recentSales={sales.map((s) => ({
-          id: s.id,
-          salePrice: s.sale_price_total,
-          soldAt: s.sold_at,
-          cattleId: s.cattle_id,
-          buyerName: s.buyer_name || undefined,
-        }))}
-
-        periodLocks={((periodLocksData ?? []) as any[]).map((p) => ({
-          id: p.id,
-          lockName: p.lock_name,
-          startDate: p.start_date,
-          endDate: p.end_date,
-          isLocked: p.is_locked,
-        }))}
-        costAllocations={((costAllocationsData ?? []) as any[]).map((a) => ({
-          id: a.id,
-          batchNumber: a.allocation_batch_number,
-          category: a.source_category,
-          method: a.allocation_method,
-          amount: Number(a.total_amount),
-          recipientsCount: Number(a.recipients_count),
-          appliedDate: a.applied_date,
-        }))}
-        biologicalValuations={((biologicalValuationsData ?? []) as any[]).map((b) => ({
-          id: b.id,
-          valuationNumber: b.valuation_number,
-          valuationDate: b.valuation_date,
-          marketRatePerKg: Number(b.market_rate_per_kg),
-          totalHeadCount: Number(b.total_head_count),
-          fairValue: Number(b.new_fair_value),
-          unrealizedGainLoss: Number(b.unrealized_gain_loss),
-        }))}
-      />
-
       {/* ── Market Price Log ── */}
       <Suspense fallback={null}>
         <MarketPriceCard />

@@ -535,7 +535,9 @@ export async function getAccountingData(
         const depAtStart = a.purchase_date < periodFrom
           ? computeDepreciation({ ...base, disposed_at: periodFrom })
           : { accumulated: 0 };
-        return s + Math.max(0, Math.round((depAtEnd.accumulated - depAtStart.accumulated) * 100) / 100);
+        // not rounded per asset: the balance sheet adds the same accumulated depreciation unrounded,
+        // so rounding here left assets and equity 1 poisha apart
+        return s + Math.max(0, depAtEnd.accumulated - depAtStart.accumulated);
       }, 0);
   }
 

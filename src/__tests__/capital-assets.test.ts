@@ -59,7 +59,6 @@ describe("no asset purchase is counted twice (source guards)", () => {
     expect(src).toMatch(/inPeriod\(a\.purchaseDate\) && !a\.sourceCostEntryId/);
   });
   test("cash service, statement and repository skip fixed assets that have a payment record", () => {
-    expect(read("lib/supabase/queries/cash.ts")).toMatch(/\.is\("source_cost_entry_id", null\)/);
     expect(read("app/dashboard/(app)/finance/statement-action.ts")).toMatch(/\.is\("source_cost_entry_id", null\)/);
     expect(read("lib/financial/financial-repository.ts")).toMatch(/!f\.source_cost_entry_id/);
   });

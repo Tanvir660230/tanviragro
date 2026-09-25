@@ -47,10 +47,9 @@ describe("A2 feed eaten is consumption − its undo; losses and undos are not fe
 
 describe("A3 cash: partner capital counted; no unknown enum value; purchase undo is not spent", () => {
   test("the query only asks for existing partner transaction types", () => {
-    const src = read("lib/supabase/queries/cash.ts");
-    expect(src).not.toMatch(/"draw"\]/);
-    expect(src).toMatch(/"purchase_reversal"/);
-    expect(src).toMatch(/cattle_treatments/);
+    // one cash figure: the separate cash query (a second calculation) was removed; the engine is the source
+    expect(fs.existsSync(path.join(__dirname, "..", "lib/supabase/queries/cash.ts"))).toBe(false);
+    expect(read("lib/accounting/engine.ts")).not.toMatch(/"draw"\]/);
   });
   test("capital in − cattle − expenses (incl. treatment fees) − net stock bought", () => {
     const pos = CashEngine.calculateCashPosition({
@@ -112,10 +111,9 @@ describe("A6 cost per kg gain uses feed over the SAME days as the gain", () => {
 });
 
 describe("A7 no invented weights or prices in finance actions", () => {
-  test("no 250 kg / ৳50,000 defaults, no non-existent current_weight column", () => {
-    const src = read("app/dashboard/(app)/finance/financial-engine-actions.ts");
-    expect(src).not.toMatch(/\|\| 250\b/);
-    expect(src).not.toMatch(/\|\| 50000\b/);
-    expect(src).not.toMatch(/current_weight/);
+  test("the parallel finance engine (its own cash / profit / cost per kg) stays removed", () => {
+    // it computed cash as sales − costs (ignoring partner capital) beside the audited engine
+    expect(fs.existsSync(path.join(__dirname, "..", "app/dashboard/(app)/finance/financial-engine-actions.ts"))).toBe(false);
+    expect(fs.existsSync(path.join(__dirname, "..", "components/finance/EnterpriseLivestockFinancialWorkspace.tsx"))).toBe(false);
   });
 });

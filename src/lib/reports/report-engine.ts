@@ -1,6 +1,5 @@
+import { getAccountingData } from "@/lib/accounting/engine";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCashBalance } from "@/lib/supabase/queries/cash";
-import { loadMonthlyConsumptions } from "@/lib/inventory/consumption-stats";
 
 export interface ReportFilterOptions {
   startDate?: string;
@@ -61,116 +60,43 @@ export class ReportEngine {
       throw new Error("Business ID is required to generate financial statement report.");
     }
 
-    const [
-      { data: cattleData },
-      { data: costsData },
-      { data: salesData },
-      { data: inventoryData },
-      { data: loansData },
-      { data: monthlyConsumptionsData },
-      cashBalanceResult,
-    ] = await Promise.all([
-      supabase
-        .from("cattle")
-        .select("id, status, purchase_price")
-        .eq("business_id", businessId)
-        .is("deleted_at", null)
-        .limit(1000),
-      supabase
-        .from("cost_entries")
-        .select("amount, type, cattle_id")
-        .eq("business_id", businessId)
-        .is("deleted_at", null)
-        .eq("entry_class", "expense")
-        .limit(5000),
-      supabase
-        .from("sales")
-        .select("cattle_id, sale_price_total, cattle!inner(business_id, purchase_price)")
-        .eq("cattle.business_id", businessId)
-        .is("deleted_at", null)
-        .limit(2000),
-      supabase
-        .from("inventory_items")
-        .select("name, category, unit, inventory_transactions(qty, type, unit_cost)")
-        .eq("business_id", businessId)
-        .is("deleted_at", null)
-        .limit(500),
-      supabase
-        .from("loans")
-        .select("principal_amount, status, loan_payments(amount)")
-        .eq("business_id", businessId)
-        .is("deleted_at", null)
-        .limit(500),
-      loadMonthlyConsumptions(supabase, businessId).then((data) => ({ data })).catch(() => ({ data: [] })),
-      getCashBalance(supabase, businessId).catch(() => ({ balance: 0, bankBalance: 0 })),
+    // Money comes from THE accounting engine (the same numbers as Finance and the statements);
+    // stock from the ledger view. This used to compute cash, profit and stock on its own, and its
+    // stock looked for rows typed "IN"/"OUT" that do not exist, so stock always showed ৳0.
+    const [{ data: cattleData }, { data: balanceRows }, acc] = await Promise.all([
+      supabase.from("cattle").select("id, status").eq("business_id", businessId).is("deleted_at", null),
+      supabase.from("v_inventory_balance").select("name, category, unit, qty_on_hand, value_on_hand").eq("business_id", businessId),
+      getAccountingData(supabase),
     ]);
 
-    const cattle = cattleData ?? [];
-    const activeCattle = cattle.filter((c: any) => c.status === "active");
-    const soldCattle = cattle.filter((c: any) => c.status === "sold");
+    const cattle = (cattleData ?? []) as { id: string; status: string }[];
+    const activeCattle = cattle.filter((c) => c.status === "active");
+    const soldCattle = cattle.filter((c) => c.status === "sold");
     const totalCattle = cattle.length;
 
-    const activeCattleValuation = activeCattle.reduce(
-      (acc: number, c: any) => acc + (c.purchase_price || 0),
-      0
-    );
-
-    const sales = salesData ?? [];
-    const revenue = sales.reduce((acc: number, s: any) => acc + (s.sale_price_total || 0), 0);
-    const soldCattleCost = sales.reduce((acc: number, s: any) => {
-      const cp = (s.cattle as { purchase_price?: number } | null)?.purchase_price || 0;
-      return acc + cp;
-    }, 0);
-
-    const consumptions = (monthlyConsumptionsData ?? []) as { total_cost: number }[];
-    const feedCost = consumptions.reduce((acc: number, row: any) => acc + (Number(row.total_cost) || 0), 0);
-    const operatingCosts = (costsData ?? []).reduce(
-      (acc: number, c: any) => acc + (c.amount || 0),
-      0
-    );
-
-    const netPL = revenue - soldCattleCost - feedCost - operatingCosts;
-    const cashBalance = Math.max(0, cashBalanceResult.balance ?? 0);
+    const bs = acc.balanceSheet;
+    const is = acc.incomeStatement;
+    const activeCattleValuation = bs.livestock;               // at cost, incl. capitalised direct costs
+    const revenue = is.totalRevenue;
+    const soldCattleCost = is.cogs;
+    const feedCost = is.feedExpenses;
+    const operatingCosts = is.totalExpenses - is.cogs - is.feedExpenses;
+    const netPL = is.netIncome;
+    const cashBalance = bs.cashAndBank;
     const bankBalance = 0;
     const totalLiquidCash = cashBalance;
 
-    const inventoryItems = inventoryData ?? [];
-    const inventoryWithStock: InventoryReportItem[] = inventoryItems
-      .map((item: any) => {
-        const txs = (item.inventory_transactions as { qty: number; type: string; unit_cost: number | null }[]) ?? [];
-        const inTxs = txs.filter((t) => t.type === "IN");
-        const inQty = inTxs.reduce((acc, t) => acc + (t.qty || 0), 0);
-        const outQty = txs.filter((t) => t.type === "OUT").reduce((acc, t) => acc + (t.qty || 0), 0);
-        const stock = Math.max(0, inQty - outQty);
-
-        const totalInCost = inTxs.reduce((acc, t) => acc + (t.qty || 0) * (t.unit_cost || 0), 0);
-        const avgCost = inQty > 0 ? totalInCost / inQty : 0;
-        const value = stock * avgCost;
-
-        return {
-          name: item.name,
-          category: item.category ?? "General",
-          stock,
-          unit: item.unit || "units",
-          avgCost,
-          value,
-        };
+    const inventoryWithStock: InventoryReportItem[] = ((balanceRows ?? []) as { name: string; category: string | null; unit: string | null; qty_on_hand: number | string; value_on_hand: number | string }[])
+      .map((b) => {
+        const stock = Number(b.qty_on_hand);
+        const value = Number(b.value_on_hand);
+        return { name: b.name, category: b.category ?? "General", stock, unit: b.unit || "units", avgCost: stock > 0 ? value / stock : 0, value };
       })
-      .filter((i: InventoryReportItem) => i.stock > 0);
+      .filter((i) => i.stock > 0.0001);
+    const totalInventoryValue = bs.feedInventory;
 
-    const totalInventoryValue = inventoryWithStock.reduce((acc, i) => acc + i.value, 0);
-
-    const loans = loansData ?? [];
-    const totalLiabilities = loans
-      .filter((l: any) => l.status === "active")
-      .reduce((acc: number, l: any) => {
-        const payments = (l.loan_payments as { amount: number }[]) ?? [];
-        const repaid = payments.reduce((pAcc: number, p: any) => pAcc + (p.amount || 0), 0);
-        return acc + Math.max(0, (l.principal_amount || 0) - repaid);
-      }, 0);
-
-    const totalAssets = totalLiquidCash + activeCattleValuation + totalInventoryValue;
-    const netEquity = totalAssets - totalLiabilities;
+    const totalLiabilities = bs.totalLiabilities;
+    const netEquity = bs.totalEquity;
     const zakatAssets = Math.max(0, totalLiquidCash + activeCattleValuation + totalInventoryValue - totalLiabilities);
 
     const reportDate = new Date().toLocaleDateString("en-GB", {

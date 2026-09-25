@@ -242,9 +242,7 @@ describe("source guards", () => {
 
   test("cash views count supplier purchases only", () => {
     // supplier purchases, net of audited purchase undos — never every IN row
-    expect(read("lib/supabase/queries/cash.ts")).toMatch(/\.in\("movement_type", \["purchase", "purchase_reversal"\]\)/);
-    // only enum values that exist: an unknown value ("draw") made PostgREST drop all partner capital
-    expect(read("lib/supabase/queries/cash.ts")).not.toMatch(/"draw"\]/);
+    // (the separate cash query was removed: the accounting engine is the one cash source)
     expect(read("lib/accounting/engine.ts")).not.toMatch(/Math\.max\(0, allTimePurchaseValue/);
   });
 

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { getCashBalance } from "@/lib/supabase/queries/cash";
+import { getAccountingData } from "@/lib/accounting/engine";
 import {
   Wallet, TrendingUp, TrendingDown, CheckCircle2, AlertTriangle,
   ArrowRight, BadgeDollarSign, Scale,
@@ -36,8 +36,8 @@ export async function SellCashImpactCard({
 }: Props) {
   const si = t.cattle_details.sell_impact;
   const supabase = await createClient();
-  const cash = await getCashBalance(supabase, businessId);
-  const { balance } = cash;
+  // cash from THE accounting engine: the same figure as the homepage and Finance
+  const balance = (await getAccountingData(supabase)).balanceSheet.cashAndBank;
 
   if (!marketPricePerKg || marketPricePerKg <= 0) {
     return (

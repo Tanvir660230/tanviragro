@@ -64,20 +64,21 @@ export async function verifyFinancialLock(
   try {
     const { data: lock } = await supabase
       .from("financial_locks")
-      .select("lock_date")
+      .select("locked_until")            // the column is locked_until (lock_date never existed, so no lock was ever enforced)
       .eq("business_id", businessId)
-      .gte("lock_date", dateStr)
-      .order("lock_date", { ascending: false })
+      .gte("locked_until", dateStr)
+      .order("locked_until", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (lock?.lock_date) {
-      const result = validateFinancialLockDate(dateStr, lock.lock_date, options.entityName);
+    const lockedUntil = (lock as { locked_until?: string } | null)?.locked_until;
+    if (lockedUntil) {
+      const result = validateFinancialLockDate(dateStr, lockedUntil, options.entityName);
       if (result.isLocked) {
         if (options.throwOnError) {
-          throw new PeriodClosedError(lock.lock_date, dateStr);
+          throw new PeriodClosedError(lockedUntil, dateStr);
         }
-        return result.errorMessage || `Financial period is closed up to ${lock.lock_date}.`;
+        return result.errorMessage || `Financial period is closed up to ${lockedUntil}.`;
       }
     }
   } catch (err) {

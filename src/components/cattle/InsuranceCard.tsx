@@ -45,7 +45,7 @@ export function InsuranceCard({ cattleId, provider, amount, expiry }: Props) {
       });
       if (r.error) toast.error(r.error);
       else {
-        toast.success("????? ???? ????? ??????");
+        toast.success("বীমার তথ্য সেভ হয়েছে");
         setEditing(false);
       }
     });
@@ -56,7 +56,7 @@ export function InsuranceCard({ cattleId, provider, amount, expiry }: Props) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-blue-500" />
-          <h3 className="font-semibold text-sm">???????? ????</h3>
+          <h3 className="font-semibold text-sm">বীমা (ইনস্যুরেন্স)</h3>
         </div>
         <button
           onClick={() => setEditing(!editing)}
@@ -69,17 +69,17 @@ export function InsuranceCard({ cattleId, provider, amount, expiry }: Props) {
       {editing ? (
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-muted-foreground">???? ????????</label>
+            <label className="text-xs font-medium text-muted-foreground">বীমা কোম্পানি</label>
             <input
               value={form.insurance_provider}
               onChange={(e) => setForm((f) => ({ ...f, insurance_provider: e.target.value }))}
-              placeholder="????: Delta Life, Pragati"
+              placeholder="যেমন: Delta Life, Pragati"
               className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">????? ????? (?)</label>
+              <label className="text-xs font-medium text-muted-foreground">বীমার পরিমাণ (৳)</label>
               <input
                 type="number"
                 min="0"
@@ -91,7 +91,7 @@ export function InsuranceCard({ cattleId, provider, amount, expiry }: Props) {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">?????? ???</label>
+              <label className="text-xs font-medium text-muted-foreground">মেয়াদ শেষ</label>
               <input
                 type="date"
                 value={form.insurance_expiry}
@@ -101,34 +101,34 @@ export function InsuranceCard({ cattleId, provider, amount, expiry }: Props) {
             </div>
           </div>
           <div className="flex gap-2 justify-end">
-            <button onClick={() => setEditing(false)} className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted">?????</button>
+            <button onClick={() => setEditing(false)} className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted">বাতিল</button>
             <button onClick={handleSave} disabled={isPending} className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
-              {isPending ? "??????? ?????..." : "??????? ????"}
+              {isPending ? "সেভ হচ্ছে..." : "সেভ করুন"}
             </button>
           </div>
         </div>
       ) : !hasInsurance ? (
         <div className="text-center py-4">
-          <p className="text-sm text-muted-foreground">???? ???? ???</p>
-          <button onClick={() => setEditing(true)} className="mt-2 text-xs text-primary hover:underline">+ ???? ??? ????</button>
+          <p className="text-sm text-muted-foreground">বীমা করা নেই</p>
+          <button onClick={() => setEditing(true)} className="mt-2 text-xs text-primary hover:underline">+ বীমার তথ্য দিন</button>
         </div>
       ) : (
         <div className="space-y-2">
           {provider && (
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">????????</span>
+              <span className="text-muted-foreground">কোম্পানি</span>
               <span className="font-medium">{provider}</span>
             </div>
           )}
           {amount && (
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">????? ?????</span>
-              <span className="font-medium">?{Math.round(amount).toLocaleString("en-IN")}</span>
+              <span className="text-muted-foreground">বীমার পরিমাণ</span>
+              <span className="font-medium">৳{Math.round(amount).toLocaleString("en-IN")}</span>
             </div>
           )}
           {expiry && (
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">?????? ???</span>
+              <span className="text-muted-foreground">মেয়াদ শেষ</span>
               <div className="flex items-center gap-1.5">
                 {expired ? (
                   <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
@@ -139,7 +139,7 @@ export function InsuranceCard({ cattleId, provider, amount, expiry }: Props) {
                 )}
                 <span className={`font-medium ${expired ? "text-destructive" : expiringSoon ? "text-amber-600 dark:text-amber-400" : ""}`}>
                   {fmtDate(expiry)}
-                  {expired ? " (?????? ???)" : expiringSoon ? ` (${daysLeft} ??? ????)` : ""}
+                  {expired ? " (মেয়াদ শেষ)" : expiringSoon ? ` (আর ${daysLeft} দিন)` : ""}
                 </span>
               </div>
             </div>
