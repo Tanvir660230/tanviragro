@@ -287,6 +287,8 @@ const DLG = {
     pct_ph: "e.g. 1.5 (%)", head_ph: "e.g. 2 (kg or pieces per animal)",
     rule_note: "This amount comes off the stock every day automatically. When you count, the difference is adjusted.",
     learn_note: "Until it has been used up once, nothing can be deducted daily; the count settles it.",
+    suggested: "From the day it was bought ({date}) — change it if feeding started later.",
+    will_deduct: "About {daily} a day (from earlier use) → about {total} will come off for {days} days (stock {stock}).",
     set_chart: "Set a feeding chart", cancel: "Cancel", start: "Start", started: "Feed started — it comes off the stock every day",
     end_title: "Finished", correct_title: "Correct", mode_finish: "Finished — no longer fed", mode_check: "Count check — keep feeding it",
     last_day: "Last day it was fed *", count_day: "Counted on *", left: "What is left now? (0 if finished)",
@@ -309,6 +311,8 @@ const DLG = {
     pct_ph: "যেমন 1.5 (%)", head_ph: "যেমন 2 (প্রতি গরু kg বা পিস)",
     rule_note: "এই পরিমাণ প্রতিদিন নিজে থেকে স্টক থেকে কাটা হবে। গুনে দিলে পার্থক্যটা মিলিয়ে নেওয়া হবে।",
     learn_note: "একবার শেষ না হওয়া পর্যন্ত প্রতিদিন কাটার হিসাব থাকে না; গোনার সময় মিলে যাবে।",
+    suggested: "কেনার দিন ({date}) থেকে ধরা হলো — পরে শুরু করলে তারিখ বদলান।",
+    will_deduct: "আগের খরচ অনুযায়ী দিনে ≈ {daily} → {days} দিনে ≈ {total} কাটা হবে (স্টক {stock})।",
     set_chart: "খাবারের চার্ট দিন", cancel: "বাতিল", start: "চালু করুন", started: "খাবার চালু হলো — প্রতিদিন নিজে স্টক থেকে কাটা হবে",
     end_title: "শেষ হয়েছে", correct_title: "ঠিক করুন", mode_finish: "শেষ — আর খাওয়ানো হচ্ছে না", mode_check: "শুধু গুনে মেলাই — চালু থাকবে",
     last_day: "শেষ কবে খাওয়ানো হয়েছে *", count_day: "কবে গুনলেন *", left: "এখন কতটা বাকি আছে? (শেষ হলে 0)",
@@ -389,20 +393,33 @@ export function StartDialog({ data, preset, onClose, lang = "en" }: { data: Usag
   const t = DLG[lang];
   const router = useRouter();
   const [key] = useState(() => crypto.randomUUID());
+  const itemOf = (tg: string) => (tg.startsWith("item:") ? data.items.find((i) => i.id === tg.slice(5)) : undefined);
   const [target, setTarget] = useState(preset);
+  // an item not started yet most likely started being fed the day it was bought
+  const [startDate, setStartDate] = useState(itemOf(preset)?.suggestedStart ?? data.asOf);
+  const chooseTarget = (tg: string) => { setTarget(tg); setStartDate(itemOf(tg)?.suggestedStart ?? data.asOf); };
   const [state, action, pending] = useActionState<UsageFormState, FormData>(startFeedUsage, undefined);
   useEffect(() => { if (state?.success) { toast.success(t.started); onClose(); router.refresh(); } }, [state?.success, onClose, router, t.started]);
+  const it = itemOf(target);
+  const days = Math.max(0, Math.round((Date.parse(`${data.asOf}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86400000));
+  const daily = it?.learnedDaily ?? null;
+  const f2 = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 1 });
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>{t.start_title}</DialogTitle></DialogHeader>
         <form action={action} className="space-y-3">
           <input type="hidden" name="key" value={key} />
-          <div className="space-y-1.5"><Label>{t.target}</Label><TargetSelect data={data} name="target" value={target} onChange={setTarget} lang={lang} /></div>
+          <div className="space-y-1.5"><Label>{t.target}</Label><TargetSelect data={data} name="target" value={target} onChange={chooseTarget} lang={lang} /></div>
           <div className="space-y-1.5">
             <Label htmlFor="us_start">{t.started_on}</Label>
-            <Input id="us_start" name="start_date" type="date" max={data.asOf} defaultValue={data.asOf} required />
-            <p className="text-[11px] text-muted-foreground">{t.past_ok}</p>
+            <Input id="us_start" name="start_date" type="date" max={data.asOf} value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+            <p className="text-[11px] text-muted-foreground">{it?.suggestedStart && startDate === it.suggestedStart && startDate !== data.asOf ? fill(t.suggested, { date: startDate }) : t.past_ok}</p>
+            {it && daily != null && days > 0 && (
+              <p className="rounded-md bg-primary/5 px-2.5 py-1.5 text-[11px] text-foreground">
+                {fill(t.will_deduct, { daily: `${f2(daily)} ${it.unit}`, days: String(days), total: `${f2(Math.min(daily * days, it.stockQty))} ${it.unit}`, stock: `${f2(it.stockQty)} ${it.unit}` })}
+              </p>
+            )}
           </div>
           <RuleFields hasChart={!!target && (data.chartTargets ?? []).includes(target)} lang={lang} />
           {state?.error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>}

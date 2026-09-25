@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AlertTriangle, Blend, History, Package, PlayCircle, Receipt, Scale, Wheat } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AddItemDialog } from "@/components/inventory/AddItemDialog";
-import { StockSection } from "@/components/inventory/StockSection";
+import { StockList, type StockStatus } from "@/components/inventory/StockList";
 import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { InventoryFeedBoard } from "@/components/inventory/InventoryFeedBoard";
 import { loadFeedData, syncFeedAutoUsage } from "@/lib/feed/feed-data";
@@ -148,8 +148,11 @@ export default async function InventoryPage({
   const stockValue = portfolio.reduce((s, p) => s + Number(p.totalValuation ?? 0), 0);
   const monthFeed = feed?.snapshot.byMonth[month]?.actual ?? 0;
   const itemName = new Map(items.map((i) => [i.id, i]));
-  const mvLabel = (m: string | null) =>
-    m === "purchase" ? ti.mv_purchase : m === "opening_balance" ? ti.mv_opening : m === "consumption" ? ti.mv_consumption
+  const mvLabel = (m: string | null, notes?: string | null) =>
+    notes?.startsWith("Correction") ? ti.mv_correction
+      : m === "feed_mix_input" ? ti.mv_mix_in : m === "feed_mix_output" ? ti.mv_mix_out
+      : m === "consumption" && notes?.startsWith("Auto:") ? ti.mv_auto
+      : m === "purchase" ? ti.mv_purchase : m === "opening_balance" ? ti.mv_opening : m === "consumption" ? ti.mv_consumption
       : m === "consumption_reversal" || m === "purchase_reversal" ? ti.mv_reversal : m === "adjustment_in" || m === "adjustment_out" ? ti.mv_adjust : ti.mv_other;
   const taka = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
   const summary = [
@@ -221,7 +224,8 @@ export default async function InventoryPage({
             <AddItemDialog />
           </div>
         ) : (
-          <StockSection items={activeItems} discontinuedItems={discontinuedItems} cattle={cattle} />
+          <StockList items={activeItems} discontinued={discontinuedItems} cattle={cattle} lang={locale}
+            status={Object.fromEntries((feed?.items ?? []).map((i): [string, StockStatus] => [i.id, { role: i.role, inUse: !!i.openPeriodId, daysLeft: i.daysLeft }]))} />
         )}
       </section>
 
@@ -242,7 +246,7 @@ export default async function InventoryPage({
                 return (
                   <li key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
                     <span className="min-w-0">
-                      <span className="block truncate font-medium">{it?.name ?? "—"} <span className="text-xs font-normal text-muted-foreground">· {mvLabel(m.movement_type)}</span></span>
+                      <span className="block truncate font-medium">{it?.name ?? "—"} <span className="text-xs font-normal text-muted-foreground">· {mvLabel(m.movement_type, m.notes)}</span></span>
                       <span className="block text-[11px] text-muted-foreground">{m.movement_type === "purchase" ? ti.bought : ti.dated} {String(m.recorded_at).slice(0, 10)} · {ti.entered} {String(m.created_at).slice(0, 10)}</span>
                     </span>
                     <span className={`shrink-0 text-right tabular-nums ${isIn ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}>

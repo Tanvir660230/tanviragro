@@ -4,7 +4,7 @@
  * supabase/tests/feed_auto_deduct.sql.
  */
 import {
-  autoRowsDue, bandFor, chartOn, computeFeedSnapshot, need,
+  autoRowsDue, bandFor, chartOn, computeFeedSnapshot, learnedFromRecorded, need,
   type Animal, type ChartVersion, type Period,
 } from "@/lib/feed/usage-engine";
 
@@ -109,5 +109,26 @@ describe("snapshot of an open period with automatic rows", () => {
     p.lines[0].posted = { "2026-09-01": { qty: 8, value: 160 } };
     const s = computeFeedSnapshot({ asOf: "2026-09-03", periods: [p], animals: [cow("A", 150), cow("B", 250)], recorded: [], wac: { hay: 20 }, charts: [chart()] });
     expect(s.lines[0]).toMatchObject({ postedQty: 8, pendingQty: 8, qty: 16 });
+  });
+});
+
+describe("daily use learned from recorded history (no closed period yet)", () => {
+  // Straw on production: 1 Jun opening, daily rows to 13 Jun, then "stock finished" = eaten 1 Jun → 18 Aug
+  const rows = [
+    ...Array.from({ length: 11 }, (_, k) => ({ date: `2026-06-${String(k + 1).padStart(2, "0")}`, itemId: "straw", qty: 3.6, unitCost: 18, cattleId: null })),
+    { date: "2026-08-18", coversFrom: "2026-06-01", itemId: "straw", qty: 488.57, unitCost: 19.2, cattleId: null },
+    { date: "2026-06-13", itemId: "straw", qty: 2, unitCost: 18, cattleId: "cow-1" },   // one animal's extra: not herd use
+  ];
+  test("total eaten over the days it covers (528 pieces over 79 days ≈ 6.7/day)", () => {
+    expect(learnedFromRecorded(rows).straw).toBeCloseTo((11 * 3.6 + 488.57) / 79, 6);
+  });
+  test("too little history (under a week) teaches nothing", () => {
+    expect(learnedFromRecorded([{ date: "2026-09-01", itemId: "x", qty: 5, unitCost: 1, cattleId: null }]).x).toBeUndefined();
+  });
+  test("a closed usage period wins over recorded history in the snapshot", () => {
+    const closedP: Period = { ...openPeriod({ id: "c", status: "closed", endDate: "2026-09-10", ruleType: "weight_share" }) };
+    closedP.lines[0] = { ...closedP.lines[0], itemId: "straw", consumedQty: 100, consumedValue: 1000 };
+    const s = computeFeedSnapshot({ asOf: "2026-09-20", periods: [closedP], animals: [cow("A", 300)], recorded: rows, wac: {} });
+    expect(s.learnedDaily.straw).toBeCloseTo(10, 6);   // 100 over 1 → 10 Sep
   });
 });

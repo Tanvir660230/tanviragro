@@ -237,9 +237,10 @@ export function dayPlan(p: Period, l: PeriodLine, day: string, animals: Animal[]
  * (after autoPostedThrough, up to the day before asOf) by the rule / chart, else by learned usage.
  * Days nobody can quantify are skipped (the count at the end settles them).
  */
-export function autoRowsDue(input: { asOf: string; periods: Period[]; animals: Animal[]; charts?: ChartVersion[] }): { rows: { lineId: string; date: string; qty: number }[]; periodIds: string[]; through: string } {
+export function autoRowsDue(input: { asOf: string; periods: Period[]; animals: Animal[]; charts?: ChartVersion[]; learned?: Record<string, number> }): { rows: { lineId: string; date: string; qty: number }[]; periodIds: string[]; through: string } {
   const through = new Date(Date.parse(`${input.asOf}T00:00:00Z`) - DAY).toISOString().slice(0, 10);
-  const learned = learnedDailyUsage(input.periods);
+  // the same daily figures the pages show (closed periods, else recorded history)
+  const learned = input.learned ?? learnedDailyUsage(input.periods);
   const rows: { lineId: string; date: string; qty: number }[] = [];
   const periodIds: string[] = [];
   for (const p of input.periods) {
@@ -262,6 +263,38 @@ export function autoRowsDue(input: { asOf: string; periods: Period[]; animals: A
     }
   }
   return { rows, periodIds, through };
+}
+
+/**
+ * Daily use learned from RECORDED consumption (old daily rows, "stock finished" catch-ups that
+ * cover several days): an item eaten 528 pieces over 1 Jun → 18 Aug ≈ 6.7 a day. Used only
+ * where no closed usage period exists yet. Needs at least `minDays` of history; the latest
+ * `windowDays` before the last recorded day count.
+ */
+export function learnedFromRecorded(recorded: RecordedRow[], minDays = 7, windowDays = 120): Record<string, number> {
+  const byItem = new Map<string, { from: string; to: string; qty: number }[]>();
+  for (const r of recorded) {
+    if (r.cattleId) continue;                          // one animal's extra feed is not the herd's daily use
+    const from = r.coversFrom && r.coversFrom < r.date ? r.coversFrom : r.date;
+    (byItem.get(r.itemId) ?? byItem.set(r.itemId, []).get(r.itemId)!).push({ from, to: r.date, qty: r.qty });
+  }
+  const out: Record<string, number> = {};
+  for (const [id, rows] of byItem) {
+    const last = rows.reduce((m, r) => (r.to > m ? r.to : m), "");
+    const windowStart = new Date(Date.parse(`${last}T00:00:00Z`) - (windowDays - 1) * DAY).toISOString().slice(0, 10);
+    const inWin = rows.filter((r) => r.to >= windowStart);
+    const first = inWin.reduce((m, r) => (r.from < m ? r.from : m), last);
+    const start = first < windowStart ? windowStart : first;
+    const days = daysBetweenInclusive(start, last);
+    // a row covering days before the window counts only for its days inside it
+    const qty = inWin.reduce((s, r) => {
+      if (r.from >= start) return s + r.qty;
+      const span = daysBetweenInclusive(r.from, r.to);
+      return s + r.qty * (daysBetweenInclusive(start, r.to) / span);
+    }, 0);
+    if (days >= minDays && qty > 0) out[id] = qty / days;
+  }
+  return out;
 }
 
 // ── learned usage (from closed periods only; history is never changed) ───────
@@ -311,7 +344,8 @@ export function computeFeedSnapshot(input: {
   const byMonth: FeedSnapshot["byMonth"] = {};
   const byItem: FeedSnapshot["byItem"] = {};
   const lines: LineResult[] = [];
-  const learnedAll = learnedDailyUsage(periods);
+  // closed usage periods first; items without one learn from their recorded history
+  const learnedAll = { ...learnedFromRecorded(recorded), ...learnedDailyUsage(periods) };
   let unallocated = 0;
   let totalActual = 0;
   let totalEstimated = 0;

@@ -31,6 +31,8 @@ export type FeedItemStatus = {
   role: FeedRole;
   /** retired by the owner: never offered as a mix or a new feed */
   discontinued: boolean;
+  /** not in use yet: the day it most likely started being fed (its last stock-in after the last recorded use) */
+  suggestedStart: string | null;
   daysLeft: number | null;
   depletionDate: string | null;
   /** open period: what should be left now by the daily deduction (stock on hand − today's estimate) */
@@ -87,7 +89,7 @@ const n = (v: number | string | null | undefined) => (v == null ? null : Number(
 export async function loadFeedData(supabase: SupabaseClient<any>, businessId: string, asOf = todayDhaka()): Promise<FeedData> {
   const data = await loadFeedDataOnly(supabase, businessId, asOf);
   if (asOf !== todayDhaka()) return data;                       // historical views never post
-  const due = autoRowsDue({ asOf, periods: data.periods, animals: data.animals, charts: data.charts });
+  const due = autoRowsDue({ asOf, periods: data.periods, animals: data.animals, charts: data.charts, learned: data.snapshot.learnedDaily });
   if (!due.periodIds.length) return data;
   const { error } = await supabase.rpc("post_feed_auto_usage", {
     p_business_id: businessId,
@@ -223,6 +225,26 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
   const balance = new Map(((balanceRes.data ?? []) as { item_id: string; qty_on_hand: number; value_on_hand: number }[]).map((b) => [b.item_id, b]));
   const openByItem = new Map<string, string>();
   for (const p of periods) if (p.status === "open") for (const l of p.lines) openByItem.set(l.itemId, p.id);
+  // last stock-in per item → a sensible "started feeding on" for an item not started yet
+  const inRows = itemIds.length
+    ? await selectAll(() => supabase.from("inventory_transactions").select("id, item_id, recorded_at")
+        .in("item_id", itemIds).in("movement_type", ["purchase", "opening_balance", "own_production", "feed_mix_output"]).order("id"))
+    : [];
+  const lastIn = new Map<string, string>();
+  for (const r of inRows as { item_id: string; recorded_at: string }[]) {
+    const d = String(r.recorded_at).slice(0, 10);
+    if (!lastIn.has(r.item_id) || d > lastIn.get(r.item_id)!) lastIn.set(r.item_id, d);
+  }
+  const lastEaten = new Map<string, string>();
+  for (const r of recorded) if (r.qty > 0 && (!lastEaten.has(r.itemId) || r.date > lastEaten.get(r.itemId)!)) lastEaten.set(r.itemId, r.date);
+  const suggestStart = (id: string): string | null => {
+    const bought = lastIn.get(id);
+    if (!bought) return null;
+    const eaten = lastEaten.get(id);
+    const start = eaten && eaten >= bought ? new Date(Date.parse(`${eaten}T00:00:00Z`) + 86400000).toISOString().slice(0, 10) : bought;
+    return start > asOf ? asOf : start;
+  };
+
   const { data: mixInputRows } = itemIds.length
     ? await supabase.from("inventory_transactions").select("item_id").in("item_id", itemIds).eq("movement_type", "feed_mix_input")
     : { data: [] };
@@ -248,6 +270,7 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
       stockQty, stockValue: Number(b?.value_on_hand ?? 0), wac: wac[i.id] ?? null, learnedDaily: learned,
       openPeriodId: openByItem.get(i.id) ?? null, daysLeft: f.daysLeft, depletionDate: f.date,
       expectedLeft, dailyQty: openLine?.dailyQty ?? learned, role: roles[i.id] ?? "direct", discontinued: !!i.is_discontinued,
+      suggestedStart: openByItem.has(i.id) ? null : suggestStart(i.id),
     };
   });
 

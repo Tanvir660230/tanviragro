@@ -1248,8 +1248,8 @@
     "since": "since {date} · day {days}",
     "running_cost": "Cost so far",
     "finished": "Finished",
-    "not_started_title": "In stock, not started ({count})",
-    "not_started_sub": "Start them when you begin feeding, so their cost is recorded.",
+    "not_started_title": "In stock but not in use — nothing is deducted ({count})",
+    "not_started_sub": "If you are feeding it, start it: the start date is taken as the day it was bought, and the days since then come off automatically.",
     "start_recipe": "Start a recipe (mix)",
     "all_stock": "All stock",
     "recent_title": "Recent activity",
@@ -1287,6 +1287,13 @@
     "starts_on": "starts {date}",
     "make_mix": "Make a mix",
     "waiting_title": "Waiting to be mixed ({count})",
-    "waiting_sub": "These are bought to be mixed. Make a mix: the mix is what gets fed and deducted every day."
+    "waiting_sub": "These are bought to be mixed. Make a mix: the mix is what gets fed and deducted every day.",
+    "bought_on": "bought {date}",
+    "daily_hint": "earlier ≈ {qty}/day",
+    "idle_days": "Not deducted for {days} days — start it if it is being fed",
+    "mv_correction": "correction",
+    "mv_mix_in": "into a mix",
+    "mv_mix_out": "mix made",
+    "mv_auto": "fed (daily)"
   }
 }

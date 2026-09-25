@@ -52,7 +52,7 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
             <Link href="/dashboard/inventory/usage" className="text-xs font-medium text-primary hover:underline">{ti.usage_history}</Link>
           </div>
         </div>
-        {open.length === 0 ? (
+        {open.length === 0 && notStarted.length > 0 ? null : open.length === 0 ? (
           <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold">{ti.none_in_use}</p>
@@ -161,7 +161,16 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
               <li key={i.id} className="flex items-center justify-between gap-3 py-2">
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{i.name}</span>
-                  <span className="block text-xs tabular-nums text-muted-foreground">{qty(i.stockQty, i.unit)} · {taka(i.stockValue)}</span>
+                  <span className="block text-xs tabular-nums text-muted-foreground">
+                    {qty(i.stockQty, i.unit)} · {taka(i.stockValue)}
+                    {i.suggestedStart ? ` · ${fill(ti.bought_on, { date: i.suggestedStart })}` : ""}
+                    {i.learnedDaily ? ` · ${fill(ti.daily_hint, { qty: qty(i.learnedDaily, i.unit) })}` : ""}
+                  </span>
+                  {i.suggestedStart && daysBetween(i.suggestedStart, data.asOf) >= 2 && (
+                    <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-red-600 dark:text-red-400">
+                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />{fill(ti.idle_days, { days: daysBetween(i.suggestedStart, data.asOf) })}
+                    </span>
+                  )}
                 </span>
                 {canEdit && (
                   <button type="button" onClick={() => setStart(`item:${i.id}`)}
