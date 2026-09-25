@@ -6,7 +6,6 @@ import { updateRecipeActiveUntil, updateRecipeActiveFrom } from "@/app/dashboard
 import { updateRoughageActiveUntil } from "@/app/dashboard/(app)/inventory/actions";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/i18n/I18nProvider";
-import { DailyFeedDeductButton } from "./DailyFeedDeductButton";
 import type { InventoryRow } from "./InventoryTable";
 import { cn } from "@/lib/utils";
 import { todayDhaka } from "@/lib/dates";
@@ -261,7 +260,7 @@ export function ActiveFeedingDashboard({
                               max={todayDhaka()}
                               onChange={(e) => saveRecipeFrom(e.target.value || null)}
                               className="text-xs rounded-md border border-border bg-card px-2 py-0.5 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-xs cursor-pointer"
-                              title="শুরুর তারিখ পরিবর্তন করলে engine সেই তারিখ থেকে recalculate করবে"
+                              title="রেশন পরিকল্পনার শুরুর তারিখ — শুধু পরিকল্পনা, স্টক থেকে কিছু কাটা হয় না"
                             />
                           </div>
                           <div className="h-px flex-1 min-w-[12px] bg-border" />
@@ -293,16 +292,7 @@ export function ActiveFeedingDashboard({
         </div>
       </div>
 
-      {/* Prominent feed button */}
-      {hasActiveDiet && feedItems.length > 0 && cattleCount > 0 && (
-        <div className="px-5 py-4 border-t border-border bg-muted/10">
-          <DailyFeedDeductButton
-            feedItems={feedItems}
-            cattleCount={cattleCount}
-            prominent
-          />
-        </div>
-      )}
+      {/* Optional daily entry lives in the inventory page's Tools section (usage periods need no daily entry) */}
 
       {/* Low-stock feed warnings */}
       {lowStockFeedItems.length > 0 && (

@@ -284,7 +284,7 @@ function RuleFields({ prefix = "" }: { prefix?: string }) {
   );
 }
 
-function TargetSelect({ data, name, defaultValue, allowEmpty }: { data: UsagePageData; name: string; defaultValue?: string; allowEmpty?: boolean }) {
+function TargetSelect({ data, name, defaultValue, allowEmpty }: { data: UsageDialogData; name: string; defaultValue?: string; allowEmpty?: boolean }) {
   return (
     <select name={name} defaultValue={defaultValue ?? ""} required={!allowEmpty} className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm">
       <option value="">{allowEmpty ? "— nothing new —" : "Choose…"}</option>
@@ -300,7 +300,10 @@ function TargetSelect({ data, name, defaultValue, allowEmpty }: { data: UsagePag
   );
 }
 
-function StartDialog({ data, preset, onClose }: { data: UsagePageData; preset: string; onClose: () => void }) {
+/** What the start / finish dialogs need (also used by the inventory page). */
+export type UsageDialogData = Pick<UsagePageData, "asOf" | "items" | "recipes">;
+
+export function StartDialog({ data, preset, onClose }: { data: UsageDialogData; preset: string; onClose: () => void }) {
   const router = useRouter();
   const [key] = useState(() => crypto.randomUUID());
   const [state, action, pending] = useActionState<UsageFormState, FormData>(startFeedUsage, undefined);
@@ -329,7 +332,7 @@ function StartDialog({ data, preset, onClose }: { data: UsagePageData; preset: s
   );
 }
 
-function EndDialog({ data, period, onClose }: { data: UsagePageData; period: Period; onClose: () => void }) {
+export function EndDialog({ data, period, onClose }: { data: UsageDialogData; period: Period; onClose: () => void }) {
   const router = useRouter();
   const correcting = period.status !== "open";
   const [state, action, pending] = useActionState<UsageFormState, FormData>(endFeedUsage, undefined);

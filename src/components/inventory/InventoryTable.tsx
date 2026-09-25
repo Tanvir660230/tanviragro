@@ -142,7 +142,7 @@ export function InventoryTable({
                   onClick={() => handleSort("cost")}
                   className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
                 >
-                  <span>FIFO Unit Cost</span>
+                  <span>Avg Unit Cost</span>
                   {sortField === "cost" ? (
                     sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
                   ) : (

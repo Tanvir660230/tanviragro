@@ -213,7 +213,7 @@ const consumption30d = useMemo(() => {
 
       <div className="text-xs text-muted-foreground border border-border/60 rounded-xl bg-muted/20 px-4 py-3">
         <FileSpreadsheet className="h-3.5 w-3.5 inline mr-1.5" />
-        Report period: last 30 days. Valuation uses FIFO costing for purchased items; items without purchase costs are valued at ৳0.
+        Report period: last 30 days. Valuation uses the moving average cost of the stock on hand; items without purchase costs are valued at ৳0.
       </div>
     </div>
   );

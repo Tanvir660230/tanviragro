@@ -152,7 +152,7 @@ export function AIInsightsFullPage({ portfolio, movements }: { portfolio: ItemSt
         icon: ShieldCheck,
         title: `${noCost.length} Item${noCost.length > 1 ? "s" : ""} Without Purchase Cost`,
         description: "Inventory valuation is inaccurate for these items. Purchase costs are missing.",
-        action: "Record costs for accurate FIFO valuation and reporting.",
+        action: "Record costs for accurate stock valuation and reporting.",
         metric: `~৳${Math.round(noCost.reduce((s, p) => s + p.currentStock, 0)).toLocaleString("en-IN")} unvalued`,
         items: noCost.map((p) => ({ name: p.itemName, detail: `Stock: ${p.currentStock.toFixed(1)} ${p.unit} · No cost recorded` })),
       });

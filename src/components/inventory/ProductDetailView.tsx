@@ -118,7 +118,7 @@ export function ProductDetailView({
         </TabsPanel>
 
         <TabsPanel value="valuation">
-          <SectionCard title="FIFO Valuation" icon={Wallet} iconVariant="amber" padding="none">
+          <SectionCard title="Stock Valuation (average cost)" icon={Wallet} iconVariant="amber" padding="none">
             {valuation && valuation.activeBatches.length > 0 ? (
               <div className="divide-y divide-border/50">
                 <div className="px-5 py-3 flex justify-between text-sm">

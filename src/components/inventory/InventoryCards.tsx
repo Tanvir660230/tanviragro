@@ -138,7 +138,7 @@ export function InventoryCards({
 
               <div>
                 <span className="text-[11px] font-medium text-muted-foreground block">
-                  FIFO Unit Cost
+                  Avg Unit Cost
                 </span>
                 <span className="font-medium text-xs text-foreground tabular-nums block mt-0.5">
                   {item.currentCost != null
