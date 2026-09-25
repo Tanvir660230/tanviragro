@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CategoryBadge } from "@/components/inventory/inventory-ui";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useL } from "@/i18n/text";
 
 export interface MovementRow {
   id: string;
@@ -24,28 +25,29 @@ export interface MovementRow {
 
 const IN_TYPES = new Set(["purchase", "adjustment_in", "transfer_in", "return", "production_in"]);
 function isInbound(t: string) { return IN_TYPES.has(t); }
-function connectType(type: string) {
+function connectType(type: string, L: (bn: string, en: string) => string) {
   const map: Record<string, { label: string; color: "in_stock" | "low_stock" | "out_of_stock" }> = {
-    purchase: { label: "Purchase", color: "in_stock" },
-    consumption: { label: "Consumption", color: "out_of_stock" },
-    transfer_in: { label: "Transfer In", color: "in_stock" },
-    transfer_out: { label: "Transfer Out", color: "out_of_stock" },
-    adjustment_in: { label: "Adjustment +", color: "in_stock" },
-    adjustment_out: { label: "Adjustment −", color: "out_of_stock" },
-    waste: { label: "Waste", color: "out_of_stock" },
-    return: { label: "Return", color: "in_stock" },
-    production_in: { label: "Production", color: "in_stock" },
-    production_out: { label: "Component Use", color: "out_of_stock" },
+    purchase: { label: L("কেনা", "Purchase"), color: "in_stock" },
+    consumption: { label: L("খাওয়ানো", "Consumption"), color: "out_of_stock" },
+    transfer_in: { label: L("স্থানান্তর আসা", "Transfer in"), color: "in_stock" },
+    transfer_out: { label: L("স্থানান্তর যাওয়া", "Transfer out"), color: "out_of_stock" },
+    adjustment_in: { label: L("গণনা +", "Adjustment +"), color: "in_stock" },
+    adjustment_out: { label: L("গণনা −", "Adjustment −"), color: "out_of_stock" },
+    waste: { label: L("নষ্ট", "Waste"), color: "out_of_stock" },
+    return: { label: L("ফেরত", "Return"), color: "in_stock" },
+    production_in: { label: L("মিক্স তৈরি", "Production"), color: "in_stock" },
+    production_out: { label: L("মিক্সে গেছে", "Component use"), color: "out_of_stock" },
   };
   return map[type] ?? { label: type.replace(/_/g, " "), color: "low_stock" as const };
 }
 
 export function MovementsClient({ movements }: { movements: MovementRow[] }) {
+  const L = useL();
   const [, setSelectedIds] = useState<string[]>([]);
 
   const columns: GridColumn<MovementRow>[] = useMemo(() => [
     {
-      id: "item", header: "Product", accessorKey: "itemName", sortable: true, filterable: true,
+      id: "item", header: L("জিনিস", "Product"), accessorKey: "itemName", sortable: true, filterable: true,
       filterType: "text", priority: 1, pinned: "left", minWidth: 200, resizable: true,
       cell: ({ row }) => (
         <div className="min-w-0">
@@ -55,25 +57,25 @@ export function MovementsClient({ movements }: { movements: MovementRow[] }) {
       ),
     },
     {
-      id: "type", header: "Movement", accessorKey: "type", sortable: true, filterable: true, filterType: "select",
+      id: "type", header: L("ধরন", "Movement"), accessorKey: "type", sortable: true, filterable: true, filterType: "select",
       filterOptions: Array.from(new Set(movements.map((m) => m.type))).map((t) => ({ label: t, value: t })),
       priority: 2,
-      cell: ({ row }) => { const c = connectType(row.type); return <StatusBadge status={c.color} label={c.label} />; },
+      cell: ({ row }) => { const c = connectType(row.type, L); return <StatusBadge status={c.color} label={c.label} />; },
     },
     {
-      id: "direction", header: "Direction", sortable: true, filterable: true, priority: 5,
+      id: "direction", header: L("দিক", "Direction"), sortable: true, filterable: true, priority: 5,
       filterOptions: [
-        { label: "Inbound", value: "IN" },
-        { label: "Outbound", value: "OUT" },
+        { label: L("এসেছে", "Inbound"), value: "IN" },
+        { label: L("গেছে", "Outbound"), value: "OUT" },
       ],
       cell: ({ row }) => isInbound(row.type) ? (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><ArrowDownLeft className="h-3.5 w-3.5" /> In</span>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><ArrowDownLeft className="h-3.5 w-3.5" /> {L("এসেছে", "In")}</span>
       ) : (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400"><ArrowUpRight className="h-3.5 w-3.5" /> Out</span>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400"><ArrowUpRight className="h-3.5 w-3.5" /> {L("গেছে", "Out")}</span>
       ),
     },
     {
-      id: "qty", header: "Quantity", accessorKey: "qty", sortable: true, filterable: true, filterType: "number",
+      id: "qty", header: L("পরিমাণ", "Quantity"), accessorKey: "qty", sortable: true, filterable: true, filterType: "number",
       align: "right", priority: 3, aggregate: "sum",
       cell: ({ row }) => (
         <span className={cn("font-mono font-semibold tabular-nums", isInbound(row.type) ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
@@ -82,33 +84,33 @@ export function MovementsClient({ movements }: { movements: MovementRow[] }) {
       ),
     },
     {
-      id: "unit_cost", header: "Unit Cost", accessorKey: "unit_cost", sortable: true, align: "right", priority: 6,
+      id: "unit_cost", header: L("দাম/একক", "Unit cost"), accessorKey: "unit_cost", sortable: true, align: "right", priority: 6,
       cell: ({ row }) => row.unit_cost != null ? <span className="font-mono text-xs text-muted-foreground">৳{row.unit_cost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span> : <span className="text-muted-foreground/40">—</span>,
     },
     {
-      id: "recorded_at", header: "Date", accessorKey: "recorded_at", sortable: true, filterable: true, filterType: "date", priority: 4,
+      id: "recorded_at", header: L("তারিখ", "Date"), accessorKey: "recorded_at", sortable: true, filterable: true, filterType: "date", priority: 4,
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-          {new Date(row.recorded_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+          {row.recorded_at.slice(0, 10)}
         </span>
       ),
     },
     {
-      id: "notes", header: "Reference", accessorKey: "notes", sortable: false, filterable: false, priority: 7,
+      id: "notes", header: L("বিবরণ", "Reference"), accessorKey: "notes", sortable: false, filterable: false, priority: 7,
       cell: ({ row }) => <span className="text-xs text-muted-foreground truncate block max-w-[220px]">{row.notes || "—"}</span>,
     },
-  ], [movements]);
+  ], [L, movements]);
 
   return (
     <EnterpriseDataGrid
       data={movements}
       columns={columns}
       rowKey="id"
-      title="Movement Ledger"
-      subtitle={`${movements.length} stock movements · traceable & audit-ready`}
+      title={L("স্টকের সব লেনদেন", "Movement Ledger")}
+      subtitle={L(`${movements.length}টি লেনদেন`, `${movements.length} stock movements`)}
       enableGlobalSearch
       searchKeys={["itemName", "notes", "type"]}
-      searchPlaceholder="Search by product, reference, type…"
+      searchPlaceholder={L("জিনিস, বিবরণ বা ধরন খুঁজুন…", "Search by product, reference, type…")}
       enableAdvancedFilter
       enableColumnVisibility
       enableColumnOrdering
@@ -123,8 +125,8 @@ export function MovementsClient({ movements }: { movements: MovementRow[] }) {
       pageSize={20}
       pageSizeOptions={[10, 20, 50, 100, 250]}
       onSelectionChange={(ids) => setSelectedIds(ids)}
-      emptyTitle="No movements yet"
-      emptyDescription="Stock transactions will appear here as you buy, consume and adjust."
+      emptyTitle={L("এখনো কোনো লেনদেন নেই", "No movements yet")}
+      emptyDescription={L("কেনা, খাওয়ানো ও গণনা করলে এখানে দেখা যাবে।", "Stock transactions will appear here as you buy, consume and adjust.")}
       savedViewsKey="inventory-movements"
       striped
     />

@@ -13,7 +13,7 @@ import { PERMISSIONS } from "@/constants/roles";
 import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 import { getCachedBusinessId } from "@/lib/supabase/cached";
 
-export const metadata: Metadata = { title: "Partners" };
+export const metadata: Metadata = { title: "অংশীদার" };
 
 export default async function PartnersPage() {
   await requirePagePermission(PERMISSIONS.PARTNERS_VIEW);
@@ -22,17 +22,13 @@ export default async function PartnersPage() {
   const locale = cookieStore.get("NEXT_LOCALE")?.value === "bn" ? "bn" : "en";
   const dict = await getDictionary(locale as "en" | "bn");
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const userId = user?.id ?? "";
-
   const { data: bizData } = await supabase
     .from("businesses")
-    .select("id, unit_price_bdt, default_daily_gain_kg, default_roughage_type")
+    .select("id, default_daily_gain_kg, default_roughage_type")
     .eq("id", (await getCachedBusinessId()) ?? "")
     .maybeSingle();
 
   const businessId: string | null = bizData?.id ?? null;
-  // unit_price_bdt is no longer used for partners logic
   const dailyGainKg: number = bizData?.default_daily_gain_kg ?? 0.6;
 
   const [
@@ -46,16 +42,10 @@ export default async function PartnersPage() {
     { data: activeCattleData },
     // Latest weight log per cattle (most recent first)
     { data: weightLogsData },
-    // Feed consumed per active cattle
-    { data: activeFeedData },
     // Cost entries for active cattle
     { data: activeCostData },
     // Latest market price
     { data: marketPriceData },
-    // Feed logic dependencies
-    { data: recentPurchasesData },
-    { data: roughagesData },
-    { data: recipesData },
     { data: treatmentsData },
   ] = await Promise.all([
     businessId
@@ -126,9 +116,6 @@ export default async function PartnersPage() {
           .order("recorded_at", { ascending: false })
       : Promise.resolve({ data: [] }),
 
-    // We reuse the single feedData RPC above instead of hitting the DB twice.
-    Promise.resolve({ data: [] }),
-
     // Variable expense cost entries tied to specific cattle (matches finance page logic).
     // Exclude fixed costs and asset-classified entries — they don't belong in per-cattle cost basis.
     businessId
@@ -152,30 +139,7 @@ export default async function PartnersPage() {
           .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-      
-    // Feed dependencies
-    businessId
-      ? supabase
-          .from("inventory_transactions")
-          .select("item_id, qty, unit_cost, inventory_items!inner(business_id)")
-          .eq("inventory_items.business_id", businessId)
-          .eq("type", "purchase")
-          .order("recorded_at", { ascending: false })
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? supabase
-          .from("inventory_items")
-          .select("id, name, unit, kg_per_unit, roughage_active_from, roughage_active_until")
-          .eq("business_id", businessId)
-          .not("roughage_active_from", "is", null)
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? supabase
-          .from("feed_recipes")
-          .select("id, active_from, active_until, recipe_ingredients(item_id, qty_per_batch)")
-          .eq("business_id", businessId)
-          .not("active_from", "is", null)
-      : Promise.resolve({ data: [] }),
+
     businessId
       ? supabase
           .from("cattle_treatments")
@@ -221,7 +185,6 @@ export default async function PartnersPage() {
     .filter((c) => c.entry_class === "asset")
     .reduce((s, c) => s + Number(c.amount ?? 0), 0);
 
-  const soldCattleIdSet = new Set(typedSales.map((r) => r.cattle_id).filter(Boolean));
   const rpcFeedData = (feedData ?? []) as { cattle_id: string | null; category: string; total_cost: number }[];
   
   // netPL is calculated below, after unrealized valuation 

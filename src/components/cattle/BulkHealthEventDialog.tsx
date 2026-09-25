@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useEffect, useTransition } from "react";
+import { useActionState, useState, useEffect } from "react";
 import { CalendarCheck, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
 import { createBulkHealthEvents, type BulkHealthFormState } from "@/app/dashboard/(app)/cattle/actions";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
+import { useL } from "@/i18n/text";
 
 interface CattleOption {
   id: string;
@@ -37,14 +38,15 @@ interface Props {
 }
 
 const EVENT_TYPES = [
-  { value: "vaccine", label: "Vaccine" },
-  { value: "checkup", label: "Checkup" },
-  { value: "deworming", label: "Deworming" },
-  { value: "treatment", label: "Treatment" },
-  { value: "other", label: "Other" },
+  { value: "vaccine", label: "Vaccine", bn: "টিকা" },
+  { value: "checkup", label: "Checkup", bn: "চেকআপ" },
+  { value: "deworming", label: "Deworming", bn: "কৃমিনাশক" },
+  { value: "treatment", label: "Treatment", bn: "চিকিৎসা" },
+  { value: "other", label: "Other", bn: "অন্যান্য" },
 ] as const;
 
 export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpenChange: externalOnChange, initialSelectedIds }: Props) {
+  const L = useL();
   const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const open    = externalOpen    ?? internalOpen;
@@ -68,7 +70,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Health events scheduled");
+      toast.success(L("স্বাস্থ্য কাজ যোগ হলো", "Health events scheduled"));
       setTimeout(() => {
         setOpen(false);
         setSelectedIds(new Set());
@@ -76,7 +78,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
       }, 0);
     }
     if (state?.error) toast.error(state.error);
-  }, [state, setOpen]);
+  }, [state, setOpen, L]);
 
   function toggleAll() {
     if (selectedIds.size === activeCattle.length) {
@@ -169,7 +171,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
 
           {/* Event type */}
           <div className="space-y-1.5">
-            <Label>Event Type</Label>
+            <Label>{L("কাজের ধরন", "Event Type")}</Label>
             <Select value={eventType} onValueChange={(val) => { if (val !== null) setEventType(val); }}>
               <SelectTrigger>
                 <SelectValue />
@@ -177,7 +179,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
               <SelectContent>
                 {EVENT_TYPES.map((et) => (
                   <SelectItem key={et.value} value={et.value}>
-                    {et.label}
+                    {L(et.bn, et.label)}
                   </SelectItem>
                 ))}
               </SelectContent>

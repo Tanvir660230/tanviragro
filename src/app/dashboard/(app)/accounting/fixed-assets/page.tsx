@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { AddFixedAssetDialog } from "@/components/accounting/AddFixedAssetDialog";
-import { ArrowLeft, TrendingDown, Building2, Layers, DollarSign, Calendar, Archive } from "lucide-react";
+import { TrendingDown, Building2, Archive } from "lucide-react";
 import { StatementReportHeader } from "@/components/finance/finance-ui";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 
-export const metadata: Metadata = { title: "Fixed Assets Register | Tanvir Agro Accounting" };
+import { getL } from "@/i18n/server-text";
+export const metadata: Metadata = { title: "স্থায়ী সম্পদ" };
+const CATEGORY_BN: Record<string, string> = { infrastructure: "অবকাঠামো", equipment: "যন্ত্রপাতি", vehicle: "গাড়ি", other: "অন্যান্য" };
+const METHOD_BN: Record<string, string> = { straight_line: "সমান হারে", declining_balance: "কমতি হারে" };
 
 function fmt(n: number) {
   return `৳${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -27,6 +29,7 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export default async function FixedAssetsPage() {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.ASSET_VIEW);
   const supabase = await createClient();
   const { fixedAssets, trialBalance: tb, asOf } = await getAccountingData(supabase);
@@ -41,21 +44,11 @@ export default async function FixedAssetsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      {/* Back link */}
-      <div className="print:hidden">
-        <Link
-          href="/dashboard/accounting"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Accounting Hub
-        </Link>
-      </div>
 
       {/* Header */}
       <StatementReportHeader
         title="Fixed Assets Register"
-        subtitle="Capital Asset Schedules · Depreciation & Net Book Value"
+        subtitle={L("শেড ও যন্ত্রপাতি — কেনা দাম, অবচয় ও বর্তমান মূল্য", "Capital Asset Schedules · Depreciation & Net Book Value")}
         asOfDate={asOf}
         isAuditedBalanced={tb.isBalanced}
         action={<AddFixedAssetDialog />}
@@ -64,24 +57,24 @@ export default async function FixedAssetsPage() {
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.03] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Gross Asset Cost</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">{L("মোট কেনা দাম", "Gross Asset Cost")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(totalCost)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{active.length} active asset{active.length !== 1 ? "s" : ""}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L(`${active.length}টি সক্রিয় সম্পদ`, `${active.length} active asset${active.length !== 1 ? "s" : ""}`)}</p>
         </div>
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Accum. Depreciation</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">{L("মোট অবচয়", "Accum. Depreciation")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-amber-700 dark:text-amber-400 mt-1">{fmt(totalAccumDep)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Lifetime write-down</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("এ পর্যন্ত যত ক্ষয় ধরা হয়েছে", "Lifetime write-down")}</p>
         </div>
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Net Book Value</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">{L("বর্তমান মূল্য", "Net Book Value")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(totalBookValue)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Current carrying balance</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("কেনা দাম − অবচয়", "Current carrying balance")}</p>
         </div>
         <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.03] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">Monthly Run-Rate</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">{L("মাসিক অবচয়", "Monthly Run-Rate")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(totalMonthlyDep)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Straight-line monthly dep.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("প্রতি মাসে যত ক্ষয় ধরা হয়", "Straight-line monthly dep.")}</p>
         </div>
       </div>
 
@@ -90,9 +83,9 @@ export default async function FixedAssetsPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-bold text-foreground">Active Capital Assets</h2>
+            <h2 className="text-sm font-bold text-foreground">{L("সক্রিয় স্থায়ী সম্পদ", "Active Capital Assets")}</h2>
           </div>
-          <span className="text-xs font-semibold text-muted-foreground">{active.length} total</span>
+          <span className="text-xs font-semibold text-muted-foreground">{L(`মোট ${active.length}টি`, `${active.length} total`)}</span>
         </div>
 
         {active.length === 0 ? (
@@ -100,9 +93,9 @@ export default async function FixedAssetsPage() {
             <div className="h-12 w-12 rounded-2xl bg-muted/50 text-muted-foreground flex items-center justify-center mx-auto mb-3">
               <TrendingDown className="h-6 w-6" />
             </div>
-            <p className="font-bold text-foreground">No fixed assets registered</p>
+            <p className="font-bold text-foreground">{L("কোনো স্থায়ী সম্পদ নেই", "No fixed assets registered")}</p>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              Add sheds, water pumps, generators, feed mixers, or vehicles to automatically calculate monthly depreciation schedules.
+              {L("শেড, পানির পাম্প, জেনারেটর, মেশিন বা গাড়ি যোগ করলে মাসিক অবচয় নিজে থেকে হিসাব হবে।", "Add sheds, water pumps, generators, feed mixers, or vehicles to automatically calculate monthly depreciation schedules.")}
             </p>
           </div>
         ) : (
@@ -111,13 +104,13 @@ export default async function FixedAssetsPage() {
               <table className="w-full text-sm min-w-[720px]">
                 <thead>
                   <tr className="border-b border-border/80 bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <th className="py-3.5 px-5 text-left font-bold">Asset Name</th>
-                    <th className="py-3.5 px-4 text-left font-bold">Category</th>
-                    <th className="py-3.5 px-4 text-left font-bold">Method</th>
-                    <th className="py-3.5 px-4 text-right font-bold">Gross Cost</th>
-                    <th className="py-3.5 px-4 text-right font-bold w-36">Accum. Dep.</th>
-                    <th className="py-3.5 px-4 text-right font-bold">Book Value</th>
-                    <th className="py-3.5 px-5 text-right font-bold">Monthly Dep.</th>
+                    <th className="py-3.5 px-5 text-left font-bold">{L("সম্পদ", "Asset Name")}</th>
+                    <th className="py-3.5 px-4 text-left font-bold">{L("ধরন", "Category")}</th>
+                    <th className="py-3.5 px-4 text-left font-bold">{L("পদ্ধতি", "Method")}</th>
+                    <th className="py-3.5 px-4 text-right font-bold">{L("কেনা দাম", "Gross Cost")}</th>
+                    <th className="py-3.5 px-4 text-right font-bold w-36">{L("মোট অবচয়", "Accum. Dep.")}</th>
+                    <th className="py-3.5 px-4 text-right font-bold">{L("বর্তমান মূল্য", "Book Value")}</th>
+                    <th className="py-3.5 px-5 text-right font-bold">{L("মাসিক অবচয়", "Monthly Dep.")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
@@ -131,16 +124,16 @@ export default async function FixedAssetsPage() {
                             <p className="text-xs text-muted-foreground line-clamp-1">{asset.description}</p>
                           )}
                           <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                            Purchased {new Date(asset.purchaseDate).toLocaleDateString("en-US", { year: "numeric", month: "short" })} · {asset.usefulLifeYears}y useful life
+                            {L(`কেনা ${asset.purchaseDate.slice(0, 7)} · ${asset.usefulLifeYears} বছর চলবে`, `Purchased ${asset.purchaseDate.slice(0, 7)} · ${asset.usefulLifeYears}y useful life`)}
                           </p>
                         </td>
                         <td className="py-3.5 px-4 text-xs font-medium text-muted-foreground">
                           <span className="rounded-full px-2 py-0.5 bg-muted/60 text-muted-foreground border border-border/40 font-semibold text-[11px]">
-                            {CATEGORY_LABELS[asset.category] ?? asset.category}
+                            {L(CATEGORY_BN[asset.category] ?? asset.category, CATEGORY_LABELS[asset.category] ?? asset.category)}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-xs font-medium text-muted-foreground">
-                          {METHOD_LABELS[asset.depreciationMethod] ?? asset.depreciationMethod}
+                          {L(METHOD_BN[asset.depreciationMethod] ?? asset.depreciationMethod, METHOD_LABELS[asset.depreciationMethod] ?? asset.depreciationMethod)}
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono tabular-nums text-sm font-medium text-foreground">
                           {fmt(asset.purchaseCost)}
@@ -155,7 +148,7 @@ export default async function FixedAssetsPage() {
                               style={{ width: `${Math.min(100, depPct)}%` }}
                             />
                           </div>
-                          <span className="text-[10px] text-muted-foreground font-mono">{depPct.toFixed(0)}% written-off</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{L(`${depPct.toFixed(0)}% ক্ষয়`, `${depPct.toFixed(0)}% written off`)}</span>
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono tabular-nums text-sm font-bold text-foreground">
                           {fmt(asset.bookValue)}
@@ -170,7 +163,7 @@ export default async function FixedAssetsPage() {
                 <tfoot>
                   <tr className="border-t-2 border-border/80 bg-muted/30 font-bold">
                     <td colSpan={3} className="py-3.5 px-5 text-xs text-foreground uppercase tracking-wider">
-                      TOTAL ACTIVE ASSET POOL
+                      {L("মোট", "TOTAL ACTIVE ASSET POOL")}
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono tabular-nums text-sm text-foreground">
                       {fmt(totalCost)}
@@ -197,7 +190,7 @@ export default async function FixedAssetsPage() {
         <div className="space-y-3 pt-4">
           <div className="flex items-center gap-2">
             <Archive className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Disposed / Written-Off Assets</h2>
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{L("বিক্রি / বাদ দেওয়া সম্পদ", "Disposed / Written-Off Assets")}</h2>
           </div>
           <div className="rounded-2xl bg-card border border-border/80 shadow-sm divide-y divide-border/40 overflow-hidden">
             {disposed.map((asset) => (
@@ -205,13 +198,13 @@ export default async function FixedAssetsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium line-through text-foreground">{asset.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Disposed {asset.disposedAt ? new Date(asset.disposedAt).toLocaleDateString("en-US", { dateStyle: "medium" }) : "—"}
-                    {asset.disposalValue != null ? ` · Recovered ${fmt(asset.disposalValue)}` : ""}
+                    {L("বাদ দেওয়া", "Disposed")} {asset.disposedAt ? asset.disposedAt.slice(0, 10) : "—"}
+                    {asset.disposalValue != null ? L(` · ফেরত ${fmt(asset.disposalValue)}`, ` · Recovered ${fmt(asset.disposalValue)}`) : ""}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-mono tabular-nums font-semibold text-foreground">{fmt(asset.purchaseCost)}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Original Cost</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{L("কেনা দাম", "Original Cost")}</p>
                 </div>
               </div>
             ))}

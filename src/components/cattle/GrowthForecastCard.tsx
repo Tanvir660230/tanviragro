@@ -23,6 +23,7 @@ const CHART_COLORS = {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { useL } from "@/i18n/text";
 
 interface LogPoint {
   recorded_at: string;
@@ -76,6 +77,7 @@ function ProfitBox({
   totalCost: number;
   marketPrice: number;
 }) {
+  const L = useL();
   const revenue = weight * marketPrice;
   const profit = revenue - totalCost;
   const isProfit = profit >= 0;
@@ -88,7 +90,7 @@ function ProfitBox({
       <p className={`mt-1 text-base font-bold ${isProfit ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
         {isProfit ? "+" : ""}৳{profit.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
       </p>
-      <p className="text-xs text-muted-foreground">ROI {roi.toFixed(1)}%</p>
+      <p className="text-xs text-muted-foreground">{L("লাভ", "ROI")} {roi.toFixed(1)}%</p>
     </div>
   );
 }
@@ -106,6 +108,7 @@ export function GrowthForecastCard({
   breed,
   defaultMarketPrice,
 }: Props) {
+  const L = useL();
   const { t } = useTranslation();
   const [targetWeight, setTargetWeight] = useState<number>(
     Math.ceil(currentWeight * 1.2)
@@ -151,9 +154,9 @@ export function GrowthForecastCard({
   const adgWarning =
     adgVsBenchmark !== null && allPoints.length >= 3
       ? adgVsBenchmark < -30
-        ? `ADG (${dailyGainKg.toFixed(2)} kg/d) is ${Math.abs(adgVsBenchmark).toFixed(0)}% below breed average — check feed quality or health`
+        ? L(`দৈনিক বৃদ্ধি (${dailyGainKg.toFixed(2)} kg/দিন) জাতের গড়ের চেয়ে ${Math.abs(adgVsBenchmark).toFixed(0)}% কম — খাবার বা স্বাস্থ্য দেখুন`, `ADG (${dailyGainKg.toFixed(2)} kg/d) is ${Math.abs(adgVsBenchmark).toFixed(0)}% below breed average — check feed quality or health`)
         : adgVsBenchmark > 50
-        ? `ADG (${dailyGainKg.toFixed(2)} kg/d) is ${adgVsBenchmark.toFixed(0)}% above breed average — verify weight entries`
+        ? L(`দৈনিক বৃদ্ধি (${dailyGainKg.toFixed(2)} kg/দিন) জাতের গড়ের চেয়ে ${adgVsBenchmark.toFixed(0)}% বেশি — ওজনগুলো যাচাই করুন`, `ADG (${dailyGainKg.toFixed(2)} kg/d) is ${adgVsBenchmark.toFixed(0)}% above breed average — verify weight entries`)
         : null
       : null;
 
@@ -264,7 +267,7 @@ export function GrowthForecastCard({
               value={`${weeklyGainKg.toFixed(2)} ${t.cattle_details.growth.kg_per_week}`}
             />
             {fcr !== null && (
-              <StatBox label="FCR (current)" value={fcr.toFixed(2)} />
+              <StatBox label={L("খাবার/ওজন অনুপাত (FCR)", "FCR (current)")} value={fcr.toFixed(2)} />
             )}
             {daysToTarget !== null && (
               <StatBox
@@ -286,7 +289,7 @@ export function GrowthForecastCard({
           {/* Inputs */}
           <div className="flex flex-wrap gap-2 sm:gap-4">
             <div className="space-y-1">
-              <Label htmlFor="target_wt">Target Weight (kg)</Label>
+              <Label htmlFor="target_wt">{L("লক্ষ্য ওজন (কেজি)", "Target Weight (kg)")}</Label>
               <Input
                 id="target_wt"
                 type="number"
@@ -357,7 +360,7 @@ export function GrowthForecastCard({
                     ? t.cattle_details.growth.actual_weight
                     : name === "forecast"
                     ? t.cattle_details.growth.prediction
-                    : `Breed avg (${benchmarkAdg.toFixed(2)} kg/d)`,
+                    : L(`জাতের গড় (${benchmarkAdg.toFixed(2)} kg/দিন)`, `Breed avg (${benchmarkAdg.toFixed(2)} kg/d)`),
                 ]}
                 labelFormatter={(d) => `${d} ${t.cattle_details.growth.days}`}
               />
@@ -367,7 +370,7 @@ export function GrowthForecastCard({
                     ? t.cattle_details.growth.actual_weight
                     : value === "forecast"
                     ? t.cattle_details.growth.prediction
-                    : `Breed avg`
+                    : L("জাতের গড়", "Breed avg")
                 }
               />
               <ReferenceLine
@@ -375,7 +378,7 @@ export function GrowthForecastCard({
                 stroke={CHART_COLORS.target}
                 strokeDasharray="4 4"
                 label={{
-                  value: `Target ${targetWeight}kg`,
+                  value: L(`লক্ষ্য ${targetWeight}kg`, `Target ${targetWeight}kg`),
                   position: "insideTopRight",
                   fontSize: 11,
                   fill: CHART_COLORS.target,
@@ -447,7 +450,7 @@ export function GrowthForecastCard({
               />
               {proj30 !== null && (
                 <ProfitBox
-                  label="+30 days"
+                  label={L("+৩০ দিন", "+30 days")}
                   weight={proj30}
                   totalCost={projCost30}
                   marketPrice={marketPrice}
@@ -455,7 +458,7 @@ export function GrowthForecastCard({
               )}
               {proj60 !== null && (
                 <ProfitBox
-                  label="+60 days"
+                  label={L("+৬০ দিন", "+60 days")}
                   weight={proj60}
                   totalCost={projCost60}
                   marketPrice={marketPrice}
@@ -463,7 +466,7 @@ export function GrowthForecastCard({
               )}
               {proj90 !== null && (
                 <ProfitBox
-                  label="+90 days"
+                  label={L("+৯০ দিন", "+90 days")}
                   weight={proj90}
                   totalCost={projCost90}
                   marketPrice={marketPrice}
@@ -474,9 +477,9 @@ export function GrowthForecastCard({
             <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-4 text-sm flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">Market Price Required</p>
+                <p className="font-medium text-amber-800 dark:text-amber-200">{L("বাজারদর লাগবে", "Market Price Required")}</p>
                 <p className="text-amber-700 dark:text-amber-300 mt-1">
-                  Please enter the current market price per kg (e.g. ৳350) or set it in the Global Settings to see an accurate profit projection for this cattle.
+                  {L("লাভের হিসাব দেখতে এখানে প্রতি কেজি বাজারদর দিন (যেমন ৳350), বা \"খরচ ও টাকা\" পাতার বাজারদর লগে দিন।", "Please enter the current market price per kg (e.g. ৳350) or set it in the Global Settings to see an accurate profit projection for this cattle.")}
                 </p>
               </div>
             </div>

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft, Shield, UserPlus, Users, CheckCircle2, ShieldCheck, Mail } from "lucide-react";
+import { Shield, UserPlus, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { InviteForm } from "@/components/settings/InviteForm";
 import { MemberRow } from "@/components/settings/MemberRow";
@@ -10,8 +9,9 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getL } from "@/i18n/server-text";
 
-export const metadata: Metadata = { title: "Team & User Access Control" };
+export const metadata: Metadata = { title: "টিম" };
 
 const ROLE_BADGE: Record<string, string> = {
   admin:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800",
@@ -20,6 +20,7 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 export default async function TeamPage() {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.TEAM_VIEW);
   const supabase = await createClient();
   const cookieStore = await cookies();
@@ -51,7 +52,7 @@ export default async function TeamPage() {
     : { data: [] };
 
   const members = (membersData ?? []) as { id: string; role: string; created_at: string; user_id: string }[];
-  const ownerName = profile?.full_name || user?.email?.split("@")[0] || "Owner";
+  const ownerName = profile?.full_name || user?.email?.split("@")[0] || L("মালিক", "Owner");
   const initials = ownerName.slice(0, 2).toUpperCase();
 
   return (
@@ -60,7 +61,7 @@ export default async function TeamPage() {
         title={t.team.title}
         subtitle={t.team.subtitle}
         icon={Users}
-        back="/dashboard/settings?tab=team"
+        back="/dashboard/settings"
       />
 
       {/* Role Guide + Invite Grid */}
@@ -101,7 +102,7 @@ export default async function TeamPage() {
       <div className="rounded-2xl border border-border/70 bg-card shadow-sm overflow-hidden">
         <div className="border-b border-border/60 bg-muted/20 px-5 py-3.5 flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t.team.owner}</h3>
-          <span className="text-xs text-muted-foreground font-mono">1 Primary Owner</span>
+          <span className="text-xs text-muted-foreground font-mono">{L("১ জন মালিক", "1 Primary Owner")}</span>
         </div>
         <div className="flex items-center justify-between gap-4 px-5 py-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -117,7 +118,7 @@ export default async function TeamPage() {
             </div>
           </div>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold capitalize shrink-0 ${ROLE_BADGE.admin}`}>
-            Admin / Owner
+            {L("মালিক", "Admin / Owner")}
           </span>
         </div>
       </div>
@@ -128,14 +129,14 @@ export default async function TeamPage() {
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             {t.team.team_members} ({members.length})
           </h3>
-          <span className="text-xs text-muted-foreground font-mono">Multi-tenant RBAC</span>
+          
         </div>
         {members.length === 0 ? (
           <div className="p-12 text-center bg-muted/5">
             <Users className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="text-sm font-semibold text-foreground">No additional members invited yet</p>
+            <p className="text-sm font-semibold text-foreground">{L("এখনো কাউকে যোগ করা হয়নি", "No additional members invited yet")}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Send an email invitation above to onboard managers and field staff to your enterprise workspace.
+              {L("উপরে ইমেইল দিয়ে ম্যানেজার বা কর্মীকে যোগ করুন।", "Send an email invitation above to onboard managers and field staff to your enterprise workspace.")}
             </p>
           </div>
         ) : (

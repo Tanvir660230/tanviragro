@@ -6,6 +6,10 @@ import { Printer, ArrowLeft, Building2, CheckCircle2, Download } from "lucide-re
 import { cn } from "@/lib/utils";
 import type { Partner, PartnerTransaction, PartnerTransactionType } from "@/types/database";
 import type { AccountSummary } from "@/app/dashboard/(app)/partners/[id]/statement/page";
+import { useL } from "@/i18n/text";
+import { Tr } from "@/i18n/Tr";
+import { partnerTxnLabel, partnerTypeLabel } from "@/lib/partners/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -14,25 +18,14 @@ function bdt(n: number) {
 }
 
 function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-US", {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
 }
 
-const TXN_LABEL: Record<PartnerTransactionType, string> = {
-  investment: "Capital In",
-  withdrawal: "Capital Out (Withdrawal)",
-  profit: "Profit Distribution",
-  loss_allocation: "Loss Allocation",
-};
 
-const TYPE_LABEL: Record<string, string> = {
-  capital: "Capital Partner",
-  labor: "Labor Partner",
-  hybrid: "Capital + Labor",
-};
 
 interface Props {
   businessName: string;
@@ -55,6 +48,8 @@ export function StatementClient({
   statementDate,
   backUrl,
 }: Props) {
+  const L = useL();
+  const { locale } = useTranslation();
   const printRef = useRef<HTMLDivElement>(null);
 
   function handlePrint() {
@@ -66,7 +61,7 @@ export function StatementClient({
       ["Partner Statement", `"${p.name.replace(/"/g, '""')}"`],
       ["Statement Date", `"${statementDate}"`],
       ["Business Name", `"${businessName.replace(/"/g, '""')}"`],
-      ["Partner Type", `"${TYPE_LABEL[p.partner_type] ?? p.partner_type}"`],
+      ["Partner Type", `"${partnerTypeLabel(p.partner_type, locale)}"`],
       ["Profit Share", `"${sharePct.toFixed(1)}%"`],
       ["Total Invested", acc.totalInvested],
       ["Total Withdrawn", acc.withdrawn],
@@ -81,7 +76,7 @@ export function StatementClient({
       const isCredit = t.type === "investment" || t.type === "profit";
       return [
         `"${t.recorded_at}"`,
-        `"${TXN_LABEL[t.type] ?? t.type}"`,
+        `"${partnerTxnLabel(t.type, locale)}"`,
         `"${(t.notes ?? "").replace(/"/g, '""')}"`,
         isCredit ? "" : t.amount,
         isCredit ? t.amount : "",
@@ -134,7 +129,7 @@ export function StatementClient({
           className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Profile
+          {L("প্রোফাইলে ফিরুন", "Back to Profile")}
         </Link>
         <div className="flex items-center gap-2">
           <button
@@ -142,14 +137,14 @@ export function StatementClient({
             className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors"
           >
             <Download className="h-4 w-4 text-muted-foreground" />
-            Export CSV
+            {L("CSV নামান", "Export CSV")}
           </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors"
           >
             <Printer className="h-4 w-4" />
-            Print / Save PDF
+            {L("প্রিন্ট / PDF", "Print / Save PDF")}
           </button>
         </div>
       </div>
@@ -170,10 +165,10 @@ export function StatementClient({
             {businessName}
           </h1>
           <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
-            Partner Statement of Account
+            {L("অংশীদারের হিসাব বিবরণী", "Partner Statement of Account")}
           </p>
           <p className="text-xs text-muted-foreground">
-            Statement Date: {statementDate}
+            {L("তারিখ", "Statement date")}: {statementDate}
           </p>
         </div>
 
@@ -181,27 +176,27 @@ export function StatementClient({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-b border-border/60">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Partner
+              {L("অংশীদার", "Partner")}
             </p>
             <p className="text-sm font-bold mt-0.5">{p.name}</p>
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Type
+              {L("ধরন", "Type")}
             </p>
             <p className="text-sm font-medium mt-0.5">
-              {TYPE_LABEL[p.partner_type ?? "capital"] ?? p.partner_type}
+              {partnerTypeLabel(p.partner_type ?? "capital", locale)}
             </p>
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Joined
+              {L("যোগ দিয়েছেন", "Joined")}
             </p>
             <p className="text-sm font-medium mt-0.5">{fmtDate(p.joined_at)}</p>
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Profit Share
+              {L("লাভের ভাগ", "Profit Share")}
             </p>
             <p className="text-sm font-bold mt-0.5">{sharePct.toFixed(2)}%</p>
           </div>
@@ -210,7 +205,7 @@ export function StatementClient({
         {/* ── Account Summary ──────────────────────────────────────── */}
         <div className="space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-border/60 pb-2">
-            Capital Account Summary
+            {L("মূলধনের সারসংক্ষেপ", "Capital Account Summary")}
           </h2>
 
           <div className="rounded-xl border border-border overflow-hidden">
@@ -218,7 +213,7 @@ export function StatementClient({
               <tbody className="divide-y divide-border/40">
                 {p.partner_type !== "labor" && (
                   <SummaryRow
-                    label="Total Capital Invested"
+                    label={L("মোট জমা", "Total Capital Invested")}
                     value={bdt(acc.totalInvested)}
                     positive
                   />
@@ -232,28 +227,28 @@ export function StatementClient({
                 )}
                 {acc.withdrawn > 0 && (
                   <SummaryRow
-                    label="Total Withdrawn"
+                    label={L("মোট তোলা", "Total Withdrawn")}
                     value={"(" + bdt(acc.withdrawn) + ")"}
                     negative
                   />
                 )}
                 {acc.profitReceived > 0 && (
                   <SummaryRow
-                    label="Profit Distributions Received"
+                    label={L("পাওয়া লাভ", "Profit Distributions Received")}
                     value={bdt(acc.profitReceived)}
                     positive
                   />
                 )}
                 {acc.lossBorne > 0 && (
                   <SummaryRow
-                    label="Loss Allocations Borne"
+                    label={L("বহন করা ক্ষতি", "Loss Allocations Borne")}
                     value={"(" + bdt(acc.lossBorne) + ")"}
                     negative
                   />
                 )}
                 {acc.pendingProfit > 0 && (
                   <SummaryRow
-                    label="Undistributed Profit (Pending)"
+                    label={L("বাকি লাভ", "Undistributed Profit (Pending)")}
                     value={bdt(acc.pendingProfit)}
                     positive
                     pending
@@ -261,7 +256,7 @@ export function StatementClient({
                 )}
                 {acc.pendingLoss > 0 && (
                   <SummaryRow
-                    label="Unallocated Loss (Pending)"
+                    label={L("বাকি ক্ষতি", "Unallocated Loss (Pending)")}
                     value={"(" + bdt(acc.pendingLoss) + ")"}
                     negative
                     pending
@@ -271,7 +266,7 @@ export function StatementClient({
               <tfoot>
                 <tr className="bg-muted/40 border-t-2 border-foreground/20">
                   <td className="px-4 py-3 text-sm font-bold uppercase tracking-wide">
-                    Current Equity
+                    {L("বর্তমান মূলধন", "Current Equity")}
                   </td>
                   <td
                     className={cn(
@@ -288,7 +283,7 @@ export function StatementClient({
                 {roi !== null && (
                   <tr className="bg-muted/20 border-t border-border/40">
                     <td className="px-4 py-2 text-xs text-muted-foreground">
-                      Return on Investment
+                      {L("বিনিয়োগে লাভ %", "Return on Investment")}
                     </td>
                     <td
                       className={cn(
@@ -312,7 +307,7 @@ export function StatementClient({
         {withBalance.length > 0 && (
           <div className="space-y-3">
             <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-border/60 pb-2">
-              Transaction History ({withBalance.length} record{withBalance.length !== 1 ? "s" : ""})
+              {L(`লেনদেন (${withBalance.length}টি)`, `Transaction history (${withBalance.length} record${withBalance.length !== 1 ? "s" : ""})`)}
             </h2>
 
             <div className="rounded-xl border border-border overflow-hidden">
@@ -320,19 +315,19 @@ export function StatementClient({
                 <thead>
                   <tr className="bg-muted/40 border-b border-border/60">
                     <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Date
+                      {L("তারিখ", "Date")}
                     </th>
                     <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Description
+                      {L("বিবরণ", "Description")}
                     </th>
                     <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Debit
+                      {L("ডেবিট", "Debit")}
                     </th>
                     <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Credit
+                      {L("ক্রেডিট", "Credit")}
                     </th>
                     <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Balance
+                      {L("ব্যালেন্স", "Balance")}
                     </th>
                   </tr>
                 </thead>
@@ -352,7 +347,7 @@ export function StatementClient({
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="text-sm font-medium">
-                            {TXN_LABEL[txn.type]}
+                            {partnerTxnLabel(txn.type, locale)}
                           </div>
                           {txn.notes && (
                             <div className="text-xs text-muted-foreground mt-0.5">
@@ -382,7 +377,7 @@ export function StatementClient({
                       colSpan={2}
                       className="px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground"
                     >
-                      Closing Balance
+                      {L("শেষ ব্যালেন্স", "Closing Balance")}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-sm text-muted-foreground font-semibold">
                       {bdt(
@@ -427,21 +422,21 @@ export function StatementClient({
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 print:text-gray-500" />
                 <p className="text-xs font-semibold text-muted-foreground">
-                  This statement is computer-generated and does not require a signature.
+                  {L("এই বিবরণী কম্পিউটারে তৈরি, স্বাক্ষর লাগে না।", "This statement is computer-generated and does not require a signature.")}
                 </p>
               </div>
               <p className="text-xs text-muted-foreground pl-6">
-                Generated by {businessName} · {statementDate}
+                {businessName} · {statementDate}
               </p>
               {p.notes && (
                 <p className="text-xs text-muted-foreground pl-6 italic">
-                  Note: {p.notes}
+                  {L("নোট", "Note")}: {p.notes}
                 </p>
               )}
             </div>
             <div className="text-right flex-shrink-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
-                Authorized Signature
+                {L("অনুমোদনকারীর স্বাক্ষর", "Authorized Signature")}
               </p>
               <div className="mt-6 border-b border-foreground/30 w-32" />
             </div>
@@ -482,7 +477,7 @@ function SummaryRow({
         {label}
         {pending && (
           <span className="ml-2 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-            pending
+            <Tr bn="বাকি" en="pending" />
           </span>
         )}
       </td>

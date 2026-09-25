@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { CATTLE_STATUS_STYLE } from "@/constants/cattle-status";
 import { createClient } from "@/lib/supabase/server";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { WeightSection } from "@/components/cattle/WeightSection";
 import { CattlePhotoGallery } from "@/components/cattle/CattlePhotoGallery";
 import { GrowthForecastCard } from "@/components/cattle/GrowthForecastCard";
-import { HealthEventSection } from "@/components/cattle/HealthEventSection";
 import { CostTimelineCard } from "@/components/cattle/CostTimelineCard";
 import { QRCodeCard } from "@/components/cattle/QRCodeCard";
-import { PrintExportButton } from "@/components/cattle/PrintExportButton";
 import { EditCattleDialog } from "@/components/cattle/EditCattleDialog";
 import { CattleDetailMoreMenu } from "@/components/cattle/CattleDetailMoreMenu";
-import { MedicalHistoryTab } from "@/components/cattle/MedicalHistoryTab";
 import { SellCashImpactCard } from "@/components/cattle/SellCashImpactCard";
 import { LifeCycleTimeline } from "@/components/cattle/LifeCycleTimeline";
 import { AnimalUnifiedTimeline } from "@/components/cattle/AnimalUnifiedTimeline";
@@ -23,17 +19,11 @@ import type { Cattle, WeightLog, CattlePhoto, HealthEvent } from "@/types/databa
 import type { CattleTreatment } from "@/app/dashboard/(app)/cattle/medical-actions";
 import { getDictionary } from "@/i18n/getDictionary";
 import { cookies } from "next/headers";
-import { computeDepreciation } from "@/lib/accounting/engine";
 import { DailyFeedRequirementCard } from "@/components/cattle/DailyFeedRequirementCard";
 import { UndoSaleButton } from "@/components/cattle/UndoSaleButton";
-import { calculateDailyFeedRequirement, calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
+import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { InsuranceCard } from "@/components/cattle/InsuranceCard";
 import { CattleDetailTabs } from "@/components/cattle/CattleDetailTabs";
-import { QuickActionPanel } from "@/components/cattle/QuickActionPanel";
-import { Cattle360OverviewTab } from "@/components/cattle/Cattle360OverviewTab";
-import { Health360Dashboard } from "@/components/cattle/Health360Dashboard";
-import { RelatedRecordsPanel } from "@/components/cattle/RelatedRecordsPanel";
-import { StickyActionPanel } from "@/components/cattle/StickyActionPanel";
 import { HealthWorkspace } from "@/components/cattle/HealthWorkspace";
 import { measuredGrowth, measuredLogs, weightTypeLabel } from "@/lib/growth/baseline";
 import { animalFeedShares, type AnimalPresence } from "@/lib/inventory/feed-costing";
@@ -43,6 +33,7 @@ import { buildHomeModel } from "@/lib/home/home-model";
 import { CattleProfileHero } from "@/components/cattle/CattleProfileHero";
 import { todayDhaka } from "@/lib/dates";
 import { dayList, feedCostBetween, feedKgBetween } from "@/lib/feed/usage-engine";
+import { getL } from "@/i18n/server-text";
 
 
 type Props = { params: Promise<{ id: string }> };
@@ -58,7 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("business_id", businessId ?? "")
     .maybeSingle();
   return {
-    title: data ? `Cattle #${(data as { tag_id: string }).tag_id}` : "Not Found",
+    title: data ? `গরু #${(data as { tag_id: string }).tag_id}` : "পাওয়া যায়নি",
   };
 }
 
@@ -117,25 +108,6 @@ function HealthSkeleton() {
   );
 }
 
-function MedicalSkeleton() {
-  return (
-    <div className="rounded-xl bg-card p-5 border border-border/70 shadow-card space-y-4">
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-5 w-52" />
-        <Skeleton className="h-8 w-40 rounded-lg" />
-      </div>
-      <div className="space-y-2">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="grid grid-cols-5 gap-3 rounded-lg bg-muted/20 px-3 py-2.5">
-            {Array.from({ length: 5 }).map((_, j) => (
-              <Skeleton key={j} className="h-4" />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── Streaming async server sections ────────────────────────────────────────
 
@@ -176,6 +148,7 @@ async function HealthSection({
     { data: treatmentsData },
     { data: medItemsData },
     { data: medProtocolsData },
+    { data: bizNameRow },
   ] = await Promise.all([
     supabase
       .from("health_events")
@@ -199,12 +172,14 @@ async function HealthSection({
     supabase
       .from("medicine_protocols")
       .select("item_id, dose_per_100kg_weight, frequency_days, notes"),
+    supabase.from("businesses").select("name").eq("id", cattle.business_id).maybeSingle(),
   ]);
 
   return (
     <HealthWorkspace
       cattle={cattle}
       businessId={cattle.business_id}
+      businessName={(bizNameRow as { name?: string } | null)?.name ?? ""}
       currentWeightKg={currentWeightKg}
       events={(eventsData ?? []) as HealthEvent[]}
       treatments={((treatmentsData ?? []) as unknown) as CattleTreatment[]}
@@ -260,53 +235,6 @@ async function TimelineSection({ cattle, initialWeight, weights }: { cattle: Cat
   );
 }
 
-async function MedicalSection({
-  cattleId,
-  currentWeightKg,
-}: {
-  cattleId: string;
-  currentWeightKg: number;
-}) {
-  const supabase = await createClient();
-  const [
-    { data: treatmentsData },
-    { data: medItemsData },
-    { data: medProtocolsData },
-  ] = await Promise.all([
-    supabase
-      .from("cattle_treatments")
-      .select("*")
-      .eq("cattle_id", cattleId)
-      .order("treated_at", { ascending: false }),
-    supabase
-      .from("inventory_items")
-      .select("id, name, unit")
-      .eq("category", "medicine")
-      .is("deleted_at", null)
-      .order("name", { ascending: true }),
-    supabase
-      .from("medicine_protocols")
-      .select("item_id, dose_per_100kg_weight, frequency_days, notes"),
-  ]);
-  return (
-    <MedicalHistoryTab
-      cattleId={cattleId}
-      currentWeightKg={currentWeightKg}
-      medicineItems={
-        (medItemsData ?? []) as { id: string; name: string; unit: string }[]
-      }
-      protocols={
-        (medProtocolsData ?? []) as {
-          item_id: string;
-          dose_per_100kg_weight: number;
-          frequency_days: number | null;
-          notes: string | null;
-        }[]
-      }
-      initialTreatments={(treatmentsData ?? []) as CattleTreatment[]}
-    />
-  );
-}
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
@@ -334,6 +262,7 @@ function ProfileSkeleton() {
 }
 
 async function ProfileSection({ id }: { id: string }) {
+  const L = await getL();
   const supabase = await getServerClient();
   const cookieStore = await cookies();
   const locale = cookieStore.get("NEXT_LOCALE")?.value === "bn" ? "bn" : "en";
@@ -929,13 +858,13 @@ async function ProfileSection({ id }: { id: string }) {
             {(feedDaysNotRecorded > 0 || actualRowsMissingCost > 0 || legacyEstimatedRows > 0) && (
               <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
                 {feedDaysNotRecorded > 0 && (
-                  <p><strong>{feedDaysNotRecorded} day{feedDaysNotRecorded === 1 ? "" : "s"} NOT RECORDED</strong> — no feed usage period or feeding record covers these days, so the actual feed cost does not include them. They are not guessed. Start a feed on the Feed Usage page (a past start date is fine) to cover them.</p>
+                  <p><strong>{L(`${feedDaysNotRecorded} দিনের খাবার লেখা নেই`, `${feedDaysNotRecorded} day${feedDaysNotRecorded === 1 ? "" : "s"} NOT RECORDED`)}</strong> — {L("এই দিনগুলোর কোনো খাবার চালু বা লেখা নেই, তাই খরচে ধরা হয়নি (আন্দাজও করা হয়নি)। \"খাবার ব্যবহার\" পাতায় আগের তারিখ দিয়ে খাবার চালু করলে ধরা হবে।", "no feed usage period or feeding record covers these days, so the actual feed cost does not include them. They are not guessed. Start a feed on the Feed usage page (a past start date is fine) to cover them.")}</p>
                 )}
                 {legacyEstimatedRows > 0 && (
-                  <p>{legacyEstimatedRows} of the feeding rows were created by the old automatic deduction (quantities from the ration formula, not weighed). They are stock movements, kept as recorded and flagged as estimates.</p>
+                  <p>{L(`${legacyEstimatedRows}টি খাবারের রেকর্ড পুরনো স্বয়ংক্রিয় হিসাবে তৈরি (মাপা নয়, আন্দাজ)। যেমন ছিল রাখা হয়েছে, আনুমানিক হিসেবে চিহ্নিত।`, `${legacyEstimatedRows} of the feeding rows were created by the old automatic deduction (not weighed). They are kept as recorded and flagged as estimates.`)}</p>
                 )}
                 {actualRowsMissingCost > 0 && (
-                  <p>{actualRowsMissingCost} recorded feeding row{actualRowsMissingCost === 1 ? " has" : "s have"} no known cost (the item had no priced stock-in at the time). Not counted as ৳0.</p>
+                  <p>{L(`${actualRowsMissingCost}টি খাবারের রেকর্ডের দাম জানা নেই (তখন দামসহ কেনা ছিল না)। ৳0 ধরা হয়নি।`, `${actualRowsMissingCost} recorded feeding row${actualRowsMissingCost === 1 ? " has" : "s have"} no known cost. Not counted as ৳0.`)}</p>
                 )}
               </div>
             )}

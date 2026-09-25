@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { cn } from "@/lib/utils"
 import type { LucideIcon } from "lucide-react"
 import { ArrowUpRightIcon, ArrowDownRightIcon, Loader2Icon } from "lucide-react"

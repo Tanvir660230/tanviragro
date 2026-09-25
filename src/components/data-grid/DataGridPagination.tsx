@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { DataPagination } from "@/components/ui/data-pagination";
 
 export interface DataGridPaginationProps {

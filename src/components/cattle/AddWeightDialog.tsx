@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import React, { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import {
   type WeightLogFormState,
 } from "@/app/dashboard/(app)/cattle/[id]/actions";
 import { enqueue } from "@/lib/offlineQueue";
+import { useL } from "@/i18n/text";
 
 // Formula: Weight (kg) = Girth² × Length / 10840  (all in cm)
 function girthLengthToKg(girthCm: number, lengthCm: number): number {
@@ -51,6 +52,7 @@ function WeightForm({
   onSuccess: () => void;
   onOptimisticAdd?: (entry: WeightLogRow) => void;
 }) {
+  const L = useL();
   const router = useRouter();
   const [state, formAction, isPending] = useActionState<
     WeightLogFormState,
@@ -71,12 +73,12 @@ function WeightForm({
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Weight logged");
+      toast.success(L("ওজন লেখা হলো", "Weight logged"));
       onSuccess();
       router.refresh();
     }
     if (state?.error) toast.error(state.error);
-  }, [state?.success, state?.error, onSuccess, router]);
+  }, [state?.success, state?.error, onSuccess, router, L]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -108,7 +110,7 @@ function WeightForm({
         notes,
         girth_cm: girthCm,
         length_cm: lengthCm,
-      }).then(() => toast.info("Weight log queued — will sync when online"));
+      }).then(() => toast.info(L("ওজন রাখা হলো — ইন্টারনেট এলে সেভ হবে", "Weight queued — will sync when online")));
       return;
     }
 
@@ -130,7 +132,7 @@ function WeightForm({
           )}
         >
           <Scale className="h-3.5 w-3.5" />
-          Direct KG
+          {L("সরাসরি কেজি", "Direct KG")}
         </button>
         <button
           type="button"
@@ -141,23 +143,23 @@ function WeightForm({
           )}
         >
           <Ruler className="h-3.5 w-3.5" />
-          Tape Measure
+          {L("ফিতা দিয়ে মাপ", "Tape Measure")}
         </button>
       </div>
 
       {/* How was the weight obtained? Growth is computed from measured weights only. */}
       <div className="space-y-1.5">
-        <Label htmlFor="wl_type">This weight is</Label>
+        <Label htmlFor="wl_type">{L("এই ওজন", "This weight is")}</Label>
         <select id="wl_type" name="weight_type" defaultValue="measured"
           className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm">
-          <option value="measured">Measured (scale or tape)</option>
-          <option value="estimated">Estimated (not weighed)</option>
+          <option value="measured">{L("মাপা (স্কেল বা ফিতা)", "Measured (scale or tape)")}</option>
+          <option value="estimated">{L("আন্দাজ (মাপা হয়নি)", "Estimated (not weighed)")}</option>
         </select>
       </div>
 
       {/* Date */}
       <div className="space-y-1.5">
-        <Label htmlFor="wl_date">Date *</Label>
+        <Label htmlFor="wl_date">{L("তারিখ *", "Date *")}</Label>
         <Input
           id="wl_date"
           name="recorded_at"
@@ -170,7 +172,7 @@ function WeightForm({
 
       {mode === "direct" ? (
         <div className="space-y-1.5">
-          <Label htmlFor="wl_weight">Weight (kg) *</Label>
+          <Label htmlFor="wl_weight">{L("ওজন (কেজি) *", "Weight (kg) *")}</Label>
           <Input
             id="wl_weight"
             name="weight_kg"
@@ -187,7 +189,7 @@ function WeightForm({
         <>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="wl_girth">Chest Girth (cm) *</Label>
+              <Label htmlFor="wl_girth">{L("বুকের বেড় (সেমি) *", "Chest Girth (cm) *")}</Label>
               <Input
                 id="wl_girth"
                 name="girth_cm"
@@ -201,7 +203,7 @@ function WeightForm({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="wl_length">Body Length (cm) *</Label>
+              <Label htmlFor="wl_length">{L("শরীরের দৈর্ঘ্য (সেমি) *", "Body Length (cm) *")}</Label>
               <Input
                 id="wl_length"
                 name="length_cm"
@@ -223,7 +225,7 @@ function WeightForm({
                 : "border-border bg-muted/40"
             }`}
           >
-            <p className="text-xs text-muted-foreground mb-0.5">Estimated Weight</p>
+            <p className="text-xs text-muted-foreground mb-0.5">{L("আনুমানিক ওজন", "Estimated Weight")}</p>
             <p
               className={`text-2xl font-bold tabular-nums ${
                 estimatedKg
@@ -248,11 +250,11 @@ function WeightForm({
       ) : null}
 
       <div className="space-y-1.5">
-        <Label htmlFor="wl_notes">Notes</Label>
+        <Label htmlFor="wl_notes">{L("নোট", "Notes")}</Label>
         <Textarea
           id="wl_notes"
           name="notes"
-          placeholder="Optional notes…"
+          placeholder={L("নোট (ঐচ্ছিক)…", "Optional notes…")}
           rows={2}
           maxLength={500}
         />
@@ -276,7 +278,7 @@ function WeightForm({
               Saving…
             </>
           ) : (
-            "Save Weight"
+            L("ওজন সেভ করুন", "Save weight")
           )}
         </Button>
       </DialogFooter>
@@ -291,6 +293,7 @@ export function AddWeightDialog({
   cattleId: string;
   onOptimisticAdd?: (entry: WeightLogRow) => void;
 }) {
+  const L = useL();
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
 
@@ -303,15 +306,15 @@ export function AddWeightDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         className={buttonVariants({ size: "sm", variant: "outline" })}
-        aria-label="Log weight"
+        aria-label={L("ওজন লিখুন", "Log weight")}
       >
         <Scale className="mr-1.5 h-4 w-4" />
-        Record Weight
+        {L("ওজন লিখুন", "Record Weight")}
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Record Weight</DialogTitle>
+          <DialogTitle>{L("ওজন লিখুন", "Record Weight")}</DialogTitle>
         </DialogHeader>
         <WeightForm
           cattleId={cattleId}

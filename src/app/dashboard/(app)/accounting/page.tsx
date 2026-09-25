@@ -25,7 +25,8 @@ import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
-export const metadata: Metadata = { title: "Accounting & Ledger" };
+import { getL } from "@/i18n/server-text";
+export const metadata: Metadata = { title: "হিসাবের খাতা" };
 
 function NavCard({
   href,
@@ -71,6 +72,7 @@ function NavCard({
 }
 
 export default async function AccountingPage() {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.ACCOUNTING_VIEW);
   const supabase = await createClient();
 
@@ -104,13 +106,9 @@ export default async function AccountingPage() {
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
               <SitePageTitle fallback="Accounts" />
             </h1>
-            <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary">
-              Double-Entry
-            </span>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-            Audited financial statements &amp; ledger balances · As of{" "}
-            {new Date(data.asOf).toLocaleDateString("en-US", { dateStyle: "long" })}
+            {L(`আয়-ব্যয়, ব্যালেন্স শিট ও খাতার হিসাব · ${data.asOf.slice(0, 10)} পর্যন্ত`, `Statements and ledger balances · as of ${data.asOf.slice(0, 10)}`)}
           </p>
         </div>
 
@@ -120,7 +118,7 @@ export default async function AccountingPage() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors shadow-sm"
           >
             <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-            Finance &amp; P&amp;L
+            {L("খরচ ও টাকা", "Finance & P&L")}
           </Link>
         </div>
       </div>
@@ -128,31 +126,31 @@ export default async function AccountingPage() {
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <FinancialStatCard
-          label="Total Revenue"
+          label={L("মোট বিক্রি", "Total Revenue")}
           value={fmtBDT(is.totalRevenue)}
-          subtext="Lifetime cattle sales"
+          subtext={L("শুরু থেকে গরু বিক্রি", "Lifetime cattle sales")}
           icon={TrendingUp}
           variant="success"
         />
         <FinancialStatCard
-          label="Net Income"
+          label={L("নিট লাভ/ক্ষতি", "Net Income")}
           value={fmtBDT(is.netIncome)}
-          subtext={netMargin !== null ? `${netMargin.toFixed(1)}% net margin` : "After all expenses"}
+          subtext={netMargin !== null ? L(`${netMargin.toFixed(1)}% নিট মার্জিন`, `${netMargin.toFixed(1)}% net margin`) : L("সব খরচ বাদে", "After all expenses")}
           icon={Wallet}
           variant={is.netIncome >= 0 ? "success" : "danger"}
           isPositive={is.netIncome >= 0}
         />
         <FinancialStatCard
-          label="Total Assets"
+          label={L("মোট সম্পদ", "Total Assets")}
           value={fmtBDT(bs.totalAssets)}
-          subtext="Cash + Feed + Cattle + Assets"
+          subtext={L("নগদ + খাবার + গরু + স্থায়ী সম্পদ", "Cash + Feed + Cattle + Assets")}
           icon={Building2}
           variant="blue"
         />
         <FinancialStatCard
-          label="Fixed Assets"
+          label={L("স্থায়ী সম্পদ", "Fixed Assets")}
           value={fmtBDT(totalFixedAssetBookValue)}
-          subtext={`${activeAssets.length} active asset${activeAssets.length !== 1 ? "s" : ""}`}
+          subtext={L(`${activeAssets.length}টি সক্রিয় সম্পদ`, `${activeAssets.length} active asset${activeAssets.length !== 1 ? "s" : ""}`)}
           icon={Package}
           variant="purple"
         />
@@ -179,7 +177,7 @@ export default async function AccountingPage() {
           <div>
             <div className="flex items-center gap-2">
               <p className="text-sm font-bold tracking-tight">
-                {tb.isBalanced ? "Double-Entry Ledger is Perfectly Balanced" : "Trial Balance Discrepancy Detected"}
+                {tb.isBalanced ? L("খাতার ডেবিট ও ক্রেডিট মিলে গেছে", "Debits and credits balance") : L("খাতায় গরমিল আছে", "The ledger does not balance")}
               </p>
               <span
                 className={cn(
@@ -189,11 +187,11 @@ export default async function AccountingPage() {
                     : "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
                 )}
               >
-                {tb.isBalanced ? "Verified" : "Review Needed"}
+                {tb.isBalanced ? L("ঠিক আছে", "OK") : L("দেখতে হবে", "Check")}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Total Debits: <span className="font-mono font-medium">{fmtBDT(tb.totalDebit)}</span> · Total Credits:{" "}
+              {L("মোট ডেবিট", "Total debits")}: <span className="font-mono font-medium">{fmtBDT(tb.totalDebit)}</span> · {L("মোট ক্রেডিট", "Total credits")}:{" "}
               <span className="font-mono font-medium">{fmtBDT(tb.totalCredit)}</span>
             </p>
           </div>
@@ -203,7 +201,7 @@ export default async function AccountingPage() {
           href="/dashboard/accounting/trial-balance"
           className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-xl bg-card border border-border/80 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-sm transition-colors"
         >
-          View Trial Balance
+          {L("রেওয়ামিল দেখুন", "View Trial Balance")}
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
@@ -215,7 +213,7 @@ export default async function AccountingPage() {
       <div className="space-y-3.5">
         <div className="flex items-center gap-3">
           <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider select-none">
-            Financial Statements &amp; Schedules
+            {L("হিসাবের বিবরণী", "Financial Statements & Schedules")}
           </h2>
           <div className="h-px flex-1 bg-border/60" />
         </div>
@@ -224,56 +222,50 @@ export default async function AccountingPage() {
           <NavCard
             href="/dashboard/accounting/balance-sheet"
             icon={BookOpen}
-            title="Balance Sheet"
-            description="Assets, liabilities, partner capital, and retained earnings"
+            title={L("ব্যালেন্স শিট", "Balance Sheet")}
+            description={L("সম্পদ, দায়, অংশীদারের মূলধন ও জমা লাভ/ক্ষতি", "Assets, liabilities, partner capital, and retained earnings")}
             accentColor="text-blue-600 dark:text-blue-400"
             accentBg="bg-blue-500/10"
-            badge="BS-100"
           />
           <NavCard
             href="/dashboard/accounting/income-statement"
             icon={TrendingUp}
-            title="Income Statement (P&L)"
-            description="Revenue, Cost of Goods Sold, operating expenses, and net profit"
+            title={L("আয়-ব্যয় বিবরণী", "Income Statement (P&L)")}
+            description={L("বিক্রি, বিক্রি করা গরুর খরচ, চলতি খরচ ও নিট লাভ", "Revenue, Cost of Goods Sold, operating expenses, and net profit")}
             accentColor="text-emerald-600 dark:text-emerald-400"
             accentBg="bg-emerald-500/10"
-            badge="IS-200"
           />
           <NavCard
             href="/dashboard/accounting/cash-flow"
             icon={Droplets}
-            title="Cash Flow Statement"
-            description="Direct method: operating, investing, and financing cash flows"
+            title={L("নগদ প্রবাহ", "Cash Flow Statement")}
+            description={L("টাকা কোথা থেকে এলো, কোথায় গেলো", "Direct method: operating, investing, and financing cash flows")}
             accentColor="text-cyan-600 dark:text-cyan-400"
             accentBg="bg-cyan-500/10"
-            badge="CF-300"
           />
           <NavCard
             href="/dashboard/accounting/trial-balance"
             icon={Scale}
-            title="Trial Balance Ledger"
-            description="Chart of accounts with verified debit and credit totals"
+            title={L("রেওয়ামিল", "Trial Balance Ledger")}
+            description={L("প্রতিটি হিসাবের ডেবিট ও ক্রেডিট", "Chart of accounts with verified debit and credit totals")}
             accentColor="text-amber-600 dark:text-amber-400"
             accentBg="bg-amber-500/10"
-            badge="TB-400"
           />
           <NavCard
             href="/dashboard/accounting/fixed-assets"
             icon={Package}
-            title="Fixed Assets &amp; Depreciation"
-            description="Sheds, equipment, machinery, straight-line &amp; declining schedules"
+            title={L("স্থায়ী সম্পদ ও অবচয়", "Fixed Assets & Depreciation")}
+            description={L("শেড, যন্ত্রপাতি — কত দাম, কতটা ক্ষয় হলো", "Sheds, equipment, machinery, straight-line & declining schedules")}
             accentColor="text-purple-600 dark:text-purple-400"
             accentBg="bg-purple-500/10"
-            badge="FA-500"
           />
           <NavCard
             href="/dashboard/finance/loans"
             icon={Landmark}
-            title="Loans &amp; Debt Tracker"
-            description="Principal, repayments, accrued interest, and due dates"
+            title={L("ঋণ", "Loans & Debt Tracker")}
+            description={L("আসল, কিস্তি, সুদ ও পরিশোধের তারিখ", "Principal, repayments, accrued interest, and due dates")}
             accentColor="text-rose-600 dark:text-rose-400"
             accentBg="bg-rose-500/10"
-            badge="LN-600"
           />
         </div>
       </div>

@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft, Trash2, RotateCcw, AlertTriangle, Package, DollarSign, Scale, Calendar } from "lucide-react";
+import {
+  Trash2,
+  AlertTriangle,
+  Package,
+  DollarSign,
+  Scale,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { TrashRestoreButton } from "@/components/settings/TrashRestoreButton";
 import { cookies } from "next/headers";
@@ -8,10 +13,14 @@ import { getDictionary } from "@/i18n/getDictionary";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getL } from "@/i18n/server-text";
+import { costCategoryLabel, costTypeLabel } from "@/lib/expenses/labels";
+import { Tr } from "@/i18n/Tr";
 
-export const metadata: Metadata = { title: "Soft-Deleted Trash Bin" };
+export const metadata: Metadata = { title: "ট্র্যাশ" };
 
 export default async function TrashBinPage() {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.SETTINGS_EDIT);
   const supabase = await createClient();
   const cookieStore = await cookies();
@@ -51,16 +60,16 @@ export default async function TrashBinPage() {
         title={t.trash.title}
         subtitle={t.trash.subtitle}
         icon={Trash2}
-        back="/dashboard/settings?tab=preferences"
+        back="/dashboard/settings"
       />
 
       {/* Summary notice banner */}
       <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 p-4 sm:p-5 flex items-start gap-3.5">
         <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
         <div className="text-xs text-muted-foreground leading-relaxed">
-          <p className="font-semibold text-foreground text-sm">Archival Retention Policy</p>
+          <p className="font-semibold text-foreground text-sm">{L("মুছে ফেলা জিনিস এখানে থাকে", "Archival Retention Policy")}</p>
           <p className="mt-0.5">
-            Records deleted across expense logs, feed supplies, and weight checkups are preserved safely here. Restoring an item immediately brings it back to financial ledgers and dashboard metrics.
+            {L("মুছে ফেলা খরচ, স্টকের জিনিস ও ওজন এখানে থাকে। ফেরত আনলে সাথে সাথে হিসাবে যোগ হয়।", "Records deleted across expense logs, feed supplies, and weight checkups are preserved safely here. Restoring an item immediately brings it back to financial ledgers and dashboard metrics.")}
           </p>
         </div>
       </div>
@@ -72,7 +81,7 @@ export default async function TrashBinPage() {
           </div>
           <p className="text-base font-semibold text-foreground">{t.trash.empty}</p>
           <p className="text-xs text-muted-foreground max-w-sm">
-            No soft-deleted records exist in this workspace. When items are deleted, they will be kept here for safe recovery.
+            {L("কিছু মুছে ফেলা হয়নি। মুছলে এখানে থাকবে, পরে ফেরত আনা যাবে।", "No soft-deleted records exist in this workspace. When items are deleted, they will be kept here for safe recovery.")}
           </p>
         </div>
       )}
@@ -83,8 +92,8 @@ export default async function TrashBinPage() {
           {(deletedCosts as { id: string; type: string; category: string; amount: number; recorded_at: string; deleted_at: string }[]).map((e) => (
             <TrashRow
               key={e.id}
-              label={e.category}
-              detail={`${e.type} · ৳${e.amount.toLocaleString("en-IN")} · Recorded ${new Date(e.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+              label={costCategoryLabel(e.category, locale)}
+              detail={`${costTypeLabel(e.type, locale)} · ৳${e.amount.toLocaleString("en-IN")} · ${L("তারিখ", "Recorded")} ${e.recorded_at.slice(0, 10)}`}
               deletedAt={e.deleted_at}
               restoreAction="cost_entry"
               id={e.id}
@@ -101,7 +110,7 @@ export default async function TrashBinPage() {
             <TrashRow
               key={i.id}
               label={i.name}
-              detail={`Category: ${i.category} · Unit: ${i.unit}`}
+              detail={`${L("ধরন", "Category")}: ${costCategoryLabel(i.category, locale)} · ${L("একক", "Unit")}: ${i.unit}`}
               deletedAt={i.deleted_at}
               restoreAction="inventory_item"
               id={i.id}
@@ -117,8 +126,8 @@ export default async function TrashBinPage() {
           {(deletedLogs as { id: string; weight_kg: number; recorded_at: string; cattle_id: string; deleted_at: string }[]).map((l) => (
             <TrashRow
               key={l.id}
-              label={`${l.weight_kg} kg Scale Reading`}
-              detail={`Recorded on ${new Date(l.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+              label={L(`${l.weight_kg} কেজি ওজন`, `${l.weight_kg} kg weight`)}
+              detail={L(`তারিখ ${l.recorded_at.slice(0, 10)}`, `Recorded on ${l.recorded_at.slice(0, 10)}`)}
               deletedAt={l.deleted_at}
               restoreAction="weight_log"
               id={l.id}
@@ -158,15 +167,13 @@ function TrashRow({
   id: string;
   table: "cost_entries" | "inventory_items" | "weight_logs";
 }) {
-  const deletedDate = new Date(deletedAt).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric",
-  });
+  const deletedDate = deletedAt.slice(0, 10);
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 hover:bg-muted/20 transition-colors">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-foreground truncate">{label}</p>
         <p className="text-xs text-muted-foreground truncate mt-0.5">
-          {detail} · <span className="text-muted-foreground/80 font-mono text-[11px]">Deleted {deletedDate}</span>
+          {detail} · <span className="text-muted-foreground/80 font-mono text-[11px]"><Tr bn="মোছা হয়েছে" en="Deleted" /> {deletedDate}</span>
         </p>
       </div>
       <TrashRestoreButton id={id} restoreAction={restoreAction} table={table} />

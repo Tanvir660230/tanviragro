@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toggleQurbaniMark } from "@/app/dashboard/(app)/cattle/actions";
 import type { QurbaniCattle } from "@/app/dashboard/(app)/cattle/qurbani/page";
+import { useL } from "@/i18n/text";
 
 type Props = {
   cattle: QurbaniCattle[];
@@ -26,18 +27,21 @@ type Props = {
 const READINESS_CONFIG = {
   ready: {
     label: "Ready",
+    labelBn: "তৈরি",
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
     badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
     row: "border-l-4 border-l-emerald-400",
   },
   developing: {
     label: "Developing",
+    labelBn: "বাড়ছে",
     icon: <AlertTriangle className="h-3.5 w-3.5" />,
     badge: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
     row: "border-l-4 border-l-amber-400",
   },
   at_risk: {
     label: "At Risk",
+    labelBn: "ঝুঁকিতে",
     icon: <XCircle className="h-3.5 w-3.5" />,
     badge: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
     row: "border-l-4 border-l-red-400",
@@ -45,6 +49,7 @@ const READINESS_CONFIG = {
 } as const;
 
 export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props) {
+  const L = useL();
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
 
@@ -65,7 +70,7 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
           return next;
         });
       } else {
-        toast.success("Removed from Qurbani list");
+        toast.success(L("কোরবানির তালিকা থেকে সরানো হলো", "Removed from Qurbani list"));
       }
     });
   }
@@ -108,7 +113,7 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
             />
           </div>
           <div>
-            <p className="text-sm font-semibold">Eid-ul-Adha {new Date(eidLabel).getFullYear()}</p>
+            <p className="text-sm font-semibold">{L("ঈদুল আযহা", "Eid-ul-Adha")} {new Date(eidLabel).getFullYear()}</p>
             <p className="text-xs text-muted-foreground">{eidLabel}</p>
           </div>
         </div>
@@ -126,14 +131,14 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
             >
               {daysToEid}
             </p>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">days left</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">{L("দিন বাকি", "days left")}</p>
           </div>
           <button
             onClick={() => window.print()}
             className="hidden sm:flex items-center gap-1.5 rounded-lg border border-border bg-background/80 px-3 py-1.5 text-sm font-medium text-foreground shadow-card hover:bg-muted transition-colors print:hidden"
           >
             <Printer className="h-3.5 w-3.5" />
-            Print List
+            {L("তালিকা প্রিন্ট", "Print List")}
           </button>
         </div>
       </div>
@@ -143,12 +148,12 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
         <div className="rounded-xl bg-muted/40 border border-border/60 p-3 sm:p-4 space-y-2">
           <Moon className="h-4 w-4 text-primary" />
           <p className="text-2xl font-bold tabular-nums">{stats.total}</p>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Marked</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{L("বাছাই করা", "Marked")}</p>
         </div>
         <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/40 p-3 sm:p-4 space-y-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{stats.ready}</p>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ready</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{L("তৈরি", "Ready")}</p>
         </div>
         <div className={cn(
           "rounded-xl ring-1 p-3 sm:p-4 space-y-2",
@@ -161,7 +166,7 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
             {stats.developing + stats.atRisk}
           </p>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Need Attention
+            {L("খেয়াল রাখুন", "Need Attention")}
           </p>
         </div>
       </div>
@@ -173,16 +178,16 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
             <Moon className="h-6 w-6 text-muted-foreground/40" />
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-semibold">No cattle marked for Qurbani</p>
+            <p className="text-sm font-semibold">{L("কোরবানির জন্য কোনো গরু বাছাই করা নেই", "No cattle marked for Qurbani")}</p>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-              Open a cattle&apos;s profile and tap the Qurbani toggle to mark them.
+              {L("গরুর পাতায় গিয়ে \"কোরবানি\" চাপলে এখানে আসবে।", "Open a cattle's profile and tap the Qurbani toggle to mark them.")}
             </p>
           </div>
           <Link
             href="/dashboard/cattle"
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            Go to Cattle List
+            {L("গরুর তালিকা", "Go to Cattle List")}
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -190,13 +195,13 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
         <div className="space-y-6">
           {/* Print header — only visible when printing */}
           <div className="hidden print:block mb-4">
-            <h2 className="text-xl font-bold">Qurbani Cattle List — {eidLabel}</h2>
+            <h2 className="text-xl font-bold">{L("কোরবানির গরুর তালিকা", "Qurbani cattle list")} — {eidLabel}</h2>
             <p className="text-sm text-muted-foreground">{cattle.length} cattle marked · {daysToEid} days to Eid</p>
           </div>
 
           {ready.length > 0 && (
             <CattleGroup
-              label="Ready for Qurbani"
+              label={L("কোরবানির জন্য তৈরি", "Ready for Qurbani")}
               labelColor="text-emerald-600 dark:text-emerald-400"
               cattle={ready}
               daysToEid={daysToEid}
@@ -206,7 +211,7 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
           )}
           {developing.length > 0 && (
             <CattleGroup
-              label="Developing"
+              label={L("বাড়ছে", "Developing")}
               labelColor="text-amber-600 dark:text-amber-400"
               cattle={developing}
               daysToEid={daysToEid}
@@ -216,7 +221,7 @@ export function QurbaniBoardClient({ cattle, eidLabel, daysToEid, stats }: Props
           )}
           {atRisk.length > 0 && (
             <CattleGroup
-              label="At Risk"
+              label={L("ঝুঁকিতে", "At risk")}
               labelColor="text-destructive"
               cattle={atRisk}
               daysToEid={daysToEid}
@@ -274,6 +279,7 @@ function CattleCard({
   isPending: boolean;
   onUnmark: (id: string) => void;
 }) {
+  const L = useL();
   const cfg = READINESS_CONFIG[cattle.readiness];
   const weightNeeded = Math.max(0, 250 - cattle.projectedWt);
   const adgNeeded = daysToEid > 0 ? weightNeeded / daysToEid : 0;
@@ -303,21 +309,21 @@ function CattleCard({
               {cattle.isQuarantined && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 px-2 py-0.5 text-xs font-semibold">
                   <ShieldAlert className="h-3 w-3" />
-                  Quarantined
+                  {L("আলাদা রাখা", "Quarantined")}
                 </span>
               )}
             </div>
             <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold shrink-0", cfg.badge)}>
               {cfg.icon}
-              {cfg.label}
+              {L(cfg.labelBn, cfg.label)}
             </span>
           </div>
 
           {/* Weight metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Metric label="Current" value={`${cattle.currentWt.toFixed(0)} kg`} />
+            <Metric label={L("এখন", "Current")} value={`${cattle.currentWt.toFixed(0)} kg`} />
             <Metric
-              label={`At Eid (${daysToEid}d)`}
+              label={L(`ঈদে (${daysToEid} দিন)`, `At Eid (${daysToEid}d)`)}
               value={`~${cattle.projectedWt.toFixed(0)} kg`}
               valueColor={
                 cattle.projectedWt >= 250
@@ -328,12 +334,12 @@ function CattleCard({
               }
             />
             <Metric
-              label="Daily Gain (ADG)"
-              value={cattle.adg > 0 ? `${cattle.adg.toFixed(2)} kg/d` : "No data"}
+              label={L("দৈনিক বৃদ্ধি", "Daily gain")}
+              value={cattle.adg > 0 ? `${cattle.adg.toFixed(2)} kg/d` : L("তথ্য নেই", "No data")}
               valueColor={cattle.adg >= 0.4 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}
             />
             <Metric
-              label="Days in Pen"
+              label={L("খামারে দিন", "Days in pen")}
               value={`${cattle.daysInPen}d`}
             />
           </div>
@@ -341,11 +347,11 @@ function CattleCard({
           {/* Need-to-gain hint */}
           {cattle.readiness !== "ready" && weightNeeded > 0 && daysToEid > 0 && (
             <p className="text-xs text-muted-foreground">
-              Needs{" "}
+              {L("ঈদের আগে আরও", "Needs")}{" "}
               <span className="font-semibold text-foreground">
                 +{weightNeeded.toFixed(0)} kg
               </span>{" "}
-              more by Eid — requires{" "}
+              {L("লাগবে — দৈনিক", "more by Eid — requires")}{" "}
               <span className={cn("font-semibold", adgNeeded > (cattle.adg > 0 ? cattle.adg * 1.2 : 0.5) ? "text-red-600 dark:text-red-400" : "text-foreground")}>
                 {adgNeeded.toFixed(2)} kg/day
               </span>
@@ -357,7 +363,7 @@ function CattleCard({
         <div className="flex shrink-0 items-center gap-1 print:hidden">
           <Link
             href={`/dashboard/cattle/${cattle.id}`}
-            title="View profile"
+            title={L("গরুর পাতা", "View profile")}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           >
             <ArrowRight className="h-4 w-4" />
@@ -365,7 +371,7 @@ function CattleCard({
           <button
             onClick={() => onUnmark(cattle.id)}
             disabled={isPending}
-            title="Remove from Qurbani list"
+            title={L("কোরবানির তালিকা থেকে সরান", "Remove from Qurbani list")}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:text-amber-700 dark:hover:text-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Moon className="h-4 w-4" />

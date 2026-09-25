@@ -24,6 +24,9 @@ import {
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { createCostEntry, type CostFormState } from "@/app/dashboard/(app)/finance/actions";
+import { useL } from "@/i18n/text";
+import { costCategoryLabel } from "@/lib/expenses/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 // ── Category lists ─────────────────────────────────────────────────
 
@@ -36,6 +39,8 @@ const ASSET_CATEGORIES    = ["Infrastructure", "Equipment", "Vehicle", "Land", "
 type EntryMode = "expense-fixed" | "expense-variable" | "asset";
 
 export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: () => void }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const router   = useRouter();
   const today    = new Date().toISOString().split("T")[0];
   const [mode, setMode]         = useState<EntryMode | "">("");
@@ -59,12 +64,12 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
 
   useEffect(() => {
     if (state?.success) {
-      toast.success(entryClass === "asset" ? "Asset recorded" : "Cost entry saved");
+      toast.success(entryClass === "asset" ? L("সম্পদ যোগ হলো", "Asset recorded") : L("খরচ সেভ হলো", "Cost entry saved"));
       onSuccess();
       router.refresh();
     }
     if (state?.error) toast.error(state.error);
-  }, [state?.success, state?.error, onSuccess, router, entryClass]);
+  }, [state?.success, state?.error, onSuccess, router, entryClass, L]);
 
   return (
     <form key={formKey} action={formAction} className="space-y-4 pt-1">
@@ -74,12 +79,12 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
 
       {/* Entry Mode */}
       <div className="space-y-1.5">
-        <Label>Entry Type *</Label>
+        <Label>{L("ধরন *", "Entry Type *")}</Label>
         <div className="grid grid-cols-3 gap-2">
           {([
-            { value: "expense-fixed",    label: "Fixed Cost",    sub: "Salary, rent…" },
-            { value: "expense-variable", label: "Variable Cost", sub: "Feed, medicine…" },
-            { value: "asset",            label: "Asset",         sub: "Equipment, shed…" },
+            { value: "expense-fixed",    label: L("নির্দিষ্ট খরচ", "Fixed cost"),    sub: L("বেতন, ভাড়া…", "Salary, rent…") },
+            { value: "expense-variable", label: L("পরিবর্তনশীল খরচ", "Variable cost"), sub: L("খাবার, ওষুধ…", "Feed, medicine…") },
+            { value: "asset",            label: L("সম্পদ", "Asset"),         sub: L("যন্ত্রপাতি, শেড…", "Equipment, shed…") },
           ] as const).map(({ value, label, sub }) => (
             <button
               key={value}
@@ -100,21 +105,21 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
         </div>
         {mode === "asset" && (
           <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md px-2.5 py-1.5">
-            Assets are <strong>not deducted from P&amp;L</strong> — they build business value and appear in your asset register.
+            {L("সম্পদ লাভ-ক্ষতি থেকে বাদ যায় না — এটি খামারের মূল্য বাড়ায় এবং স্থায়ী সম্পদের তালিকায় থাকে।", "Assets are not deducted from P&L — they add to the farm's value and appear in the asset register.")}
           </p>
         )}
       </div>
 
       {/* Category */}
       <div className="space-y-1.5">
-        <Label htmlFor="cost_category">Category *</Label>
+        <Label htmlFor="cost_category">{L("ধরন *", "Category *")}</Label>
         <Select value={category} onValueChange={(v) => setCategory(v ?? "")} disabled={!mode}>
           <SelectTrigger id="cost_category" className="w-full">
-            <SelectValue placeholder={mode ? "Select category…" : "Select type first"} />
+            <SelectValue placeholder={mode ? L("ধরন বাছুন…", "Select category…") : L("আগে প্রকার বাছুন", "Select type first")} />
           </SelectTrigger>
           <SelectContent>
             {categories.map((c) => (
-              <SelectItem key={c} value={c.toLowerCase()}>{c}</SelectItem>
+              <SelectItem key={c} value={c.toLowerCase()}>{costCategoryLabel(c, locale)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -123,11 +128,11 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
       {/* Amount + Date */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="cost_amount">Amount (৳) *</Label>
+          <Label htmlFor="cost_amount">{L("টাকা (৳) *", "Amount (৳) *")}</Label>
           <Input id="cost_amount" name="amount" type="number" min="0.01" step="0.01" placeholder="e.g. 50000" required disabled={isPending} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="cost_date">Date *</Label>
+          <Label htmlFor="cost_date">{L("তারিখ *", "Date *")}</Label>
           <Input id="cost_date" name="recorded_at" type="date" max={today} defaultValue={today} required disabled={isPending} />
         </div>
       </div>
@@ -135,12 +140,12 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
       {/* Description */}
       <div className="space-y-1.5">
         <Label htmlFor="cost_desc">
-          {mode === "asset" ? "Asset Name / Details" : "Description"}
+          {mode === "asset" ? L("সম্পদের নাম / বিবরণ", "Asset name / details") : L("বিবরণ", "Description")}
         </Label>
         <Textarea
           id="cost_desc"
           name="description"
-          placeholder={mode === "asset" ? "e.g. Steel cattle shed — 40×20 ft" : "Optional details…"}
+          placeholder={mode === "asset" ? L("যেমন স্টিলের গরুর শেড — ৪০×২০ ফুট", "e.g. Steel cattle shed — 40×20 ft") : L("বিস্তারিত (ঐচ্ছিক)…", "Optional details…")}
           rows={3}
           disabled={isPending}
         />
@@ -153,8 +158,8 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
       <DialogFooter>
         <Button type="submit" disabled={isPending} className="w-full">
           {isPending ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
-          ) : mode === "asset" ? "Record Asset" : "Add Entry"}
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{L("সেভ হচ্ছে…", "Saving…")}</>
+          ) : mode === "asset" ? L("সম্পদ যোগ করুন", "Record asset") : L("খরচ যোগ করুন", "Add entry")}
         </Button>
       </DialogFooter>
     </form>
@@ -164,6 +169,7 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
 // ── AddCostDialog ──────────────────────────────────────────────────
 
 export function AddCostDialog() {
+  const L = useL();
   const [open, setOpen]       = useState(false);
   const [formKey, setFormKey] = useState(0);
 
@@ -174,13 +180,13 @@ export function AddCostDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger className={buttonVariants({ size: "sm" })} aria-label="Add cost entry">
+      <DialogTrigger className={buttonVariants({ size: "sm" })} aria-label={L("খরচ যোগ", "Add cost entry")}>
         <Plus className="mr-1.5 h-4 w-4" />
-        Add Entry
+        {L("খরচ যোগ", "Add Entry")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>New Cost / Asset Entry</DialogTitle>
+          <DialogTitle>{L("নতুন খরচ / সম্পদ", "New Cost / Asset Entry")}</DialogTitle>
         </DialogHeader>
         <CostForm formKey={formKey} onSuccess={() => setOpen(false)} />
       </DialogContent>

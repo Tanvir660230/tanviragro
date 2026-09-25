@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Filter, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GridColumn, FilterConfig, FilterOperator } from "./types";
+import { useL } from "@/i18n/text";
 
 export interface DataGridAdvancedFiltersProps<T> {
   columns: GridColumn<T>[];
@@ -16,26 +17,26 @@ export interface DataGridAdvancedFiltersProps<T> {
   clearFilters: () => void;
 }
 
-const OPERATORS_BY_TYPE: Record<string, { label: string; value: FilterOperator }[]> = {
+const OPERATORS_BY_TYPE: Record<string, { label: string; bn: string; value: FilterOperator }[]> = {
   text: [
-    { label: "Contains", value: "contains" },
-    { label: "Equals", value: "equals" },
-    { label: "Starts with", value: "starts_with" },
-    { label: "Is Empty", value: "is_empty" },
-    { label: "Is Not Empty", value: "is_not_empty" },
+    { label: "Contains", bn: "আছে", value: "contains" },
+    { label: "Equals", bn: "সমান", value: "equals" },
+    { label: "Starts with", bn: "শুরু হয়", value: "starts_with" },
+    { label: "Is Empty", bn: "খালি", value: "is_empty" },
+    { label: "Is Not Empty", bn: "খালি নয়", value: "is_not_empty" },
   ],
   number: [
-    { label: "Equals (=)", value: "equals" },
-    { label: "Greater (>) ", value: "gt" },
-    { label: "Less (<)", value: "lt" },
+    { label: "Equals (=)", bn: "সমান (=)", value: "equals" },
+    { label: "Greater (>) ", bn: "বেশি (>)", value: "gt" },
+    { label: "Less (<)", bn: "কম (<)", value: "lt" },
   ],
   select: [
-    { label: "Equals", value: "equals" },
-    { label: "Not equals", value: "not_equals" },
+    { label: "Equals", bn: "সমান", value: "equals" },
+    { label: "Not equals", bn: "সমান নয়", value: "not_equals" },
   ],
   boolean: [
-    { label: "Is True", value: "equals" },
-    { label: "Is False", value: "not_equals" },
+    { label: "Is True", bn: "হ্যাঁ", value: "equals" },
+    { label: "Is False", bn: "না", value: "not_equals" },
   ],
 };
 
@@ -46,6 +47,7 @@ export function DataGridAdvancedFilters<T>({
   removeFilter,
   clearFilters,
 }: DataGridAdvancedFiltersProps<T>) {
+  const L = useL();
   const filterableCols = columns.filter(
     (c) => c.filterable !== false && c.id !== "__selection__" && c.id !== "__actions__"
   );
@@ -73,7 +75,7 @@ export function DataGridAdvancedFilters<T>({
         )}
       >
         <Filter className="h-3.5 w-3.5" />
-        <span>Filters</span>
+        <span>{L("ফিল্টার", "Filters")}</span>
         {filters.length > 0 && (
           <span className="ml-1 bg-primary-foreground text-primary rounded-full px-1.5 text-[10px] font-bold">
             {filters.length}
@@ -85,7 +87,7 @@ export function DataGridAdvancedFilters<T>({
           <span className="text-xs font-semibold uppercase tracking-wider">Filters</span>
           {filters.length > 0 && (
             <Button variant="ghost" size="sm" className="h-5 px-1 text-[11px] text-destructive" onClick={clearFilters}>
-              Clear
+              {L("মুছুন", "Clear")}
             </Button>
           )}
         </div>
@@ -128,7 +130,7 @@ export function DataGridAdvancedFilters<T>({
               className="h-7 text-xs rounded border border-input bg-background px-1"
             >
               {ops.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+                <option key={o.value} value={o.value}>{L(o.bn, o.label)}</option>
               ))}
             </select>
           </div>
@@ -137,7 +139,7 @@ export function DataGridAdvancedFilters<T>({
             <Input
               value={val}
               onChange={(e) => setVal(e.target.value)}
-              placeholder="Value..."
+              placeholder={L("মান…", "Value...")}
               className="h-7 text-xs"
               onKeyDown={(e) => e.key === "Enter" && handleApply()}
             />

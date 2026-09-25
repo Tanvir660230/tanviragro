@@ -7,6 +7,9 @@ import { CostEntryActions } from "./CostEntryActions";
 import { Receipt, Tag, Building2, Package, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { DataPagination, DateRangeFilter } from "@/components/ui/data-pagination";
+import { useL } from "@/i18n/text";
+import { costCategoryLabel, costTypeLabel } from "@/lib/expenses/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 export interface CostEntry {
   id: string;
@@ -102,10 +105,10 @@ const TYPE_STYLE = {
   variable: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400",
 };
 
-const TABS: { value: Filter; label: string }[] = [
-  { value: "all",      label: "All" },
-  { value: "fixed",    label: "Fixed" },
-  { value: "variable", label: "Variable" },
+const TABS: { value: Filter; label: string; bn: string }[] = [
+  { value: "all",      label: "All", bn: "সব" },
+  { value: "fixed",    label: "Fixed", bn: "নির্দিষ্ট" },
+  { value: "variable", label: "Variable", bn: "পরিবর্তনশীল" },
 ];
 
 function fmt(n: number) {
@@ -113,12 +116,12 @@ function fmt(n: number) {
 }
 
 function formatDate(s: string) {
-  return new Date(s + "T00:00:00").toLocaleDateString("en-US", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  return s.slice(0, 10);
 }
 
 function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchaseEntry[] }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const VISIBLE = 5;
 
@@ -135,10 +138,10 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
             <Package className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            Feed &amp; Inventory Purchases
+            {L("খাবার ও স্টক কেনা", "Feed & Inventory Purchases")}
           </span>
           <span className="text-xs text-emerald-700/80 dark:text-emerald-400/80 hidden sm:inline">
-            — counted as cost only when consumed
+            {L("— খাওয়ানো হলে তবেই খরচ ধরা হয়", "— counted as cost only when consumed")}
           </span>
         </div>
         <span className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
@@ -151,12 +154,12 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-emerald-200 dark:border-emerald-800/60 bg-emerald-100/50 dark:bg-emerald-950/30">
-              <th className="px-4 py-2.5 text-left font-medium text-emerald-700 dark:text-emerald-400">Date</th>
-              <th className="px-4 py-2.5 text-left font-medium text-emerald-700 dark:text-emerald-400">Item</th>
-              <th className="px-4 py-2.5 text-left font-medium text-emerald-700 dark:text-emerald-400">Category</th>
-              <th className="px-4 py-2.5 text-right font-medium text-emerald-700 dark:text-emerald-400">Qty</th>
-              <th className="px-4 py-2.5 text-right font-medium text-emerald-700 dark:text-emerald-400">Unit Cost</th>
-              <th className="px-4 py-2.5 text-right font-medium text-emerald-700 dark:text-emerald-400">Total</th>
+              <th className="px-4 py-2.5 text-left font-medium text-emerald-700 dark:text-emerald-400">{L("তারিখ", "Date")}</th>
+              <th className="px-4 py-2.5 text-left font-medium text-emerald-700 dark:text-emerald-400">{L("জিনিস", "Item")}</th>
+              <th className="px-4 py-2.5 text-left font-medium text-emerald-700 dark:text-emerald-400">{L("ধরন", "Category")}</th>
+              <th className="px-4 py-2.5 text-right font-medium text-emerald-700 dark:text-emerald-400">{L("পরিমাণ", "Qty")}</th>
+              <th className="px-4 py-2.5 text-right font-medium text-emerald-700 dark:text-emerald-400">{L("দাম/একক", "Unit Cost")}</th>
+              <th className="px-4 py-2.5 text-right font-medium text-emerald-700 dark:text-emerald-400">{L("মোট", "Total")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40">
@@ -166,7 +169,7 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
                 <td className="px-4 py-2.5 font-medium">{p.item_name}</td>
                 <td className="px-4 py-2.5">
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", INV_CATEGORY_STYLE[p.item_category] ?? INV_CATEGORY_STYLE.other)}>
-                    {p.item_category}
+                    {costCategoryLabel(p.item_category, locale)}
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{p.qty} {p.unit}</td>
@@ -186,7 +189,7 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <span className="font-medium text-sm">{p.item_name}</span>
                 <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", INV_CATEGORY_STYLE[p.item_category] ?? INV_CATEGORY_STYLE.other)}>
-                  {p.item_category}
+                  {costCategoryLabel(p.item_category, locale)}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">{formatDate(p.recorded_at)} · {p.qty} {p.unit} @ {fmt(p.unit_cost)}</p>
@@ -202,13 +205,13 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
           onClick={() => setShowAll((v) => !v)}
           className="flex w-full items-center justify-center gap-1.5 border-t border-emerald-200 dark:border-emerald-800/60 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/40 dark:hover:bg-emerald-950/30 transition-colors"
         >
-          {showAll ? <><ChevronUp className="h-3.5 w-3.5" /> Show less</> : <><ChevronDown className="h-3.5 w-3.5" /> Show all {purchases.length} purchases</>}
+          {showAll ? <><ChevronUp className="h-3.5 w-3.5" /> {L("কম দেখান", "Show less")}</> : <><ChevronDown className="h-3.5 w-3.5" /> {L(`সব ${purchases.length}টি কেনা দেখান`, `Show all ${purchases.length} purchases`)}</>}
         </button>
       )}
 
       <div className="border-t border-emerald-200 dark:border-emerald-800/60 px-4 py-2 text-center">
         <Link href="/dashboard/inventory" className="text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:underline">
-          Manage stock in Inventory →
+          {L("খাবার ও স্টক পাতায় দেখুন →", "Manage stock in Inventory →")}
         </Link>
       </div>
     </div>
@@ -220,15 +223,17 @@ interface Props { entries: CostEntry[]; inventoryPurchases?: InventoryPurchaseEn
 // ── Asset Register section ─────────────────────────────────────────
 
 export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry[]; showEmpty?: boolean }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const total = assets.reduce((s, a) => s + a.amount, 0);
   if (assets.length === 0) {
     if (!showEmpty) return null;
     return (
       <div className="rounded-xl border border-border/60 p-10 text-center">
         <Building2 className="h-9 w-9 text-muted-foreground mx-auto mb-3" />
-        <p className="font-medium">কোনো মূলধনী সম্পদ নেই</p>
+        <p className="font-medium">{L("কোনো মূলধনী সম্পদ নেই", "No capital assets")}</p>
         <p className="text-sm text-muted-foreground mt-1">
-          &ldquo;Add Cost / Asset&rdquo; বাটনে ক্লিক করুন এবং <strong>Asset</strong> মোড বেছে নিন।
+          {L("\"খরচ যোগ\" চেপে \"সম্পদ\" বেছে নিন।", "Use Add entry and choose Asset.")}
         </p>
       </div>
     );
@@ -242,10 +247,10 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
             <Building2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
           </div>
           <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-            Capital Assets
+            {L("স্থায়ী সম্পদ", "Capital Assets")}
           </span>
           <span className="text-xs text-amber-700/80 dark:text-amber-400/80 hidden sm:inline">
-            — not deducted from P&amp;L
+            {L("— লাভ-ক্ষতি থেকে বাদ যায় না", "— not deducted from P&L")}
           </span>
         </div>
         <span className="text-sm font-bold tabular-nums text-amber-700 dark:text-amber-300">
@@ -258,10 +263,10 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-amber-200 dark:border-amber-800/60 bg-amber-100/50 dark:bg-amber-950/30">
-              <th className="px-4 py-2.5 text-left font-medium text-amber-700 dark:text-amber-400">Date</th>
-              <th className="px-4 py-2.5 text-left font-medium text-amber-700 dark:text-amber-400">Category</th>
-              <th className="px-4 py-2.5 text-left font-medium text-amber-700 dark:text-amber-400">Description</th>
-              <th className="px-4 py-2.5 text-right font-medium text-amber-700 dark:text-amber-400">Value</th>
+              <th className="px-4 py-2.5 text-left font-medium text-amber-700 dark:text-amber-400">{L("তারিখ", "Date")}</th>
+              <th className="px-4 py-2.5 text-left font-medium text-amber-700 dark:text-amber-400">{L("ধরন", "Category")}</th>
+              <th className="px-4 py-2.5 text-left font-medium text-amber-700 dark:text-amber-400">{L("বিবরণ", "Description")}</th>
+              <th className="px-4 py-2.5 text-right font-medium text-amber-700 dark:text-amber-400">{L("মূল্য", "Value")}</th>
               <th className="px-4 py-2.5 w-16" />
             </tr>
           </thead>
@@ -273,7 +278,7 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
                   <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{formatDate(a.recorded_at)}</td>
                   <td className="px-4 py-2.5">
                     <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", catStyle.badge)}>
-                      {a.category}
+                      {costCategoryLabel(a.category, locale)}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
@@ -301,7 +306,7 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", catStyle.badge)}>
-                    {a.category}
+                    {costCategoryLabel(a.category, locale)}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">{formatDate(a.recorded_at)}</p>
@@ -326,6 +331,8 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
 // ── Main CostList ──────────────────────────────────────────────────
 
 export function CostList({ entries, inventoryPurchases = [] }: Props) {
+  const L = useL();
+  const { locale } = useTranslation();
   const expenses = useMemo(() => entries.filter((e) => (e.entry_class ?? "expense") === "expense"), [entries]);
   const assets   = useMemo(() => entries.filter((e) => e.entry_class === "asset"), [entries]);
 
@@ -374,10 +381,10 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
       {/* Summary chips */}
       <div className="flex flex-wrap gap-3">
         {[
-          { label: "Fixed Costs",    value: totalFixed,    ring: "ring-blue-500/10",    wash: "from-blue-500/[0.06]",    text: "text-blue-700 dark:text-blue-400" },
-          { label: "Variable Costs", value: totalVariable, ring: "ring-purple-500/10",  wash: "from-purple-500/[0.06]",  text: "text-purple-700 dark:text-purple-400" },
-          { label: "Total Expenses", value: totalFixed + totalVariable, ring: "ring-black/5", wash: "from-foreground/[0.03]", text: "text-foreground" },
-          ...(totalAssets > 0 ? [{ label: "Capital Assets", value: totalAssets, ring: "ring-amber-500/10", wash: "from-amber-500/[0.06]", text: "text-amber-700 dark:text-amber-400" }] : []),
+          { label: L("নির্দিষ্ট খরচ", "Fixed costs"),    value: totalFixed,    ring: "ring-blue-500/10",    wash: "from-blue-500/[0.06]",    text: "text-blue-700 dark:text-blue-400" },
+          { label: L("পরিবর্তনশীল খরচ", "Variable costs"), value: totalVariable, ring: "ring-purple-500/10",  wash: "from-purple-500/[0.06]",  text: "text-purple-700 dark:text-purple-400" },
+          { label: L("মোট খরচ", "Total expenses"), value: totalFixed + totalVariable, ring: "ring-black/5", wash: "from-foreground/[0.03]", text: "text-foreground" },
+          ...(totalAssets > 0 ? [{ label: L("স্থায়ী সম্পদ", "Capital assets"), value: totalAssets, ring: "ring-amber-500/10", wash: "from-amber-500/[0.06]", text: "text-amber-700 dark:text-amber-400" }] : []),
         ].map(({ label, value, ring, wash, text }) => (
           <div key={label} className={cn("relative overflow-hidden rounded-xl bg-card px-4 py-3 sm:px-5 sm:py-3.5 min-w-0 shadow-card ring-1 flex-1 basis-[140px]", ring)}>
             <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br to-transparent", wash)} />
@@ -418,7 +425,7 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
                   : "text-muted-foreground hover:text-foreground hover:bg-card/60"
               )}
             >
-              {t.label}
+              {L(t.bn, t.label)}
               {t.value !== "all" && (
                 <span className="ml-1.5 tabular-nums opacity-60">
                   ({expenses.filter((e) => e.type === t.value).length})
@@ -450,7 +457,7 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
                 onClick={() => setPersonFilter(null)}
                 className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
               >
-                Clear
+                {L("মুছুন", "Clear")}
               </button>
             )}
           </div>
@@ -463,8 +470,8 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
 
       {allPersonTags.length === 0 && expenses.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Tip: Start a description with <code className="rounded bg-muted px-1">@Name</code> or{" "}
-          <code className="rounded bg-muted px-1">Name:</code> to tag payments to a specific person.
+          {L("টিপ: বিবরণ শুরুতে", "Tip: start a description with")} <code className="rounded bg-muted px-1">@Name</code> {L("বা", "or")}{" "}
+          <code className="rounded bg-muted px-1">Name:</code> {L("লিখলে সেই মানুষের নামে খরচ আলাদা দেখা যাবে।", "to tag payments to a person.")}
         </p>
       )}
 
@@ -474,8 +481,7 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
             <Receipt className="h-5 w-5 text-muted-foreground/60" />
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            No {filter === "all" ? "" : filter + " "}expense entries
-            {personFilter ? ` for @${personFilter}` : ""} yet
+            {L(`কোনো খরচ নেই${personFilter ? ` (@${personFilter})` : ""}`, `No ${filter === "all" ? "" : filter + " "}expense entries${personFilter ? ` for @${personFilter}` : ""} yet`)}
           </p>
         </div>
       )}
@@ -487,11 +493,11 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/30">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("তারিখ", "Date")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("প্রকার", "Type")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("ধরন", "Category")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("বিবরণ", "Description")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("টাকা", "Amount")}</th>
                   <th className="px-4 py-3 w-16" />
                 </tr>
               </thead>
@@ -504,12 +510,12 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(e.recorded_at)}</td>
                       <td className="px-4 py-3">
                         <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", TYPE_STYLE[e.type])}>
-                          {e.type}
+                          {costTypeLabel(e.type, locale)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", catStyle.badge)}>
-                          {e.category}
+                          {costCategoryLabel(e.category, locale)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -545,10 +551,10 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", TYPE_STYLE[e.type])}>
-                        {e.type}
+                        {costTypeLabel(e.type, locale)}
                       </span>
                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", catStyle.badge)}>
-                        {e.category}
+                        {costCategoryLabel(e.category, locale)}
                       </span>
                       {personTag && (
                         <span className="rounded bg-foreground/10 px-1.5 py-0.5 text-xs font-semibold text-foreground">

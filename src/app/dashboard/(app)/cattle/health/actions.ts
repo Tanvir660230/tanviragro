@@ -25,7 +25,9 @@ export async function completeHealthEventHub(eventId: string): Promise<{ error?:
 
   if (error) return { error: "Failed to update" };
 
-  revalidatePath("/dashboard/cattle/health");
+  revalidatePath("/dashboard/health");
+  revalidatePath("/dashboard/health/vaccinations");
+  revalidatePath("/dashboard/compliance");
   revalidatePath("/dashboard");
   return {};
 }
@@ -46,7 +48,9 @@ export async function deleteHealthEventHub(eventId: string): Promise<{ error?: s
     .eq("id", eventId)
     .eq("business_id", businessId);
 
-  revalidatePath("/dashboard/cattle/health");
+  revalidatePath("/dashboard/health");
+  revalidatePath("/dashboard/health/vaccinations");
+  revalidatePath("/dashboard/compliance");
   revalidatePath("/dashboard");
   return {};
 }

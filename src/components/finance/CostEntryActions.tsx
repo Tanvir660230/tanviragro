@@ -24,6 +24,9 @@ import { Trash2, Loader2, Pencil } from "lucide-react";
 import { deleteCostEntry, updateCostEntry } from "@/app/dashboard/(app)/finance/actions";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { CostEntry } from "@/components/finance/CostList";
+import { useL } from "@/i18n/text";
+import { costCategoryLabel, costTypeLabel } from "@/lib/expenses/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 const FIXED_CATEGORIES    = ["Rent", "Salary", "Utilities", "Insurance", "Other"];
 const VARIABLE_CATEGORIES = ["Feed", "Medicine", "Labour", "Transport", "Veterinary", "Other"];
@@ -38,6 +41,8 @@ function getCategories(type: string, entryClass: string) {
 // ── Edit Dialog ────────────────────────────────────────────────────
 
 function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -77,7 +82,7 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
         description: desc.trim() || null,
       });
       if (result.error) { setError(result.error); return; }
-      toast.success("Entry updated");
+      toast.success(L("খরচ আপডেট হলো", "Entry updated"));
       router.refresh();
       onClose();
     });
@@ -86,12 +91,12 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
   return (
     <DialogContent className="sm:max-w-sm">
       <DialogHeader>
-        <DialogTitle>Edit Entry</DialogTitle>
+        <DialogTitle>{L("খরচ বদলান", "Edit Entry")}</DialogTitle>
       </DialogHeader>
       <div className="space-y-4 pt-1">
         {/* Entry class toggle */}
         <div className="space-y-1.5">
-          <Label>Entry Type</Label>
+          <Label>{L("ধরন", "Entry Type")}</Label>
           <div className="grid grid-cols-2 gap-2">
             {(["expense", "asset"] as const).map((cls) => (
               <button
@@ -106,13 +111,13 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
                     : "border-input bg-transparent text-muted-foreground hover:border-ring hover:text-foreground"
                 }`}
               >
-                {cls === "asset" ? "Asset" : "Expense"}
+                {cls === "asset" ? L("সম্পদ", "Asset") : L("খরচ", "Expense")}
               </button>
             ))}
           </div>
           {entryClass === "asset" && (
             <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md px-2.5 py-1.5">
-              Will be removed from P&amp;L and shown in asset register.
+              {L("লাভ-ক্ষতি থেকে সরে স্থায়ী সম্পদের তালিকায় যাবে।", "Will be removed from P&L and shown in asset register.")}
             </p>
           )}
         </div>
@@ -120,7 +125,7 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
         {/* Cost type (only for expenses) */}
         {entryClass === "expense" && (
           <div className="space-y-1.5">
-            <Label>Cost Type</Label>
+            <Label>{L("খরচের প্রকার", "Cost Type")}</Label>
             <div className="grid grid-cols-2 gap-2">
               {(["fixed", "variable"] as const).map((t) => (
                 <button
@@ -133,7 +138,7 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
                       : "border-input bg-transparent text-muted-foreground hover:border-ring hover:text-foreground"
                   }`}
                 >
-                  {t}
+                  {costTypeLabel(t, locale)}
                 </button>
               ))}
             </div>
@@ -142,15 +147,15 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
 
         {/* Category */}
         <div className="space-y-1.5">
-          <Label>Category *</Label>
+          <Label>{L("ধরন *", "Category *")}</Label>
           <Select value={category} onValueChange={(v) => setCategory(v ?? "")}>
-            <SelectTrigger><SelectValue placeholder="Select category…" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder={L("ধরন বাছুন…", "Select category…")} /></SelectTrigger>
             <SelectContent>
               {availableCategories.map((c) => (
-                <SelectItem key={c} value={c.toLowerCase()}>{c}</SelectItem>
+                <SelectItem key={c} value={c.toLowerCase()}>{costCategoryLabel(c, locale)}</SelectItem>
               ))}
               {!availableCategories.map(c => c.toLowerCase()).includes(category) && category && (
-                <SelectItem value={category}>{category}</SelectItem>
+                <SelectItem value={category}>{costCategoryLabel(category, locale)}</SelectItem>
               )}
             </SelectContent>
           </Select>
@@ -159,7 +164,7 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
         {/* Amount + Date */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label>Amount (৳) *</Label>
+            <Label>{L("টাকা (৳) *", "Amount (৳) *")}</Label>
             <Input
               type="number" min="0.01" step="0.01"
               value={amount}
@@ -167,19 +172,19 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Date *</Label>
+            <Label>{L("তারিখ *", "Date *")}</Label>
             <Input type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
 
         {/* Description */}
         <div className="space-y-1.5">
-          <Label>Description</Label>
+          <Label>{L("বিবরণ", "Description")}</Label>
           <Textarea
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             rows={2}
-            placeholder="Optional details…"
+            placeholder={L("বিস্তারিত (ঐচ্ছিক)…", "Optional details…")}
           />
         </div>
 
@@ -189,10 +194,10 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
 
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={isPending}>
-            Cancel
+            {L("বাতিল", "Cancel")}
           </Button>
           <Button className="flex-1" onClick={handleSave} disabled={isPending}>
-            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save"}
+            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{L("সেভ হচ্ছে…", "Saving…")}</> : L("সেভ করুন", "Save")}
           </Button>
         </div>
       </div>
@@ -203,6 +208,7 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
 // ── CostEntryActions (edit + delete buttons) ───────────────────────
 
 export function CostEntryActions({ entry }: { entry: CostEntry }) {
+  const L = useL();
   const router = useRouter();
   const [editOpen, setEditOpen]       = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -213,7 +219,7 @@ export function CostEntryActions({ entry }: { entry: CostEntry }) {
     startTransition(async () => {
       const result = await deleteCostEntry(entry.id);
       if (result?.error) toast.error(result.error);
-      else { toast.success("Entry deleted"); router.refresh(); }
+      else { toast.success(L("খরচ মুছে ট্র্যাশে রাখা হলো", "Entry deleted")); router.refresh(); }
     });
   };
 
@@ -247,9 +253,9 @@ export function CostEntryActions({ entry }: { entry: CostEntry }) {
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Delete Entry"
-        description="Delete this entry permanently? This cannot be undone."
-        confirmLabel="Delete"
+        title={L("খরচ মুছবেন?", "Delete Entry")}
+        description={L("খরচটি ট্র্যাশে যাবে — সেটিংস › ট্র্যাশ থেকে ফেরানো যায়।", "Delete this entry permanently? This cannot be undone.")}
+        confirmLabel={L("মুছুন", "Delete")}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}

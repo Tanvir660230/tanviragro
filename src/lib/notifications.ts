@@ -1,6 +1,5 @@
 // ── Notification helpers ──────────────────────────────────────────
 
-import { notificationEngine } from "./notifications/engine";
 import { publicAppUrl } from "@/lib/app-url";
 
 export interface NotificationPayload {

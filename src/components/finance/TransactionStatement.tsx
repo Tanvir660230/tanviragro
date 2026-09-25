@@ -5,6 +5,7 @@ import { Printer, Loader2 } from "lucide-react";
 import { getStatementData } from "@/app/dashboard/(app)/finance/statement-action";
 import type { TxnRow, StatementResult } from "@/app/dashboard/(app)/finance/statement-action";
 import { DataPagination } from "@/components/ui/data-pagination";
+import { useL } from "@/i18n/text";
 
 const BADGE: Record<TxnRow["category"], string> = {
   "Capital In":      "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
@@ -22,12 +23,13 @@ function fmt(n: number) {
   return "৳" + Math.abs(Math.round(n)).toLocaleString("en-IN");
 }
 
+const CATEGORY_BN: Record<string, string> = {
+  "Capital In": "মূলধন জমা", "Capital Out": "মূলধন তোলা", "Cattle Sale": "গরু বিক্রি", "Cattle Purchase": "গরু কেনা",
+  "Inventory": "খাবার/স্টক", "Operating Cost": "খরচ", "Asset Purchase": "সম্পদ কেনা", "Loan Received": "ঋণ নেওয়া", "Loan Repayment": "ঋণ শোধ",
+};
+
 function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return d.slice(0, 10);
 }
 
 function todayStr() {
@@ -40,6 +42,7 @@ function firstOfMonthStr() {
 }
 
 export function TransactionStatement() {
+  const L = useL();
   const [dateRange, setDateRange] = useState({
     from: firstOfMonthStr(),
     to: todayStr(),
@@ -80,17 +83,17 @@ export function TransactionStatement() {
         <div className="hidden print:block mb-6 border-b pb-4">
           <h1 className="text-2xl font-bold">{result?.businessName}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Cash Flow Statement
+            {L("নগদ লেনদেনের বিবরণী", "Cash statement")}
             {dateRange.from && ` · ${fmtDate(dateRange.from)}`}
-            {dateRange.to ? ` – ${fmtDate(dateRange.to)}` : " – All time"}
+            {dateRange.to ? ` – ${fmtDate(dateRange.to)}` : L(" – শুরু থেকে", " – All time")}
           </p>
-          <p className="text-xs text-muted-foreground mt-0.5">Generated {fmtDate(todayStr())}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("তৈরি", "Generated")} {fmtDate(todayStr())}</p>
         </div>
 
         {/* Controls */}
         <div className="flex flex-wrap items-end gap-3 stmt-print-hide">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">From</label>
+            <label className="text-xs text-muted-foreground block mb-1">{L("থেকে", "From")}</label>
             <input
               type="date"
               value={dateRange.from}
@@ -100,7 +103,7 @@ export function TransactionStatement() {
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">To</label>
+            <label className="text-xs text-muted-foreground block mb-1">{L("পর্যন্ত", "To")}</label>
             <input
               type="date"
               value={dateRange.to}
@@ -113,7 +116,7 @@ export function TransactionStatement() {
             onClick={() => setDateRange({ from: "", to: "" })}
             className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-1.5 transition-colors"
           >
-            All time
+            {L("শুরু থেকে", "All time")}
           </button>
           {isPending && (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground self-center" />
@@ -128,7 +131,7 @@ export function TransactionStatement() {
               className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               <Printer className="h-3.5 w-3.5" />
-              Print
+              {L("প্রিন্ট", "Print")}
             </button>
           </div>
         </div>
@@ -138,10 +141,10 @@ export function TransactionStatement() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {(
               [
-                { label: "Opening Balance", amount: result.openingBalance, cls: "", ring: "ring-black/5",       wash: "from-foreground/[0.03]" },
-                { label: "Total In",        amount: totalIn,              cls: "text-emerald-600 dark:text-emerald-400", ring: "ring-emerald-500/10", wash: "from-emerald-500/[0.06]" },
-                { label: "Total Out",       amount: totalOut,             cls: "text-destructive", ring: "ring-red-500/10", wash: "from-red-500/[0.06]" },
-                { label: "Closing Balance", amount: closing,              cls: closing < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400", ring: closing < 0 ? "ring-red-500/10" : "ring-emerald-500/10", wash: closing < 0 ? "from-red-500/[0.06]" : "from-emerald-500/[0.06]" },
+                { label: L("শুরুর নগদ", "Opening balance"), amount: result.openingBalance, cls: "", ring: "ring-black/5",       wash: "from-foreground/[0.03]" },
+                { label: L("মোট এসেছে", "Total in"),        amount: totalIn,              cls: "text-emerald-600 dark:text-emerald-400", ring: "ring-emerald-500/10", wash: "from-emerald-500/[0.06]" },
+                { label: L("মোট গেছে", "Total out"),       amount: totalOut,             cls: "text-destructive", ring: "ring-red-500/10", wash: "from-red-500/[0.06]" },
+                { label: L("শেষ নগদ", "Closing balance"), amount: closing,              cls: closing < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400", ring: closing < 0 ? "ring-red-500/10" : "ring-emerald-500/10", wash: closing < 0 ? "from-red-500/[0.06]" : "from-emerald-500/[0.06]" },
               ] as const
             ).map(({ label, amount, cls, ring, wash }) => (
               <div key={label} className={`relative overflow-hidden rounded-xl bg-card px-4 py-3.5 shadow-card ring-1 ${ring}`}>
@@ -171,22 +174,22 @@ export function TransactionStatement() {
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   <th className="text-left py-2.5 px-4 font-semibold text-xs text-muted-foreground uppercase tracking-wide whitespace-nowrap">
-                    Date
+                    {L("তারিখ", "Date")}
                   </th>
                   <th className="text-left py-2.5 px-4 font-semibold text-xs text-muted-foreground uppercase tracking-wide">
-                    Description
+                    {L("বিবরণ", "Description")}
                   </th>
                   <th className="text-left py-2.5 px-4 font-semibold text-xs text-muted-foreground uppercase tracking-wide hidden md:table-cell">
-                    Category
+                    {L("ধরন", "Category")}
                   </th>
                   <th className="text-right py-2.5 px-4 font-semibold text-xs text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-                    In
+                    {L("এসেছে", "In")}
                   </th>
                   <th className="text-right py-2.5 px-4 font-semibold text-xs text-destructive uppercase tracking-wide">
-                    Out
+                    {L("গেছে", "Out")}
                   </th>
                   <th className="text-right py-2.5 px-4 font-semibold text-xs text-muted-foreground uppercase tracking-wide whitespace-nowrap">
-                    Balance
+                    {L("ব্যালেন্স", "Balance")}
                   </th>
                 </tr>
               </thead>
@@ -194,10 +197,10 @@ export function TransactionStatement() {
                 {/* Opening balance row */}
                 <tr className="border-b border-border/50 bg-muted/20">
                   <td className="py-2 px-4 text-xs text-muted-foreground whitespace-nowrap">
-                    {dateRange.from ? fmtDate(dateRange.from) : "All time"}
+                    {dateRange.from ? fmtDate(dateRange.from) : L("শুরু থেকে", "All time")}
                   </td>
                   <td className="py-2 px-4 text-xs text-muted-foreground italic font-medium">
-                    Opening Balance
+                    {L("শুরুর নগদ", "Opening Balance")}
                   </td>
                   <td className="hidden md:table-cell" />
                   <td />
@@ -211,7 +214,7 @@ export function TransactionStatement() {
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                      No transactions in this period
+                      {L("এই সময়ে কোনো লেনদেন নেই", "No transactions in this period")}
                     </td>
                   </tr>
                 ) : (
@@ -228,7 +231,7 @@ export function TransactionStatement() {
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${BADGE[row.category]}`}
                         >
-                          {row.category}
+                          {L(CATEGORY_BN[row.category] ?? row.category, row.category)}
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
@@ -270,7 +273,7 @@ export function TransactionStatement() {
                     <td className="py-2.5 px-4 text-xs text-muted-foreground whitespace-nowrap">
                       {dateRange.to ? fmtDate(dateRange.to) : fmtDate(todayStr())}
                     </td>
-                    <td className="py-2.5 px-4 font-bold text-sm">Closing Balance</td>
+                    <td className="py-2.5 px-4 font-bold text-sm">{L("শেষ নগদ", "Closing Balance")}</td>
                     <td className="hidden md:table-cell" />
                     <td className="py-2.5 px-4 text-right tabular-nums text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                       {fmt(totalIn)}

@@ -10,9 +10,11 @@ import { DataGridCardView } from "./DataGridCardView";
 import { DataGridPagination } from "./DataGridPagination";
 import { useDataGridState } from "./useDataGridState";
 import { cn } from "@/lib/utils";
+import { useL } from "@/i18n/text";
 import type { EnterpriseDataGridProps } from "./types";
 
 export function EnterpriseDataGrid<T extends Record<string, any>>(props: EnterpriseDataGridProps<T>) {
+  const L = useL();
   const {
     data,
     columns,
@@ -324,7 +326,7 @@ export function EnterpriseDataGrid<T extends Record<string, any>>(props: Enterpr
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {state.totalCount > 0 && (
           <span>
-            {state.totalCount} record{state.totalCount !== 1 ? "s" : ""}
+            {L(`${state.totalCount}টি রেকর্ড`, `${state.totalCount} record${state.totalCount !== 1 ? "s" : ""}`)}
             {selectedIds.length > 0 && `, ${selectedIds.length} selected`}
             {state.sortConfigs.length > 0 && `, sorted by ${state.sortConfigs.map((s) => s.key).join(", ")}`}
             {state.filters.length > 0 && `, ${state.filters.length} filter${state.filters.length !== 1 ? "s" : ""} applied`}

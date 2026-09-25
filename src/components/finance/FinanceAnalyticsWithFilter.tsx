@@ -11,16 +11,17 @@ const FinanceAnalyticsPanel = dynamic(
   { ssr: false }
 );
 import type { MonthlyPoint } from "@/lib/supabase/queries/analytics";
+import { useL } from "@/i18n/text";
 
 type Range = "this-month" | "last-30" | "last-3m" | "last-6m" | "all" | "custom";
 
-const RANGES: { value: Range; label: string }[] = [
-  { value: "this-month", label: "This Month" },
-  { value: "last-30", label: "Last 30 Days" },
-  { value: "last-3m", label: "Last 3 Months" },
-  { value: "last-6m", label: "Last 6 Months" },
-  { value: "all", label: "All Time" },
-  { value: "custom", label: "Custom" },
+const RANGES: { value: Range; label: string; bn: string }[] = [
+  { value: "this-month", label: "This Month", bn: "এই মাস" },
+  { value: "last-30", label: "Last 30 Days", bn: "গত ৩০ দিন" },
+  { value: "last-3m", label: "Last 3 Months", bn: "গত ৩ মাস" },
+  { value: "last-6m", label: "Last 6 Months", bn: "গত ৬ মাস" },
+  { value: "all", label: "All Time", bn: "শুরু থেকে" },
+  { value: "custom", label: "Custom", bn: "নিজে বাছুন" },
 ];
 
 function getRangeDates(range: Range, customFrom: string, customTo: string): { from: Date | null; to: Date } {
@@ -130,6 +131,7 @@ interface Props {
 }
 
 export function FinanceAnalyticsWithFilter({ allSales, allCosts, monthlyConsumptions, unrealizedInvestment, feedCostByCattle = {}, directCostByCattle = {} }: Props) {
+  const L = useL();
   const [range, setRange] = useState<Range>("last-6m");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -188,12 +190,12 @@ export function FinanceAnalyticsWithFilter({ allSales, allCosts, monthlyConsumpt
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {r.label}
+                {L(r.bn, r.label)}
               </button>
             ))}
           </div>
           <p className="text-xs text-muted-foreground shrink-0 hidden sm:block">
-            {filteredSales.length} sale{filteredSales.length !== 1 ? "s" : ""} · {filteredCosts.length} entr{filteredCosts.length !== 1 ? "ies" : "y"}
+            {L(`${filteredSales.length}টি বিক্রি · ${filteredCosts.length}টি খরচ`, `${filteredSales.length} sale${filteredSales.length !== 1 ? "s" : ""} · ${filteredCosts.length} entr${filteredCosts.length !== 1 ? "ies" : "y"}`)}
           </p>
         </div>
         {range === "custom" && (

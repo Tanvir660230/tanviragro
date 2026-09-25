@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { Tr } from "@/i18n/Tr";
 
 export type EntityStatus =
   | "active"
@@ -143,6 +144,9 @@ const STATUS_CONFIG: Record<
   },
 };
 
+/** Bangla default labels (the English ones sit in STATUS_CONFIG) */
+const STATUS_BN: Record<string, string> = {"active":"সক্রিয়", "sold":"বিক্রি", "deceased":"মৃত", "quarantined":"আলাদা রাখা", "sick":"অসুস্থ", "pregnant":"গর্ভবতী", "due_soon":"শীঘ্রই", "completed":"শেষ", "paid":"পরিশোধিত", "pending":"বাকি", "overdue":"সময় পেরিয়েছে", "draft":"খসড়া", "in_stock":"স্টকে আছে", "low_stock":"কম আছে", "out_of_stock":"শেষ"};
+
 export function StatusBadge({
   status,
   label,
@@ -159,7 +163,7 @@ export function StatusBadge({
     label: status,
   };
 
-  const displayLabel = label ?? config.label;
+  const displayLabel = label ?? <Tr bn={STATUS_BN[normalized] ?? config.label} en={config.label} />;
 
   return (
     <span

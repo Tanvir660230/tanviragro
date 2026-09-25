@@ -23,8 +23,6 @@ import {
   Loader2,
   ListPlus,
   ArrowLeft,
-  DollarSign,
-  Scale,
 } from "lucide-react";
 import {
   parseLivestockCsv,

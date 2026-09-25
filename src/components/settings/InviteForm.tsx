@@ -1,14 +1,16 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
-import { Loader2, UserPlus, Mail, Shield, CheckCircle2 } from "lucide-react";
+import { Loader2, UserPlus, Mail, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inviteTeamMember } from "@/app/dashboard/(app)/settings/team/actions";
 import { toast } from "sonner";
+import { useL } from "@/i18n/text";
 
 export function InviteForm() {
+  const L = useL();
   const [state, action, pending] = useActionState(inviteTeamMember, undefined);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -27,7 +29,7 @@ export function InviteForm() {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="invite_email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Colleague Email <span className="text-destructive">*</span>
+            {L("ইমেইল", "Email")} <span className="text-destructive">*</span>
           </Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -43,7 +45,7 @@ export function InviteForm() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="invite_role" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            System Role <span className="text-destructive">*</span>
+            {L("ভূমিকা", "Role")} <span className="text-destructive">*</span>
           </Label>
           <div className="relative">
             <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -54,9 +56,9 @@ export function InviteForm() {
               defaultValue=""
               className="w-full pl-9 pr-4 h-10 rounded-lg border border-input bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
-              <option value="" disabled>Select assigned role...</option>
-              <option value="manager">Manager (Can record cattle, sales, inventory & operations)</option>
-              <option value="worker">Worker (Field staff & task logging)</option>
+              <option value="" disabled>{L("ভূমিকা বাছুন…", "Select assigned role...")}</option>
+              <option value="manager">{L("ম্যানেজার (গরু, বিক্রি, স্টক ও কাজ লিখতে পারবেন)", "Manager (Can record cattle, sales, inventory & operations)")}</option>
+              <option value="worker">{L("কর্মী (দৈনিক কাজ লিখতে পারবেন)", "Worker (Field staff & task logging)")}</option>
             </select>
           </div>
         </div>
@@ -70,11 +72,11 @@ export function InviteForm() {
 
       <div className="flex items-center justify-between pt-1">
         <p className="text-xs text-muted-foreground">
-          An invitation link will be sent to the email to join this farm workspace.
+          {L("এই ইমেইলে খামারে যোগ দেওয়ার লিংক যাবে।", "An invitation link will be sent to the email to join this farm workspace.")}
         </p>
         <Button type="submit" size="sm" disabled={pending} className="gap-1.5 shadow-sm">
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-          Send Invite
+          {L("আমন্ত্রণ পাঠান", "Send Invite")}
         </Button>
       </div>
     </form>

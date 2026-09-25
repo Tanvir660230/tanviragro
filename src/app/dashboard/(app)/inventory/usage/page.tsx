@@ -9,10 +9,12 @@ import { loadFeedData } from "@/lib/feed/feed-data";
 import { feedCostBetween } from "@/lib/feed/usage-engine";
 import { measuredGrowth } from "@/lib/growth/baseline";
 import { FeedUsageClient, type UsagePageData } from "@/components/inventory/FeedUsageClient";
+import { getL } from "@/i18n/server-text";
 
-export const metadata: Metadata = { title: "Feed Usage" };
+export const metadata: Metadata = { title: "খাবার ব্যবহার" };
 
 export default async function FeedUsagePage() {
+  const L = await getL();
   const ctx = await requirePagePermission(PERMISSIONS.INVENTORY_VIEW);
   const supabase = await createClient();
   const data = await loadFeedData(supabase, ctx.businessId);
@@ -64,7 +66,7 @@ export default async function FeedUsagePage() {
     <div className="space-y-4 pb-12">
       <PageHeader
         title="Feed Usage"
-        subtitle="Start a feed when you begin using it, end it when it finishes. The system works out daily use and cost — no daily entry needed."
+        subtitle={L("খাওয়ানো শুরু হলে চালু করুন, শেষ হলে শেষ করুন। প্রতিদিনের খরচ সিস্টেম নিজে হিসাব করে — রোজ লিখতে হয় না।", "Start a feed when you begin using it, end it when it finishes. The system works out daily use and cost — no daily entry needed.")}
         icon={CalendarRange}
         back="/dashboard/inventory"
       />

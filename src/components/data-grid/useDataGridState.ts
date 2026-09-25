@@ -9,7 +9,7 @@ import type {
   GroupHeadMeta,
   GroupFootMeta,
 } from "./types";
-import { ROW_MARKERS, type AggregateContext } from "./types";
+import { ROW_MARKERS } from "./types";
 import { resolveAggregate } from "./aggregate-utils";
 
 export interface UseDataGridStateOptions<T> {

@@ -4,17 +4,13 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { Partner, PartnerTransaction, ManagementFeeRate } from "@/types/database";
 import { StatementClient } from "@/components/partners/StatementClient";
-import {
-  effectiveShare,
-  computeAccount,
-  type PartnerAccountSummary as AccountSummary,
-} from "@/lib/partners/calculations";
+import { type PartnerAccountSummary as AccountSummary } from "@/lib/partners/calculations";
 import { PartnerEngine } from "@/lib/partners/partner-engine";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { getCachedBusinessId } from "@/lib/supabase/cached";
 
-export const metadata: Metadata = { title: "Partner Statement" };
+export const metadata: Metadata = { title: "অংশীদারের হিসাব বিবরণী" };
 
 export type { AccountSummary };
 
@@ -186,7 +182,7 @@ export default async function StatementPage({
     pendingLoss: partnerEquity.pendingLoss,
   };
 
-  const statementDate = new Date().toLocaleDateString("en-US", {
+  const statementDate = new Date().toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",

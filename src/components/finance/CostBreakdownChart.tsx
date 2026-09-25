@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { fmtBDTFull } from "@/lib/format";
+import { useL } from "@/i18n/text";
 
 interface Props {
   cattlePurchase: number;
@@ -17,12 +18,6 @@ interface Props {
   variableCosts: number;
 }
 
-const SEGMENTS = [
-  { key: "Cattle Purchases", color: "#f97316" },
-  { key: "Feed Consumption", color: "#10b981" },
-  { key: "Fixed Ops Costs", color: "#3b82f6" },
-  { key: "Variable Ops Costs", color: "#a855f7" },
-];
 
 interface PieTooltipPayload {
   active?: boolean;
@@ -30,6 +25,7 @@ interface PieTooltipPayload {
 }
 
 function CustomTooltip({ active, payload }: PieTooltipPayload) {
+  const L = useL();
   if (!active || !payload?.length) return null;
   const { name, value, payload: inner } = payload[0];
   const pct = inner.total > 0 ? (value / inner.total) * 100 : 0;
@@ -37,7 +33,7 @@ function CustomTooltip({ active, payload }: PieTooltipPayload) {
     <div className="rounded-xl border border-border bg-card px-3 py-2 shadow-lg text-xs">
       <p className="font-semibold">{name}</p>
       <p className="text-muted-foreground">{fmtBDTFull(value)}</p>
-      <p className="text-muted-foreground">{pct.toFixed(1)}% of total</p>
+      <p className="text-muted-foreground">{L(`মোটের ${pct.toFixed(1)}%`, `${pct.toFixed(1)}% of total`)}</p>
     </div>
   );
 }
@@ -48,6 +44,7 @@ export function CostBreakdownChart({
   fixedCosts,
   variableCosts,
 }: Props) {
+  const L = useL();
   // Recharts' Pie needs a moment after mount to stabilize its geometry —
   // without this it briefly renders blank. A short skeleton avoids that flash.
   const [ready, setReady] = useState(false);
@@ -60,16 +57,17 @@ export function CostBreakdownChart({
   if (total === 0) {
     return (
       <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        No cost data yet
+        {L("এখনো খরচের তথ্য নেই", "No cost data yet")}
       </div>
     );
   }
 
+  const nm = { cattle: L("গরু কেনা", "Cattle purchases"), feed: L("খাবার খাওয়ানো", "Feed consumption"), fixed: L("নির্দিষ্ট খরচ", "Fixed costs"), variable: L("অন্যান্য খরচ", "Variable costs") };
   const data = [
-    { name: "Cattle Purchases", value: cattlePurchase, total },
-    { name: "Feed Consumption", value: feedCosts, total },
-    { name: "Fixed Ops Costs", value: fixedCosts, total },
-    { name: "Variable Ops Costs", value: variableCosts, total },
+    { name: nm.cattle, value: cattlePurchase, total, color: "#f97316" },
+    { name: nm.feed, value: feedCosts, total, color: "#10b981" },
+    { name: nm.fixed, value: fixedCosts, total, color: "#3b82f6" },
+    { name: nm.variable, value: variableCosts, total, color: "#a855f7" },
   ].filter((d) => d.value > 0);
 
   return (
@@ -87,10 +85,7 @@ export function CostBreakdownChart({
               dataKey="value"
               isAnimationActive={false}
             >
-              {data.map((entry) => {
-                const seg = SEGMENTS.find((s) => s.key === entry.name);
-                return <Cell key={entry.name} fill={seg?.color ?? "#888"} />;
-              })}
+              {data.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
           </PieChart>
@@ -104,10 +99,10 @@ export function CostBreakdownChart({
       {/* Legend */}
       <div className="flex flex-col gap-1.5">
         {[
-          { label: "Cattle Purchases", value: cattlePurchase, color: "#f97316" },
-          { label: "Feed Consumption", value: feedCosts, color: "#10b981" },
-          { label: "Fixed Ops Costs", value: fixedCosts, color: "#3b82f6" },
-          { label: "Variable Ops Costs", value: variableCosts, color: "#a855f7" },
+          { label: nm.cattle, value: cattlePurchase, color: "#f97316" },
+          { label: nm.feed, value: feedCosts, color: "#10b981" },
+          { label: nm.fixed, value: fixedCosts, color: "#3b82f6" },
+          { label: nm.variable, value: variableCosts, color: "#a855f7" },
         ].map(({ label, value, color }) => (
           <div key={label} className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5">

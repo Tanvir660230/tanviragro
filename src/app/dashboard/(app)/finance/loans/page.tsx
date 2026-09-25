@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft, Landmark } from "lucide-react";
+import { Landmark } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { LoanDashboard } from "@/components/finance/LoanDashboard";

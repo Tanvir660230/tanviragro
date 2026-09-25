@@ -153,3 +153,27 @@ Parallel engines that go: `lib/financial` (except the pieces the accounting engi
   - operating result −৳1,54,120 on Finance and Accounts;
   - assets ৳6,75,017 on Report, the Balance Sheet and Accounts.
 - Phone screenshots: bottom bar, "More" sheet and menu drawer all work.
+
+## 7. Leftovers finished (2026-09-26)
+
+**Every screen in Bangla and English, from one mechanism.**
+- `L("বাংলা", "English")` for client pages (`src/i18n/text.ts`, `useL()`), `getL()` for server pages (`src/i18n/server-text.ts`), `<Tr bn en />` for pieces shared by both.
+- Shared label sources: expense categories/types `lib/expenses/labels.ts`, partner and transaction types `lib/partners/labels.ts`, status badges `components/ui/status-badge.tsx`.
+- Page titles come from the site map; the back arrow is hidden on pages that are on the site map (the tabs lead everywhere).
+- English UI strings seen on pages in Bangla mode: 1,211 → only data left (names, notes, units, dates).
+
+**Settings is one page.** The second tab row is gone (profile, accounts, herd and feed, preferences, security). Removed settings nothing used: VAT/tax rate and "equity unit price".
+
+**Bugs fixed while translating**
+- What-if calculator started from ৳1,000/kg (the old "unit share" value) → now the latest market price from the log.
+- Vaccines: "Record details" on a task used the first animal and FMD instead of the tapped task, and recording a dose added a second completed copy while the task stayed overdue → rebuilt; a dose now closes its task.
+- Vaccine page: stock computed with a wrong sign rule and a 1,000-row limit → stock ledger view. Fake "campaigns" tab and fixed-dose "adverse" advice removed.
+- Treatments: totals stopped at the last 100 rows; month count used UTC → all rows, Dhaka date.
+- Vaccine report and print report: "hs"/"bq" matched inside other words ("months"); made-up legal citations removed from the print report.
+- Dhaka date (not UTC) on health, vaccines, notifications and the top-bar alerts.
+- ৳ sign showed as "?" on "Add several"; delete dialogs said "permanently" for soft deletes; notes pointed to Settings for the market price (it is on the Money page); health certificate printed "Tanvir Agro" instead of the farm's name.
+- The animal form in use (wizard) never asked whether the purchase weight was measured or estimated (only an unused form did) → asked and saved.
+
+**More unused code removed:** vaccination engine, 9 cattle components that were imported but never shown, an unused 480-line cattle form, unused imports in 80 files, 5 database queries whose results were never used (partners 4, money 1).
+
+**Left as is, on purpose:** the partners page computes profit on a "realised" basis (cost of animals still on the farm is excluded) for profit sharing; that is a business rule, not a display bug. Data (names, notes, units like "piece", English month names in some dates) stays as entered.

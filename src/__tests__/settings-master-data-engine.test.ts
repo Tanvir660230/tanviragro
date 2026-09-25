@@ -1,5 +1,4 @@
-import { MASTER_DATA, MASTER_BREEDS, MASTER_MEASUREMENT_UNITS } from "@/constants/master-data";
-import { FARM_DEFAULTS, CACHE_TAGS, ROUTES } from "@/constants/config";
+import { MASTER_DATA } from "@/constants/master-data";
 
 describe("Phase 10: Enterprise Settings, Configuration & Master Data Engine", () => {
   test("Master Data repository provides uniform breeds, units, and categories across ERP", () => {

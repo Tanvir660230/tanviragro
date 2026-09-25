@@ -28,6 +28,9 @@ import {
 import { toast } from "sonner";
 import type { InventoryRow } from "./InventoryTable";
 import { KgPerUnitField } from "./ledger-fields";
+import { useL } from "@/i18n/text";
+import { costCategoryLabel } from "@/lib/expenses/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 const CATEGORIES = [
   { value: "feed", label: "Feed" },
@@ -48,6 +51,8 @@ function EditItemForm({
   formKey: number;
   onSuccess: () => void;
 }) {
+  const { locale } = useTranslation();
+  const L = useL();
   const router = useRouter();
   const [category, setCategory] = useState(item.category);
   const [name, setName] = useState(item.name);
@@ -61,12 +66,12 @@ function EditItemForm({
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Item updated successfully");
+      toast.success(L("আপডেট হলো", "Item updated successfully"));
       onSuccess();
       router.refresh();
     }
     if (state?.error) toast.error(state.error);
-  }, [state?.success, state?.error, onSuccess, router]);
+  }, [state?.success, state?.error, onSuccess, router, L]);
 
   return (
     <form key={formKey} action={formAction} className="space-y-4 pt-1">
@@ -74,31 +79,31 @@ function EditItemForm({
       <input type="hidden" name="category" value={category} />
 
       <div className="space-y-1.5">
-        <Label htmlFor="inv_name">Item Name *</Label>
+        <Label htmlFor="inv_name">{L("নাম *", "Item Name *")}</Label>
         <Input
           id="inv_name"
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Bulls Protein 55%"
+          placeholder={L("যেমন বুলস প্রোটিন ৫৫%", "e.g. Bulls Protein 55%")}
           required
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="inv_category">Category *</Label>
+          <Label htmlFor="inv_category">{L("ধরন *", "Category *")}</Label>
           <Select
             value={category}
             onValueChange={(v) => setCategory(v ?? "")}
           >
             <SelectTrigger id="inv_category">
-              <SelectValue placeholder="Select…" />
+              <SelectValue placeholder={L("বাছুন…", "Select…")} />
             </SelectTrigger>
             <SelectContent>
               {CATEGORIES.map((c) => (
                 <SelectItem key={c.value} value={c.value}>
-                  {c.label}
+                  {costCategoryLabel(c.value, locale)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -106,14 +111,14 @@ function EditItemForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="inv_unit">Unit *</Label>
+          <Label htmlFor="inv_unit">{L("একক *", "Unit *")}</Label>
           <Input
             id="inv_unit"
             name="unit"
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
             list="edit-unit-suggestions"
-            placeholder="kg, litre, piece…"
+            placeholder={L("kg, লিটার, পিস…", "kg, litre, piece…")}
             required
           />
           <datalist id="edit-unit-suggestions">
@@ -127,7 +132,7 @@ function EditItemForm({
       <KgPerUnitField unit={unit} defaultValue={item.kg_per_unit} idPrefix="edit" />
 
       <div className="space-y-1.5">
-        <Label htmlFor="inv_threshold">Low Stock Alert Threshold</Label>
+        <Label htmlFor="inv_threshold">{L("কত কমলে সতর্ক করবে", "Low Stock Alert Threshold")}</Label>
         <Input
           id="inv_threshold"
           name="low_stock_threshold"
@@ -136,7 +141,7 @@ function EditItemForm({
           step="0.1"
           value={threshold}
           onChange={(e) => setThreshold(e.target.value)}
-          placeholder={`e.g. 50 ${unit ? unit : ''} (optional)`}
+          placeholder={L(`যেমন 50 ${unit ? unit : ""} (ঐচ্ছিক)`, `e.g. 50 ${unit ? unit : ""} (optional)`)}
         />
       </div>
 
@@ -151,10 +156,10 @@ function EditItemForm({
           {isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Updating…
+              {L("আপডেট হচ্ছে…", "Updating…")}
             </>
           ) : (
-            "Save Changes"
+            L("সেভ করুন", "Save changes")
           )}
         </Button>
       </DialogFooter>
@@ -163,6 +168,7 @@ function EditItemForm({
 }
 
 export function EditItemDialog({ item }: { item: InventoryRow }) {
+  const L = useL();
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
 
@@ -175,14 +181,14 @@ export function EditItemDialog({ item }: { item: InventoryRow }) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-foreground h-8 w-8 text-muted-foreground"
-        aria-label="Edit item"
+        aria-label={L("বদলান", "Edit item")}
       >
         <Pencil className="h-3.5 w-3.5" />
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-sm p-6">
         <DialogHeader>
-          <DialogTitle>Edit Inventory Item</DialogTitle>
+          <DialogTitle>{L("জিনিস বদলান", "Edit Inventory Item")}</DialogTitle>
         </DialogHeader>
         <EditItemForm item={item} formKey={formKey} onSuccess={() => setOpen(false)} />
       </DialogContent>

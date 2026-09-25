@@ -8,12 +8,14 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useL } from "@/i18n/text";
 
 interface Props {
   data: { date: string; balance: number }[];
 }
 
 export function CapitalTimelineChart({ data }: Props) {
+  const L = useL();
   const chartData = data.map((d) => ({
     label: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", {
       month: "short",
@@ -50,7 +52,7 @@ export function CapitalTimelineChart({ data }: Props) {
         <Tooltip
           formatter={(v) => [
             `৳${Number(v ?? 0).toLocaleString("en-IN")}`,
-            "Balance",
+            L("ব্যালেন্স", "Balance"),
           ]}
           contentStyle={{
             fontSize: 12,

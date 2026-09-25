@@ -75,6 +75,7 @@ export async function saveEnterpriseAnimalWizardAction(
         purchase_date: purchaseDate,
         purchase_price: payload.origin.purchasePrice || 0,
         initial_weight_kg: payload.origin.initialWeightKg || 1,
+        ...(payload.origin.initialWeightType ? { initial_weight_type: payload.origin.initialWeightType } : {}),
         notes: payload.notes?.trim() || null,
       })
       .eq("id", editAnimalId)
@@ -103,6 +104,7 @@ export async function saveEnterpriseAnimalWizardAction(
       purchase_date: purchaseDate,
       purchase_price: payload.origin.purchasePrice || 0,
       initial_weight_kg: payload.origin.initialWeightKg || 1,
+      initial_weight_type: payload.origin.initialWeightType ?? "unknown",
       status: "active",
       notes: payload.notes?.trim() || null,
     })

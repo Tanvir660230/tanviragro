@@ -9,6 +9,7 @@ import { PERMISSIONS } from "@/constants/roles";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { todayDhaka } from "@/lib/dates";
 
+import { getL } from "@/i18n/server-text";
 export type FixedAssetFormState =
   | { success: true }
   | { error: string }
@@ -18,6 +19,7 @@ export async function addFixedAsset(
   _prev: FixedAssetFormState,
   formData: FormData
 ): Promise<FixedAssetFormState> {
+  const L = await getL();
   try {
     const supabase = await createClient();
     const ctx = await getBusinessContext(supabase);
@@ -37,12 +39,12 @@ export async function addFixedAsset(
       : null;
     const notes = ((formData.get("notes") as string | null) ?? "").trim() || null;
 
-    if (!name) return { error: "Name is required" };
-    if (!purchaseDate) return { error: "Purchase date is required" };
-    if (isNaN(purchaseCost) || purchaseCost <= 0) return { error: "Invalid purchase cost" };
-    if (isNaN(usefulLifeYears) || usefulLifeYears <= 0) return { error: "Invalid useful life" };
+    if (!name) return { error: L("নাম লিখুন", "Name is required") };
+    if (!purchaseDate) return { error: L("কেনার তারিখ দিন", "Purchase date is required") };
+    if (isNaN(purchaseCost) || purchaseCost <= 0) return { error: L("কেনা দাম ঠিক নয়", "Invalid purchase cost") };
+    if (isNaN(usefulLifeYears) || usefulLifeYears <= 0) return { error: L("চলার বছর ঠিক নয়", "Invalid useful life") };
     if (decliningRate !== null && (isNaN(decliningRate) || decliningRate <= 0 || decliningRate > 1))
-      return { error: "Declining rate must be between 1% and 100%" };
+      return { error: L("হার ১% থেকে ১০০% এর মধ্যে হতে হবে", "Declining rate must be between 1% and 100%") };
 
     const lockError = await checkFinancialLock(supabase, ctx.businessId, purchaseDate);
     if (lockError) return { error: lockError };
@@ -75,13 +77,14 @@ export async function disposeFixedAsset(
   id: string,
   disposalValue: number
 ): Promise<FixedAssetFormState> {
+  const L = await getL();
   try {
     const supabase = await createClient();
     const ctx = await getBusinessContext(supabase);
     requirePermission(ctx, PERMISSIONS.ASSET_MANAGE);
 
     if (!Number.isFinite(disposalValue) || disposalValue < 0)
-      return { error: "Disposal value must be zero or positive" };
+      return { error: L("বিক্রি মূল্য শূন্য বা তার বেশি হতে হবে", "Disposal value must be zero or positive") };
 
     await assertResourceOwnership(
       supabase,

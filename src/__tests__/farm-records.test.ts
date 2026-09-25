@@ -131,8 +131,10 @@ describe("source guards", () => {
 
   test("weight forms ask whether a weight was measured or estimated", () => {
     expect(read("components/cattle/AddWeightDialog.tsx")).toMatch(/name="weight_type"/);
-    expect(read("components/cattle/AddCattleDialog.tsx")).toMatch(/name="initial_weight_type"/);
-    expect(read("components/cattle/EditCattleDialog.tsx")).toMatch(/name="initial_weight_type"/);
+    // add and edit both use the animal wizard; its origin step asks it and the save action stores it
+    expect(read("components/livestock/wizard/steps/Step5Origin.tsx")).toMatch(/name="initial_weight_type"/);
+    expect(read("app/dashboard/(app)/cattle/wizard-actions.ts")).toMatch(/initial_weight_type: payload\.origin\.initialWeightType/);
+    expect(read("components/cattle/EditCattleDialog.tsx")).toMatch(/initialWeightType: \(cattle\.initial_weight_type/);
   });
 
   test("kg per piece is optional — never required for straw", () => {

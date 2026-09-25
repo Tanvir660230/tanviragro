@@ -22,7 +22,7 @@ import { loadInventoryStats } from "@/lib/inventory/consumption-stats";
 
 type MoveRow = { item_id: string; type: string; movement_type: string | null; qty: number; unit_cost: number | null; recorded_at: string; created_at: string; notes: string | null };
 
-export const metadata: Metadata = { title: "Inventory & Warehouse" };
+export const metadata: Metadata = { title: "খাবার ও স্টক" };
 
 export default async function InventoryPage({
   searchParams,

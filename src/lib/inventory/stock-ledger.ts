@@ -4,7 +4,7 @@ import type {
   StockMovementDirection,
   StockTransactionType,
 } from "./types";
-import { InsufficientStockError, NegativeStockError } from "./errors";
+import { InsufficientStockError } from "./errors";
 import { weightedAverageUnitCost } from "./feed-costing";
 
 export interface RawInventoryItemRow {

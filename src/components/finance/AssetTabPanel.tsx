@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, Building2 } from "lucide-react";
 import { AssetRegister, type CostEntry } from "./CostList";
+import { getL, getLocale } from "@/i18n/server-text";
+import { costCategoryLabel } from "@/lib/expenses/labels";
 
 export type SimpleFixedAsset = {
   id: string;
@@ -26,13 +28,15 @@ const CATEGORY_STYLE: Record<string, string> = {
   other:          "bg-muted text-muted-foreground",
 };
 
-export function AssetTabPanel({
+export async function AssetTabPanel({
   costAssets,
   fixedAssets,
 }: {
   costAssets: CostEntry[];
   fixedAssets: SimpleFixedAsset[];
 }) {
+  const L = await getL();
+  const locale = await getLocale();
   const hasAnything = costAssets.length > 0 || fixedAssets.length > 0;
 
   if (!hasAnything) {
@@ -40,16 +44,16 @@ export function AssetTabPanel({
       <div className="rounded-xl border border-border/60 p-10 text-center space-y-3">
         <Building2 className="h-9 w-9 text-muted-foreground mx-auto" />
         <div>
-          <p className="font-medium">কোনো সম্পদ নেই</p>
+          <p className="font-medium">{L("কোনো সম্পদ নেই", "No assets")}</p>
           <p className="text-sm text-muted-foreground mt-1">
-            উপরের <strong>Add Cost / Asset</strong> বাটনে ক্লিক করে প্রথম সম্পদ যোগ করুন।
+            {L("উপরের \"খরচ যোগ\" চেপে \"সম্পদ\" বেছে প্রথম সম্পদ যোগ করুন।", "Use Add entry above and choose Asset to add the first one.")}
           </p>
         </div>
         <Link
           href="/dashboard/accounting/fixed-assets"
           className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
         >
-          Depreciation tracking (Fixed Assets) <ArrowRight className="h-3 w-3" />
+          {L("স্থায়ী সম্পদ ও অবচয়", "Fixed assets & depreciation")} <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
     );
@@ -79,30 +83,30 @@ export function AssetTabPanel({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {
-            label: "Capital Entries",
+            label: L("সম্পদ হিসেবে লেখা খরচ", "Capital entries"),
             value: fmt(totalCostEntryValue),
-            sub: `${costAssets.length} item${costAssets.length !== 1 ? "s" : ""}`,
+            sub: L(`${costAssets.length}টি`, `${costAssets.length} item${costAssets.length !== 1 ? "s" : ""}`),
             ring: "ring-amber-500/10", grad: "from-amber-500/[0.05]",
             text: "text-amber-700 dark:text-amber-400",
           },
           {
-            label: "Fixed Assets (Cost)",
+            label: L("স্থায়ী সম্পদ (কেনা দাম)", "Fixed assets (cost)"),
             value: fmt(totalFixedCost),
-            sub: `${fixedAssets.length} asset${fixedAssets.length !== 1 ? "s" : ""}`,
+            sub: L(`${fixedAssets.length}টি সম্পদ`, `${fixedAssets.length} asset${fixedAssets.length !== 1 ? "s" : ""}`),
             ring: "ring-blue-500/10", grad: "from-blue-500/[0.05]",
             text: "text-blue-700 dark:text-blue-400",
           },
           {
-            label: "Fixed Book Value",
+            label: L("বর্তমান মূল্য", "Book value"),
             value: fmt(totalFixedBookValue),
-            sub: "After depreciation",
+            sub: L("অবচয়ের পর", "After depreciation"),
             ring: "ring-purple-500/10", grad: "from-purple-500/[0.05]",
             text: "text-purple-700 dark:text-purple-400",
           },
           {
-            label: "Annual Dep.",
+            label: L("বার্ষিক অবচয়", "Annual depreciation"),
             value: fmt(totalAnnualDep),
-            sub: "Fixed assets only",
+            sub: L("শুধু স্থায়ী সম্পদ", "Fixed assets only"),
             ring: "ring-rose-500/10", grad: "from-rose-500/[0.05]",
             text: "text-rose-600 dark:text-rose-400",
           },
@@ -135,7 +139,7 @@ export function AssetTabPanel({
       {costAssets.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
-            Capital Entries
+            {L("সম্পদ হিসেবে লেখা খরচ", "Capital Entries")}
           </p>
           <AssetRegister assets={costAssets} />
         </div>
@@ -146,13 +150,13 @@ export function AssetTabPanel({
         <div className="space-y-2">
           <div className="flex items-center justify-between px-0.5">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Fixed Assets
+              {L("স্থায়ী সম্পদ", "Fixed Assets")}
             </p>
             <Link
               href="/dashboard/accounting/fixed-assets"
               className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
             >
-              Full depreciation schedule <ArrowRight className="h-3 w-3" />
+              {L("পুরো অবচয় সূচি", "Full depreciation schedule")} <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
 
@@ -161,11 +165,11 @@ export function AssetTabPanel({
               <table className="w-full text-sm min-w-[480px]">
                 <thead>
                   <tr className="border-b border-blue-200 dark:border-blue-800/60 bg-blue-100/40 dark:bg-blue-950/20">
-                    <th className="px-4 py-2.5 text-left font-medium text-blue-700 dark:text-blue-400">Asset</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-blue-700 dark:text-blue-400 hidden sm:table-cell">Category</th>
-                    <th className="px-4 py-2.5 text-right font-medium text-blue-700 dark:text-blue-400">Cost</th>
-                    <th className="px-4 py-2.5 text-right font-medium text-blue-700 dark:text-blue-400">Book Value</th>
-                    <th className="px-4 py-2.5 text-right font-medium text-blue-700 dark:text-blue-400 hidden md:table-cell">Annual Dep.</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-blue-700 dark:text-blue-400">{L("সম্পদ", "Asset")}</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-blue-700 dark:text-blue-400 hidden sm:table-cell">{L("ধরন", "Category")}</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-blue-700 dark:text-blue-400">{L("কেনা দাম", "Cost")}</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-blue-700 dark:text-blue-400">{L("বর্তমান মূল্য", "Book Value")}</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-blue-700 dark:text-blue-400 hidden md:table-cell">{L("বার্ষিক অবচয়", "Annual Dep.")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-blue-100 dark:divide-blue-900/40">
@@ -177,11 +181,10 @@ export function AssetTabPanel({
                           <p className="text-xs text-muted-foreground">{a.description}</p>
                         )}
                         <p className="text-xs text-muted-foreground">
-                          Since {new Date(a.purchaseDate).toLocaleDateString("en-US", { year: "numeric", month: "short" })}
-                          {" · "}{a.usefulLifeYears}yr life
+                          {L(`${a.purchaseDate.slice(0, 7)} থেকে · ${a.usefulLifeYears} বছর চলবে`, `Since ${a.purchaseDate.slice(0, 7)} · ${a.usefulLifeYears}yr life`)}
                         </p>
                       </td>
-                      <td className="px-4 py-3 capitalize text-muted-foreground hidden sm:table-cell">{a.category}</td>
+                      <td className="px-4 py-3 capitalize text-muted-foreground hidden sm:table-cell">{costCategoryLabel(a.category, locale)}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmt(a.purchaseCost)}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-700 dark:text-blue-300">
                         {fmt(a.bookValue)}
@@ -196,13 +199,13 @@ export function AssetTabPanel({
             </div>
             {/* Summary footer */}
             <div className="border-t-2 border-blue-200 dark:border-blue-800/60 bg-blue-100/40 dark:bg-blue-950/20 px-4 py-2.5 flex items-center justify-between text-sm font-semibold">
-              <span className="text-muted-foreground">Total ({fixedAssets.length})</span>
+              <span className="text-muted-foreground">{L("মোট", "Total")} ({fixedAssets.length})</span>
               <div className="flex items-center gap-5 tabular-nums">
                 <span className="text-muted-foreground hidden md:inline">
-                  {fmt(totalAnnualDep)}/yr dep
+                  {L(`বছরে অবচয় ${fmt(totalAnnualDep)}`, `${fmt(totalAnnualDep)}/yr dep`)}
                 </span>
-                <span className="text-blue-700 dark:text-blue-300">{fmt(totalFixedBookValue)} book</span>
-                <span>{fmt(totalFixedCost)} cost</span>
+                <span className="text-blue-700 dark:text-blue-300">{L(`বর্তমান ${fmt(totalFixedBookValue)}`, `${fmt(totalFixedBookValue)} book`)}</span>
+                <span>{L(`কেনা ${fmt(totalFixedCost)}`, `${fmt(totalFixedCost)} cost`)}</span>
               </div>
             </div>
           </div>
@@ -210,16 +213,16 @@ export function AssetTabPanel({
       ) : (
         <div className="rounded-xl border border-dashed border-blue-300 dark:border-blue-800 p-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">Depreciation tracking</p>
+            <p className="text-sm font-medium">{L("অবচয় হিসাব", "Depreciation tracking")}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Add fixed assets (shed, pump, vehicle) to auto-calculate annual depreciation.
+              {L("শেড, পাম্প, গাড়ি যোগ করলে বার্ষিক অবচয় নিজে হিসাব হবে।", "Add fixed assets (shed, pump, vehicle) to auto-calculate annual depreciation.")}
             </p>
           </div>
           <Link
             href="/dashboard/accounting/fixed-assets"
             className="text-xs font-medium text-primary whitespace-nowrap inline-flex items-center gap-1 hover:underline shrink-0"
           >
-            Fixed Assets <ArrowRight className="h-3 w-3" />
+            {L("স্থায়ী সম্পদ", "Fixed Assets")} <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       )}

@@ -1,14 +1,16 @@
 "use client";
 
-import { WIZARD_TEMPLATES, type WizardTemplate, type AnimalWizardState } from "@/lib/validation/cattle-wizard";
+import { WIZARD_TEMPLATES, type WizardTemplate } from "@/lib/validation/cattle-wizard";
 import { Sparkles, Beef, Milk, Baby } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useL } from "@/i18n/text";
 
 interface Props {
   onSelect: (template: WizardTemplate) => void;
 }
 
 export function WizardTemplateSelector({ onSelect }: Props) {
+  const L = useL();
   const getIcon = (id: string) => {
     switch (id) {
       case "fattening_bull":
@@ -29,10 +31,10 @@ export function WizardTemplateSelector({ onSelect }: Props) {
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
           <Sparkles className="h-3.5 w-3.5" />
-          <span>Fast-Fill Templates</span>
+          <span>{L("দ্রুত পূরণ", "Quick fill")}</span>
         </div>
         <Badge variant="outline" className="text-[10px] bg-background/50">
-          Click to auto-populate
+          {L("চাপলে নিজে পূরণ হবে", "Click to auto-populate")}
         </Badge>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

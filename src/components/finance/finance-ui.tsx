@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { ShieldCheck, AlertTriangle } from "lucide-react";
 import { PrintButton } from "./PrintButton";
 import { SitePageTitle } from "@/components/navigation/SitePageTitle";
+import { Tr } from "@/i18n/Tr";
 
 export function fmtBDT(n: number, decimals: number = 0): string {
   if (!isFinite(n) || isNaN(n)) return "৳0";
@@ -156,18 +157,18 @@ export function StatementReportHeader({
           {isAuditedBalanced ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
               <ShieldCheck className="h-3.5 w-3.5" />
-              Audited &amp; Balanced
+              <Tr bn="হিসাব মিলেছে" en="Balanced" />
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
               <AlertTriangle className="h-3.5 w-3.5" />
-              Audit Discrepancy
+              <Tr bn="গরমিল আছে" en="Does not balance" />
             </span>
           )}
         </div>
         <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-          {subtitle ?? "Official Double-Entry Financial Statement"}
-          {asOfDate && ` · As of ${new Date(asOfDate).toLocaleDateString("en-US", { dateStyle: "long" })}`}
+          {subtitle ?? <Tr bn="হিসাবের বিবরণী" en="Financial statement" />}
+          {asOfDate && <> · <Tr bn={`${asOfDate.slice(0, 10)} পর্যন্ত`} en={`as of ${asOfDate.slice(0, 10)}`} /></>}
         </p>
       </div>
       <div className="flex items-center gap-2 print:hidden">

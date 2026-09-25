@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Bookmark, Plus, Trash2, Check } from "lucide-react";
+import { Bookmark, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SavedView } from "./types";
+import { useL } from "@/i18n/text";
 
 export interface DataGridSavedViewsProps {
   savedViews: SavedView[];
@@ -23,6 +24,7 @@ export function DataGridSavedViews({
   onSaveView,
   onDeleteView,
 }: DataGridSavedViewsProps) {
+  const L = useL();
   const [newViewName, setNewViewName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
@@ -39,7 +41,7 @@ export function DataGridSavedViews({
         className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 text-xs cursor-pointer")}
       >
         <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>Views</span>
+        <span>{L("সংরক্ষিত ভিউ", "Views")}</span>
         {activeViewId && (
           <span className="w-1.5 h-1.5 rounded-full bg-primary" />
         )}
@@ -53,7 +55,7 @@ export function DataGridSavedViews({
             className="h-5 px-1 text-[11px] text-primary"
             onClick={() => setIsCreating(!isCreating)}
           >
-            {isCreating ? "Cancel" : "+ Save Current"}
+            {isCreating ? L("বাতিল", "Cancel") : L("+ এটা সেভ করুন", "+ Save current")}
           </Button>
         </div>
 
@@ -62,12 +64,12 @@ export function DataGridSavedViews({
             <Input
               value={newViewName}
               onChange={(e) => setNewViewName(e.target.value)}
-              placeholder="View name..."
+              placeholder={L("ভিউর নাম…", "View name...")}
               className="h-7 text-xs flex-1"
               onKeyDown={(e) => e.key === "Enter" && handleSave()}
             />
             <Button size="sm" className="h-7 px-2 text-xs" onClick={handleSave}>
-              Save
+              {L("সেভ", "Save")}
             </Button>
           </div>
         )}
@@ -75,7 +77,7 @@ export function DataGridSavedViews({
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {savedViews.length === 0 ? (
             <div className="text-xs text-muted-foreground text-center py-2">
-              No saved views yet
+              {L("কোনো সংরক্ষিত ভিউ নেই", "No saved views yet")}
             </div>
           ) : (
             savedViews.map((view) => {

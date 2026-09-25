@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Receipt, ShoppingCart, Stethoscope, Tag } from "lucide-react";
 import type { ConsumptionRow } from "@/app/dashboard/(app)/cattle/[id]/page";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { useL } from "@/i18n/text";
 
 interface TreatmentRow {
   vet_fee: number | null;
@@ -62,6 +63,7 @@ export function CostTimelineCard({
   allocatedRoughageKg = 0,
   activeRoughage = null,
 }: Props) {
+  const L = useL();
   // Hooks must be before any early return
   const { t } = useTranslation();
   const [showAllCosts, setShowAllCosts] = useState(false);
@@ -87,7 +89,7 @@ export function CostTimelineCard({
     { name: string; unit: string; totalQty: number; totalAmount: number; firstDate: string; lastDate: string }
   >();
   for (const c of costedConsumptions) {
-    const name = c.inventory_items?.name ?? "Feed";
+    const name = c.inventory_items?.name ?? L("খাবার", "Feed");
     const unit = c.inventory_items?.unit ?? "kg";
     const date = c.recorded_at.slice(0, 10);
     const existing = feedMap.get(name);
@@ -105,7 +107,7 @@ export function CostTimelineCard({
     sortDate: item.lastDate,
     displayDate: fmtDateRange(item.firstDate, item.lastDate),
     label: item.name,
-    sublabel: `${item.totalQty % 1 === 0 ? item.totalQty.toFixed(0) : item.totalQty.toFixed(1)} ${item.unit} total`,
+    sublabel: L(`মোট ${item.totalQty % 1 === 0 ? item.totalQty.toFixed(0) : item.totalQty.toFixed(1)} ${item.unit}`, `${item.totalQty % 1 === 0 ? item.totalQty.toFixed(0) : item.totalQty.toFixed(1)} ${item.unit} total`),
     amount: item.totalAmount,
     icon: "feed" as const,
   }));
@@ -129,7 +131,7 @@ export function CostTimelineCard({
     .map((tr) => ({
       sortDate: tr.treated_at.slice(0, 10),
       displayDate: fmtDate(tr.treated_at.slice(0, 10)),
-      label: tr.diagnosis ? `Vet: ${tr.diagnosis}` : t.cattle_details.smart.veterinary,
+      label: tr.diagnosis ? L(`চিকিৎসা: ${tr.diagnosis}`, `Vet: ${tr.diagnosis}`) : t.cattle_details.smart.veterinary,
       amount: (tr.vet_fee ?? 0) + (tr.additional_medical_cost ?? 0),
       icon: "medical" as const,
     }));

@@ -13,6 +13,7 @@ import {
 import { BulkCostDialog } from "./BulkCostDialog";
 import { BulkHealthEventDialog } from "./BulkHealthEventDialog";
 import { BulkWeightDialog } from "./BulkWeightDialog";
+import { useL } from "@/i18n/text";
 
 interface CattleOption {
   id:     string;
@@ -27,6 +28,7 @@ interface Props {
 type OpenDialog = "cost" | "health" | "weight" | null;
 
 export function CattleActionsMenu({ activeCattle, defaultOpenWeigh }: Props) {
+  const L = useL();
   const router = useRouter();
   const [openDialog, setOpenDialog] = useState<OpenDialog>(
     defaultOpenWeigh ? "weight" : null
@@ -59,7 +61,7 @@ export function CattleActionsMenu({ activeCattle, defaultOpenWeigh }: Props) {
         className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border/70 bg-card text-sm font-medium text-foreground hover:bg-muted transition-colors"
       >
         <Scale className="h-4 w-4" />
-        <span className="hidden sm:inline">Weigh</span>
+        <span className="hidden sm:inline">{L("ওজন", "Weigh")}</span>
       </button>
 
       {/* More actions — dropdown */}

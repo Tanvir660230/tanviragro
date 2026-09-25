@@ -11,6 +11,7 @@ import {
   Legend,
 } from "recharts";
 import type { MonthlyPoint } from "@/lib/supabase/queries/analytics";
+import { useL } from "@/i18n/text";
 
 function fmt(n: number) {
   if (n >= 100_000) return `৳${(n / 100_000).toFixed(1)}L`;
@@ -42,10 +43,11 @@ function CustomTooltip({ active, payload, label }: TooltipPayload) {
 }
 
 export function PLTrendChart({ data }: { data: MonthlyPoint[] }) {
+  const L = useL();
   if (!data.length) {
     return (
       <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        No data yet
+        {L("এখনো তথ্য নেই", "No data yet")}
       </div>
     );
   }
@@ -67,7 +69,7 @@ export function PLTrendChart({ data }: { data: MonthlyPoint[] }) {
         <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={fmt} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={52} />
         <Tooltip content={<CustomTooltip />} />
-        <Legend formatter={(v) => (v === "revenue" ? "Revenue" : "Cost")} wrapperStyle={{ fontSize: 12 }} />
+        <Legend formatter={(v) => (v === "revenue" ? L("বিক্রি", "Revenue") : L("খরচ", "Cost"))} wrapperStyle={{ fontSize: 12 }} />
         <Area type="monotone" dataKey="revenue" stroke="var(--color-chart-1)" strokeWidth={2} fill="url(#plRevGrad)" dot={false} activeDot={{ r: 4 }} />
         <Area type="monotone" dataKey="cost" stroke="var(--color-chart-4)" strokeWidth={2} fill="url(#plCostGrad)" dot={false} activeDot={{ r: 4 }} />
       </AreaChart>

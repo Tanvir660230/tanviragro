@@ -6,9 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Search, Check, AlertTriangle, PlusCircle } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  Search,
+  Check,
+  PlusCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { updatePurchaseMemo, deletePurchaseMemo } from "@/app/dashboard/(app)/inventory/purchase/history/actions";
+import { useL } from "@/i18n/text";
+import { costCategoryLabel } from "@/lib/expenses/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 type InventoryItem = { id: string; name: string; category: string; unit: string };
 type RowMode = "bags" | "loose";
@@ -77,6 +87,7 @@ export function EditPurchaseMemoClient({
   initialTransportCost?: number,
   items: InventoryItem[] 
 }) {
+  const L = useL();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -150,7 +161,7 @@ export function EditPurchaseMemoClient({
     e.preventDefault();
 
     if (rows.length === 0) {
-      toast.error("Please add at least one item.");
+      toast.error(L("অন্তত একটি জিনিস যোগ করুন।", "Please add at least one item."));
       return;
     }
 
@@ -178,15 +189,15 @@ export function EditPurchaseMemoClient({
 
     for (const item of formattedItems) {
       if (item.qty <= 0) {
-        toast.error("Quantity must be greater than 0 for all items.");
+        toast.error(L("সব জিনিসের পরিমাণ ০-এর বেশি হতে হবে।", "Quantity must be greater than 0 for all items."));
         return;
       }
       if (item.isNew && !item.newItemName.trim()) {
-        toast.error("New items must have a name.");
+        toast.error(L("নতুন জিনিসের নাম দিন।", "New items must have a name."));
         return;
       }
       if (!item.isNew && !item.itemId) {
-        toast.error("Please select an item or create a new one.");
+        toast.error(L("একটি জিনিস বাছুন বা নতুন তৈরি করুন।", "Please select an item or create a new one."));
         return;
       }
     }
@@ -198,14 +209,14 @@ export function EditPurchaseMemoClient({
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Purchase memo updated successfully!");
+        toast.success(L("মেমো আপডেট হলো!", "Purchase memo updated successfully!"));
         router.push("/dashboard/inventory/purchase/history");
       }
     });
   }
 
   async function handleDelete() {
-    if (!confirm("Are you sure you want to delete this memo? This will remove all associated inventory items.")) return;
+    if (!confirm(L("মেমোটি মুছবেন? এর সব কেনা স্টক থেকে বাদ যাবে।", "Delete this memo? All its purchases will be removed from stock."))) return;
     
     setIsDeleting(true);
     const existingIds = existingTxns.map(t => t.id);
@@ -214,7 +225,7 @@ export function EditPurchaseMemoClient({
       toast.error(result.error);
       setIsDeleting(false);
     } else {
-      toast.success("Purchase memo deleted successfully!");
+      toast.success(L("মেমো মুছে ফেলা হলো!", "Purchase memo deleted successfully!"));
       router.push("/dashboard/inventory/purchase/history");
     }
   }
@@ -224,11 +235,11 @@ export function EditPurchaseMemoClient({
       {/* 0. Real-time Summary Cards */}
       <div className="grid grid-cols-2 gap-4 mb-8">
         <div className="bg-card border border-border shadow-card rounded-xl p-4 flex flex-col justify-center items-center text-center">
-          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Items</span>
+          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{L("জিনিস", "Items")}</span>
           <span className="text-2xl font-bold text-primary">{rows.filter(r => r.itemId || r.isNew).length}</span>
         </div>
         <div className="bg-card border border-border shadow-card rounded-xl p-4 flex flex-col justify-center items-center text-center">
-          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Bill</span>
+          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{L("মোট বিল", "Total Bill")}</span>
           <span className="text-2xl font-bold text-foreground">{totalBill.toLocaleString()} ৳</span>
         </div>
       </div>
@@ -237,23 +248,23 @@ export function EditPurchaseMemoClient({
       <div className="glass-panel p-5 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            <div className="space-y-1.5">
-             <Label>Date</Label>
+             <Label>{L("তারিখ", "Date")}</Label>
              <Input value={date} disabled />
            </div>
            <div className="space-y-1.5">
-             <Label>Supplier Name</Label>
+             <Label>{L("দোকানের নাম", "Supplier Name")}</Label>
              <Input value={supplierName} disabled />
            </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
            <div className="space-y-1.5">
-             <Label>Transport / Loading Cost (৳)</Label>
+             <Label>{L("পরিবহন / লোড খরচ (৳)", "Transport / Loading Cost (৳)")}</Label>
              <Input type="number" min="0" step="0.01" value={transportCost} onChange={e => setTransportCost(e.target.value)} placeholder="0" />
-             <p className="text-xs text-muted-foreground">Automatically distributed to item unit costs.</p>
+             <p className="text-xs text-muted-foreground">{L("প্রতিটি জিনিসের দামে ভাগ করে যোগ হবে।", "Automatically distributed to item unit costs.")}</p>
            </div>
            <div className="space-y-1.5">
-             <Label>Extra Notes</Label>
-             <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+             <Label>{L("নোট", "Extra Notes")}</Label>
+             <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder={L("ঐচ্ছিক", "Optional")} />
            </div>
         </div>
       </div>
@@ -261,7 +272,7 @@ export function EditPurchaseMemoClient({
       {/* 2. Items List */}
       <div className="glass-panel border-primary/10 shadow-md">
         <div className="border-b border-border bg-muted/30 px-5 py-4 rounded-t-2xl">
-          <h2 className="text-sm font-semibold text-foreground">Purchased Items</h2>
+          <h2 className="text-sm font-semibold text-foreground">{L("কেনা জিনিস", "Purchased Items")}</h2>
         </div>
         <div className="divide-y divide-border bg-background">
           {rows.map((row, idx) => (
@@ -278,17 +289,17 @@ export function EditPurchaseMemoClient({
         </div>
         <div className="p-4 bg-muted/20 border-t border-border flex justify-between items-center rounded-b-2xl">
           <Button type="button" variant="outline" onClick={addRow} className="border-dashed border-primary/30 text-primary hover:bg-primary/5 hover:text-primary rounded-full px-6 transition-all shadow-card">
-            <Plus className="mr-2 h-4 w-4" /> Add Another Item
+            <Plus className="mr-2 h-4 w-4" /> {L("আরেকটি জিনিস", "Add another item")}
           </Button>
           <Button type="button" variant="destructive" onClick={handleDelete} disabled={isDeleting || isPending} className="rounded-full shadow-card">
-            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />} Delete Memo
+            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />} {L("মেমো মুছুন", "Delete memo")}
           </Button>
         </div>
       </div>
 
       <div className="flex justify-end pt-4">
         <Button type="submit" size="lg" className="w-full md:w-auto px-10 shadow-md" disabled={isPending || totalBill <= 0}>
-            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : <><Check className="mr-2 h-4 w-4" /> Save Changes</>}
+            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {L("সেভ হচ্ছে…", "Saving…")}</> : <><Check className="mr-2 h-4 w-4" /> {L("সেভ করুন", "Save changes")}</>}
         </Button>
       </div>
     </form>
@@ -305,6 +316,8 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
   removeRow: (uiId: string) => void;
   canRemove: boolean;
 }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close dropdown
@@ -358,7 +371,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
     <div className="p-5 grid grid-cols-1 lg:grid-cols-[1.5fr_1fr_1fr_40px] gap-6 items-start relative hover:bg-muted/10 transition-colors group">
       {/* 1. Item Selection */}
       <div className="space-y-1.5" ref={wrapperRef}>
-        <Label>Item {idx + 1}</Label>
+        <Label>{L("জিনিস", "Item")} {idx + 1}</Label>
         {!row.isNew && row.itemId ? (
           <div className="flex items-center gap-2 bg-muted/50 border border-input rounded-xl px-3 py-2 text-sm">
             <span className="flex-1 truncate">{displayLabel}</span>
@@ -374,12 +387,12 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
           <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1 flex-1">
-                <Label className="text-xs text-primary uppercase flex items-center gap-1"><PlusCircle className="h-3 w-3" /> New Item Name *</Label>
+                <Label className="text-xs text-primary uppercase flex items-center gap-1"><PlusCircle className="h-3 w-3" /> {L("নতুন জিনিসের নাম *", "New item name *")}</Label>
                 <Input 
                   value={row.newItemName} 
                   onChange={e => updateRow(row.uiId, "newItemName", e.target.value)}
                   className="h-8 text-sm"
-                  placeholder="Enter item name..."
+                  placeholder={L("নাম লিখুন…", "Enter item name...")}
                   required
                 />
               </div>
@@ -389,16 +402,16 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs uppercase">Category</Label>
+                <Label className="text-xs uppercase">{L("ধরন", "Category")}</Label>
                 <Select value={row.newItemCategory} onValueChange={v => updateRow(row.uiId, "newItemCategory", v || "feed")}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>)}
+                    {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value} className="text-xs">{costCategoryLabel(c.value, locale)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs uppercase">Unit</Label>
+                <Label className="text-xs uppercase">{L("একক", "Unit")}</Label>
                 <Select value={row.newItemUnit} onValueChange={v => updateRow(row.uiId, "newItemUnit", v || "kg")}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -419,7 +432,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
                   updateRow(row.uiId, "showDropdown", true);
                 }}
                 onFocus={() => updateRow(row.uiId, "showDropdown", true)}
-                placeholder="Search items..."
+                placeholder={L("জিনিস খুঁজুন…", "Search items...")}
                 className="pl-9"
               />
             </div>
@@ -444,7 +457,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
                     </button>
                   ))}
                   {filteredItems.length === 0 && !showCreateOption && (
-                    <div className="px-3 py-4 text-center text-xs text-muted-foreground">No items found</div>
+                    <div className="px-3 py-4 text-center text-xs text-muted-foreground">{L("কিছু পাওয়া যায়নি", "No items found")}</div>
                   )}
                   {showCreateOption && (
                     <button
@@ -452,12 +465,12 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
                       className="w-full text-left px-3 py-2 text-sm bg-primary/10 text-primary hover:bg-primary/20 rounded-lg flex items-center mt-1 border border-primary/20"
                       onClick={() => {
                         updateRow(row.uiId, "isNew", true);
-                        updateRow(row.uiId, "newItemName", row.searchQuery.trim() || "New Item");
+                        updateRow(row.uiId, "newItemName", row.searchQuery.trim() || L("নতুন জিনিস", "New item"));
                         updateRow(row.uiId, "showDropdown", false);
                       }}
                     >
                       <Plus className="mr-2 h-4 w-4" /> 
-                      {row.searchQuery.trim() ? `Create "${row.searchQuery}"` : "Add New Item"}
+                      {row.searchQuery.trim() ? L(`"${row.searchQuery}" তৈরি করুন`, `Create "${row.searchQuery}"`) : L("নতুন জিনিস যোগ", "Add new item")}
                     </button>
                   )}
                 </div>
@@ -470,21 +483,21 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
       {/* 2. Quantity Input */}
       <div className="space-y-1.5 min-w-[280px]">
         <div className="flex items-center justify-between">
-          <Label>Quantity</Label>
+          <Label>{L("পরিমাণ", "Quantity")}</Label>
           <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
             <button
               type="button"
               className={`px-2 py-0.5 text-xs font-medium rounded-sm transition-colors ${row.mode === "bags" ? "bg-background shadow-card" : "text-muted-foreground"}`}
               onClick={() => updateRow(row.uiId, "mode", "bags")}
             >
-              Bags/Batches
+              {L("বস্তা হিসেবে", "Bags/Batches")}
             </button>
             <button
               type="button"
               className={`px-2 py-0.5 text-xs font-medium rounded-sm transition-colors ${row.mode === "loose" ? "bg-background shadow-card" : "text-muted-foreground"}`}
               onClick={() => updateRow(row.uiId, "mode", "loose")}
             >
-              Total Loose
+              {L("মোট খোলা", "Total Loose")}
             </button>
           </div>
         </div>
@@ -493,7 +506,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
           <div className="flex items-center">
             <div className="relative flex-1">
               <Input type="number" min="0" step="0.01" value={row.bags} onChange={e => updateRow(row.uiId, "bags", e.target.value)} placeholder="0" className="pr-12 rounded-r-none focus:z-10" required />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">Bags</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">{L("বস্তা", "Bags")}</span>
             </div>
             <div className="bg-muted border-y border-input px-3 h-9 flex items-center justify-center text-xs text-muted-foreground">
               ×
@@ -507,7 +520,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
           <div className="relative">
             <Input type="number" min="0" step="0.01" value={row.looseQty} onChange={e => updateRow(row.uiId, "looseQty", e.target.value)} placeholder="e.g. 500" required />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground uppercase">
-              {row.isNew ? row.newItemUnit : (selectedItem?.unit || "Unit")}
+              {row.isNew ? row.newItemUnit : (selectedItem?.unit || L("একক", "Unit"))}
             </span>
           </div>
         )}
@@ -516,21 +529,21 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
       {/* 3. Item Total Cost & Analytics */}
       <div className="space-y-1.5 min-w-[200px] flex-1">
         <div className="flex items-center justify-between">
-          <Label>Price (৳) *</Label>
+          <Label>{L("দাম (৳) *", "Price (৳) *")}</Label>
           <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
             <button
               type="button"
               className={`px-2 py-0.5 text-xs font-medium rounded-sm transition-colors ${row.costMode === "total" ? "bg-background shadow-card" : "text-muted-foreground"}`}
               onClick={() => updateRow(row.uiId, "costMode", "total")}
             >
-              Total Cost
+              {L("মোট দাম", "Total Cost")}
             </button>
             <button
               type="button"
               className={`px-2 py-0.5 text-xs font-medium rounded-sm transition-colors ${row.costMode === "unit" ? "bg-background shadow-card" : "text-muted-foreground"}`}
               onClick={() => updateRow(row.uiId, "costMode", "unit")}
             >
-              {row.mode === "bags" ? "Per Bag" : "Per Unit"}
+              {row.mode === "bags" ? L("প্রতি বস্তা", "Per bag") : L("প্রতি একক", "Per unit")}
             </button>
           </div>
         </div>
@@ -550,7 +563,7 @@ function ItemRow({ row, idx, items, updateRow, removeRow, canRemove }: {
           )}
         </div>
         <div className="mt-2 text-xs leading-tight text-muted-foreground">
-          {currentUnitCost > 0 ? `Unit cost: ${currentUnitCost.toFixed(2)} ৳ / ${selectedItem?.unit || "unit"}` : " "}
+          {currentUnitCost > 0 ? L(`দাম: ${currentUnitCost.toFixed(2)} ৳ / ${selectedItem?.unit || "একক"}`, `Unit cost: ${currentUnitCost.toFixed(2)} ৳ / ${selectedItem?.unit || "unit"}`) : " "}
         </div>
       </div>
 

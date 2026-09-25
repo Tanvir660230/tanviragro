@@ -1,9 +1,9 @@
 "use client";
 
-import React from "react";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useL } from "@/i18n/text";
 
 export interface PrintButtonProps {
   label?: string;
@@ -13,11 +13,12 @@ export interface PrintButtonProps {
 }
 
 export function PrintButton({
-  label = "Print Document",
+  label,
   className,
   variant = "outline",
   size = "sm",
 }: PrintButtonProps) {
+  const L = useL();
   return (
     <Button
       variant={variant}
@@ -29,7 +30,7 @@ export function PrintButton({
       )}
     >
       <Printer className="h-3.5 w-3.5" />
-      {label}
+      {label ?? L("প্রিন্ট করুন", "Print")}
     </Button>
   );
 }

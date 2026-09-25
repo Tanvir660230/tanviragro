@@ -23,6 +23,7 @@ import {
 } from "@/app/dashboard/(app)/cattle/actions";
 
 import type { CattleStatus } from "@/types/database";
+import { useL } from "@/i18n/text";
 
 interface Props {
   cattleId:      string;
@@ -41,6 +42,7 @@ export function CattleDetailMoreMenu({
   isQuarantined,
   isQurbani,
 }: Props) {
+  const L = useL();
   const router = useRouter();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [isPending, startTransition] = useTransition();
@@ -59,7 +61,7 @@ export function CattleDetailMoreMenu({
   const handleQuarantine = () => {
     run(async () => {
       const r = await toggleQuarantine(cattleId, !isQuarantined);
-      toast.success(isQuarantined ? "Removed from quarantine" : "Moved to quarantine");
+      toast.success(isQuarantined ? L("আবার দলে ফিরল", "Removed from quarantine") : L("আলাদা রাখা হলো", "Moved to quarantine"));
       return r;
     });
   };
@@ -68,7 +70,7 @@ export function CattleDetailMoreMenu({
     run(async () => {
       const next = !isQurbani;
       const r = await toggleQurbaniMark(cattleId, next);
-      toast.success(next ? "Marked for Qurbani" : "Qurbani mark removed");
+      toast.success(next ? L("কোরবানির জন্য বাছাই হলো", "Marked for Qurbani") : L("কোরবানি থেকে সরানো হলো", "Qurbani mark removed"));
       return r;
     });
   };
@@ -76,7 +78,7 @@ export function CattleDetailMoreMenu({
   const handleMarkDead = () => {
     run(async () => {
       const r = await markAsDeceased(cattleId);
-      toast.success(`#${tagId} marked as deceased`);
+      toast.success(L(`#${tagId} মৃত হিসেবে লেখা হলো`, `#${tagId} marked as deceased`));
       setConfirm(null);
       return r;
     });
@@ -85,7 +87,7 @@ export function CattleDetailMoreMenu({
   const handleUndoDead = () => {
     run(async () => {
       const r = await undoMarkAsDeceased(cattleId);
-      toast.success(`#${tagId} restored to active`);
+      toast.success(L(`#${tagId} আবার সক্রিয়`, `#${tagId} restored to active`));
       return r;
     });
   };
@@ -96,20 +98,20 @@ export function CattleDetailMoreMenu({
       {confirm === "dead" && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-1.5">
           <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-          <span className="text-xs text-destructive font-medium whitespace-nowrap">Confirm?</span>
+          <span className="text-xs text-destructive font-medium whitespace-nowrap">{L("নিশ্চিত?", "Confirm?")}</span>
           <button
             onClick={handleMarkDead}
             disabled={isPending}
             className="rounded px-2 py-0.5 text-xs font-semibold bg-destructive text-white hover:bg-destructive/90 disabled:opacity-50 transition-colors"
           >
-            {isPending ? "…" : "Yes"}
+            {isPending ? "…" : L("হ্যাঁ", "Yes")}
           </button>
           <button
             onClick={() => setConfirm(null)}
             disabled={isPending}
             className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            Cancel
+            {L("বাতিল", "Cancel")}
           </button>
         </div>
       )}
@@ -118,7 +120,7 @@ export function CattleDetailMoreMenu({
       {confirm === null && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            aria-label="More actions"
+            aria-label={L("আরও", "More actions")}
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground",
               "hover:bg-muted hover:text-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -136,7 +138,7 @@ export function CattleDetailMoreMenu({
                   "h-4 w-4",
                   isQuarantined ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
                 )} />
-                {isQuarantined ? "Remove from Quarantine" : "Move to Quarantine"}
+                {isQuarantined ? L("দলে ফেরত আনুন", "Remove from quarantine") : L("আলাদা রাখুন", "Move to quarantine")}
               </DropdownMenuItem>
             )}
 
@@ -147,7 +149,7 @@ export function CattleDetailMoreMenu({
                   "h-4 w-4",
                   isQurbani ? "text-primary" : "text-muted-foreground"
                 )} />
-                {isQurbani ? "Remove Qurbani Mark" : "Mark for Qurbani"}
+                {isQurbani ? L("কোরবানি থেকে সরান", "Remove Qurbani mark") : L("কোরবানির জন্য বাছুন", "Mark for Qurbani")}
               </DropdownMenuItem>
             )}
 
@@ -160,7 +162,7 @@ export function CattleDetailMoreMenu({
                   onClick={() => setConfirm("dead")}
                 >
                   <Skull className="h-4 w-4" />
-                  Mark as Dead
+                  {L("মৃত লিখুন", "Mark as Dead")}
                 </DropdownMenuItem>
               </>
             )}
@@ -169,7 +171,7 @@ export function CattleDetailMoreMenu({
             {status === "dead" && (
               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={handleUndoDead}>
                 <RotateCcw className="h-4 w-4 text-muted-foreground" />
-                Restore to Active
+                {L("আবার সক্রিয় করুন", "Restore to Active")}
               </DropdownMenuItem>
             )}
 
@@ -178,7 +180,7 @@ export function CattleDetailMoreMenu({
             {/* Print */}
             <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => window.print()}>
               <Printer className="h-4 w-4 text-muted-foreground" />
-              Print / Export
+              {L("প্রিন্ট / এক্সপোর্ট", "Print / Export")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

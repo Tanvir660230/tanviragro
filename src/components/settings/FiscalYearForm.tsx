@@ -6,6 +6,8 @@ import { updateFiscalYear } from "@/app/dashboard/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle2, Calendar } from "lucide-react";
+import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 const MONTHS = [
   { value: 1, label: "January" },
@@ -14,7 +16,7 @@ const MONTHS = [
   { value: 4, label: "April" },
   { value: 5, label: "May" },
   { value: 6, label: "June" },
-  { value: 7, label: "July (Bangladesh Standard: July 1 – June 30)" },
+  { value: 7, label: "July (Bangladesh: July 1 – June 30)" },
   { value: 8, label: "August" },
   { value: 9, label: "September" },
   { value: 10, label: "October" },
@@ -23,6 +25,8 @@ const MONTHS = [
 ];
 
 export function FiscalYearForm({ initialMonth }: { initialMonth: number }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const [state, action, pending] = useActionState(updateFiscalYear, undefined);
 
   useEffect(() => {
@@ -34,7 +38,7 @@ export function FiscalYearForm({ initialMonth }: { initialMonth: number }) {
     <form action={action} className="space-y-3 max-w-md">
       <div className="space-y-1.5">
         <Label htmlFor="fiscal_month" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Fiscal Year Commencement Month
+          {L("অর্থবছর শুরুর মাস", "Fiscal Year Commencement Month")}
         </Label>
         <div className="relative">
           <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -46,18 +50,18 @@ export function FiscalYearForm({ initialMonth }: { initialMonth: number }) {
           >
             {MONTHS.map((m) => (
               <option key={m.value} value={m.value}>
-                {m.label}
+                {locale === "bn" ? new Date(Date.UTC(2026, m.value - 1, 1)).toLocaleDateString("bn-BD", { month: "long", timeZone: "UTC" }) + (m.value === 7 ? " (বাংলাদেশ: ১ জুলাই – ৩০ জুন)" : "") : m.label}
               </option>
             ))}
           </select>
         </div>
         <p className="text-xs text-muted-foreground">
-          Determines the 12-month accounting cycle for Profit & Loss and financial statements.
+          {L("লাভ-ক্ষতি ও হিসাবের ১২ মাস কোন মাস থেকে গোনা হবে।", "Determines the 12-month accounting cycle for Profit & Loss and financial statements.")}
         </p>
       </div>
       <Button type="submit" size="sm" disabled={pending} className="gap-1.5 shadow-sm">
         {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-        Save Fiscal Cycle
+        {L("সেভ করুন", "Save Fiscal Cycle")}
       </Button>
       {state?.error && <p className="text-xs text-destructive font-medium">{state.error}</p>}
     </form>

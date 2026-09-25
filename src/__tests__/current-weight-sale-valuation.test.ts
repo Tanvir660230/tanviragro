@@ -1,4 +1,4 @@
-import { getCurrentLiveWeight, predictWeight } from "@/lib/cattle-weight";
+import { getCurrentLiveWeight } from "@/lib/cattle-weight";
 
 describe("Current Weight and Sell Today Valuation Business Logic Bug Fix", () => {
   test("C004 animal calculates sell-today valuation using latest live weight, NOT initial weight", () => {

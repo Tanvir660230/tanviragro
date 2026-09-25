@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import Link from "next/link";
 import { SellTodaySummary } from "@/components/finance/SellTodaySummary";
 import { AddCostDialog } from "@/components/finance/AddCostDialog";
 import { CapitalSummaryCard } from "@/components/finance/CapitalSummaryCard";
@@ -96,7 +95,6 @@ export default async function FinancePage(props: {
     { data: rawFixedAssetsData },
     { data: treatmentsData },
     { data: deadCattleData },
-    { data: recentPurchasesData },
   ] = await Promise.all([
     businessId
       ? supabase
@@ -130,7 +128,7 @@ export default async function FinancePage(props: {
       ? supabase.rpc("get_cattle_consumptions", { p_business_id: businessId })
       : Promise.resolve({ data: [] }),
     businessId
-      ? supabase.from("businesses").select("unit_price_bdt, default_daily_gain_kg, default_roughage_type").eq("id", businessId).maybeSingle()
+      ? supabase.from("businesses").select("default_daily_gain_kg, default_roughage_type").eq("id", businessId).maybeSingle()
       : Promise.resolve({ data: null }),
     businessId
       ? supabase
@@ -181,14 +179,6 @@ export default async function FinancePage(props: {
           .eq("business_id", businessId)
           .eq("status", "dead")
           .is("deleted_at", null)
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? supabase
-          .from("inventory_transactions")
-          .select("item_id, qty, unit_cost, inventory_items!inner(business_id)")
-          .eq("inventory_items.business_id", businessId)
-          .eq("type", "purchase")
-          .order("recorded_at", { ascending: false })
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -281,13 +271,6 @@ export default async function FinancePage(props: {
       })
     : sales;
 
-  const filteredMonthly = filterStart
-    ? monthlyConsumptions.filter(item => {
-        const m = item.month_yr; // "YYYY-MM"
-        return m >= filterStart!.slice(0, 7) && (!filterEnd || m <= filterEnd.slice(0, 7));
-      })
-    : monthlyConsumptions;
-
   // Totals for PLSummary — from expense entries only (assets excluded)
   const totalFixedCosts = filteredEntries
     .filter((e) => e.type === "fixed")
@@ -364,7 +347,11 @@ export default async function FinancePage(props: {
     notes: r.notes,
   }));
 
-  const defaultMarketPricePerKg: number = (bizConfig as { unit_price_bdt?: number } | null)?.unit_price_bdt ?? 0;
+  // What-if starts from the latest price in the market price log (it used the old ৳1,000 "unit share" value)
+  const { data: lastMarket } = businessId
+    ? await supabase.from("market_prices").select("price_per_kg").eq("business_id", businessId).order("date", { ascending: false }).limit(1).maybeSingle()
+    : { data: null };
+  const defaultMarketPricePerKg: number = Number((lastMarket as { price_per_kg?: number } | null)?.price_per_kg ?? 0);
   const defaultDailyGainKg: number = (bizConfig as { default_daily_gain_kg?: number } | null)?.default_daily_gain_kg ?? 0.6;
 
   const weightPredictions = buildWeightPredictions(
@@ -379,7 +366,6 @@ export default async function FinancePage(props: {
   );
   // Actual herd feeding allocated to each animal (see lib/inventory/herd-feed-share.ts)
   const herdFeedShare = await getHerdFeedShareByCattle(supabase, businessId);
-  const nowMs = new Date().getTime();
   // Apply Algorithmic Feed Cost fallback for any cattle without direct feed logs
   for (const c of activeCattleList) {
     // Recorded herd feeding shared by head-days (actual), never a ration estimate

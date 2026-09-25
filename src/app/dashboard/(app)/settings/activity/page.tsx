@@ -5,12 +5,15 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ActivityTimeline, type ActivityItem } from "@/components/settings/ActivityTimeline";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getL } from "@/i18n/server-text";
+import { costCategoryLabel } from "@/lib/expenses/labels";
 
 export const metadata: Metadata = {
-  title: "Unified Audit Logs",
+  title: "কার্যকলাপ",
 };
 
 export default async function ActivityLogPage() {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.AUDIT_LOG_VIEW);
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
@@ -74,8 +77,8 @@ export default async function ActivityLogPage() {
     activities.push({
       id: `c_${c.id}`,
       type: "cattle_add",
-      title: "New Cattle Purchased",
-      description: `Tag: ${c.tag_id} | Price: ৳${c.purchase_price}`,
+      title: L("নতুন গরু কেনা", "New cattle purchased"),
+      description: L(`ট্যাগ: ${c.tag_id} | দাম: ৳${c.purchase_price}`, `Tag: ${c.tag_id} | Price: ৳${c.purchase_price}`),
       date: c.created_at,
       color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
     });
@@ -85,8 +88,8 @@ export default async function ActivityLogPage() {
     activities.push({
       id: `s_${s.id}`,
       type: "cattle_sold",
-      title: "Cattle Sold",
-      description: `Sold to ${s.buyer_name || "Unknown"} | Amount: ৳${s.sale_price_total}`,
+      title: L("গরু বিক্রি", "Cattle sold"),
+      description: L(`ক্রেতা: ${s.buyer_name || "অজানা"} | টাকা: ৳${s.sale_price_total}`, `Sold to ${s.buyer_name || "Unknown"} | Amount: ৳${s.sale_price_total}`),
       date: s.sold_at,
       color: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400",
     });
@@ -96,21 +99,21 @@ export default async function ActivityLogPage() {
     activities.push({
       id: `cost_${c.id}`,
       type: "cost_add",
-      title: `Expense: ${c.category}`,
-      description: `Amount: ৳${c.amount} | ${c.description || ""}`,
+      title: L(`খরচ: ${costCategoryLabel(c.category, "bn")}`, `Expense: ${costCategoryLabel(c.category, "en")}`),
+      description: L(`টাকা: ৳${c.amount} | ${c.description || ""}`, `Amount: ৳${c.amount} | ${c.description || ""}`),
       date: c.recorded_at,
       color: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400",
     });
   });
 
   (invPurchases as InvPurchaseRow[] ?? []).forEach((p) => {
-    const name = p.inventory_items?.name ?? "Item";
+    const name = p.inventory_items?.name ?? L("জিনিস", "Item");
     const amount = p.unit_cost != null ? Math.round(p.qty * p.unit_cost) : null;
     activities.push({
       id: `inv_${p.id}`,
       type: "inventory_purchase",
-      title: `Purchased: ${name}`,
-      description: `${p.qty} ${p.inventory_items?.unit ?? ""}${amount != null ? ` | Cost: ৳${amount}` : ""}`,
+      title: L(`কেনা: ${name}`, `Purchased: ${name}`),
+      description: `${p.qty} ${p.inventory_items?.unit ?? ""}${amount != null ? L(` | দাম: ৳${amount}`, ` | Cost: ৳${amount}`) : ""}`,
       date: p.recorded_at,
       color: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
     });
@@ -123,8 +126,8 @@ export default async function ActivityLogPage() {
     activities.push({
       id: `tr_${tr.id}`,
       type: "medical_treatment",
-      title: `Treatment: Cattle #${tag}`,
-      description: `${tr.diagnosis || "Medical treatment"}${totalCost > 0 ? ` | Cost: ৳${totalCost}` : ""}`,
+      title: L(`চিকিৎসা: গরু #${tag}`, `Treatment: cattle #${tag}`),
+      description: `${tr.diagnosis || L("চিকিৎসা", "Medical treatment")}${totalCost > 0 ? L(` | খরচ: ৳${totalCost}`, ` | Cost: ৳${totalCost}`) : ""}`,
       date: tr.treated_at,
       color: "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-400",
     });
@@ -135,7 +138,7 @@ export default async function ActivityLogPage() {
     activities.push({
       id: `he_${h.id}`,
       type: "health_event",
-      title: `${h.event_type === "vaccine" ? "Vaccinated" : h.event_type === "checkup" ? "Checkup" : "Health Event"}: Cattle #${tag}`,
+      title: `${h.event_type === "vaccine" ? L("টিকা", "Vaccinated") : h.event_type === "checkup" ? L("চেকআপ", "Checkup") : L("স্বাস্থ্য কাজ", "Health event")}: ${L("গরু", "Cattle")} #${tag}`,
       description: h.title,
       date: h.completed_at,
       color: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400",
@@ -143,13 +146,13 @@ export default async function ActivityLogPage() {
   });
 
   (partnerTxns as PartnerTxnRow[] ?? []).forEach((t) => {
-    const name = t.partners?.name ?? "Partner";
-    const label = t.type === "investment" ? "Investment" : t.type === "profit" ? "Profit Paid" : "Withdrawal";
+    const name = t.partners?.name ?? L("অংশীদার", "Partner");
+    const label = t.type === "investment" ? L("জমা", "Investment") : t.type === "profit" ? L("লাভ দেওয়া", "Profit paid") : L("তোলা", "Withdrawal");
     activities.push({
       id: `pt_${t.id}`,
       type: "partner_txn",
       title: `${label}: ${name}`,
-      description: `Amount: ৳${t.amount}`,
+      description: L(`টাকা: ৳${t.amount}`, `Amount: ৳${t.amount}`),
       date: t.recorded_at,
       color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400",
     });
@@ -159,8 +162,8 @@ export default async function ActivityLogPage() {
     activities.push({
       id: `loan_${l.id}`,
       type: "loan",
-      title: `Loan Taken: ${l.lender_name}`,
-      description: `Amount: ৳${l.principal_amount}`,
+      title: L(`ঋণ নেওয়া: ${l.lender_name}`, `Loan taken: ${l.lender_name}`),
+      description: L(`টাকা: ৳${l.principal_amount}`, `Amount: ৳${l.principal_amount}`),
       date: l.loan_date,
       color: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400",
     });
@@ -168,8 +171,8 @@ export default async function ActivityLogPage() {
       activities.push({
         id: `loanpay_${p.id}`,
         type: "loan",
-        title: `Loan Payment: ${l.lender_name}`,
-        description: `Amount: ৳${p.amount}`,
+        title: L(`ঋণ শোধ: ${l.lender_name}`, `Loan payment: ${l.lender_name}`),
+        description: L(`টাকা: ৳${p.amount}`, `Amount: ৳${p.amount}`),
         date: p.paid_at,
         color: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400",
       });
@@ -182,9 +185,9 @@ export default async function ActivityLogPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader 
-        title="Unified Audit & Activity Logs" 
-        subtitle="A comprehensive immutable timeline of farm events, sales transactions, health interventions, and ledger entries."
-        back="/dashboard/settings?tab=security"
+        title={L("কার্যকলাপ", "Activity")} 
+        subtitle={L("খামারের সব কাজ — গরু কেনা-বেচা, খরচ, খাবার, স্বাস্থ্য ও অংশীদারের লেনদেন।", "A comprehensive immutable timeline of farm events, sales transactions, health interventions, and ledger entries.")}
+        back="/dashboard/settings"
       />
 
       <ActivityTimeline activities={activities} />

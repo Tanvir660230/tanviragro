@@ -15,6 +15,7 @@ import { totalCapitalOf } from "@/lib/partners/calculations";
 import { FormField } from "@/components/partners/partner-ui";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useL } from "@/i18n/text";
 
 export function EditPartnerDialog({
   partner: p,
@@ -25,6 +26,7 @@ export function EditPartnerDialog({
   transactions: PartnerTransaction[];
   t: Dictionary;
 }) {
+  const L = useL();
   const actualCapital = totalCapitalOf(transactions);
   const [open, setOpen] = useState(false);
   const [partnerTypeField, setPartnerTypeField] = useState<PartnerType>(p.partner_type ?? "capital");
@@ -35,11 +37,11 @@ export function EditPartnerDialog({
   useEffect(() => {
     if (state?.success) {
       setTimeout(() => {
-        toast.success("Partner updated");
+        toast.success(L("অংশীদার আপডেট হলো", "Partner updated"));
         setOpen(false);
       }, 0);
     }
-  }, [state]);
+  }, [state, L]);
 
   useEffect(() => {
     if (open) {
@@ -58,7 +60,7 @@ export function EditPartnerDialog({
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Partner</DialogTitle>
+          <DialogTitle>{L("অংশীদার বদলান", "Edit Partner")}</DialogTitle>
         </DialogHeader>
         <form
           action={(fd) => {
@@ -111,14 +113,14 @@ export function EditPartnerDialog({
               <FormField label={t.partners.labor_value_monthly} id="elabor">
                 <Input id="elabor" name="labor_value_monthly" type="number" min="0" step="500" defaultValue={p.labor_value_monthly ?? 0} />
               </FormField>
-              <FormField label="Cliff Period (months)" id="ecliff">
+              <FormField label={L("অপেক্ষার সময় (মাস)", "Cliff Period (months)")} id="ecliff">
                 <Input id="ecliff" name="cliff_months" type="number" min="0" step="1" defaultValue={p.cliff_months ?? 0} />
-                <p className="text-xs text-muted-foreground mt-1">Months before labor units start vesting (0 = immediate)</p>
+                <p className="text-xs text-muted-foreground mt-1">{L("শ্রমের মূল্য যোগ হওয়ার আগে কত মাস (0 = সাথে সাথে)", "Months before labor units start vesting (0 = immediate)")}</p>
               </FormField>
             </>
           )}
 
-          <FormField label="Share Mode">
+          <FormField label={L("ভাগের ধরন", "Share Mode")}>
             <div className="flex gap-2">
               {(["auto", "manual"] as const).map((mode) => (
                 <button
@@ -132,7 +134,7 @@ export function EditPartnerDialog({
                       : "border-border bg-card text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {mode === "auto" ? "Auto (Ratio-Based)" : "Manual %"}
+                  {mode === "auto" ? L("নিজে (অনুপাতে)", "Auto (ratio-based)") : L("নিজে দেওয়া %", "Manual %")}
                 </button>
               ))}
             </div>
@@ -147,8 +149,8 @@ export function EditPartnerDialog({
           {partnerTypeField !== "labor" && (
             <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-card">
               <div className="space-y-0.5">
-                <Label htmlFor={`edit-bears-loss-${p.id}`} className="text-base">Bears Capital Loss</Label>
-                <p className="text-xs text-muted-foreground">Does this partner take a share of business losses?</p>
+                <Label htmlFor={`edit-bears-loss-${p.id}`} className="text-base">{L("ক্ষতির ভাগ নেবেন", "Bears Capital Loss")}</Label>
+                <p className="text-xs text-muted-foreground">{L("এই অংশীদার কি ক্ষতিরও ভাগ নেবেন?", "Does this partner take a share of business losses?")}</p>
               </div>
               <input
                 type="checkbox"

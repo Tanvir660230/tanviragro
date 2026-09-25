@@ -2,13 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ReceiptText } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EditPurchaseMemoClient } from "@/components/inventory/EditPurchaseMemoClient";
 import { undonePurchaseIds } from "@/lib/inventory/purchase-rows";
+import { getL } from "@/i18n/server-text";
 
 export const metadata = {
-  title: "Edit Purchase Memo | Tanvir Agro",
+  title: "মেমো ঠিক করুন",
 };
 
 export default async function EditPurchaseMemoPage({
@@ -16,6 +17,7 @@ export default async function EditPurchaseMemoPage({
 }: {
   params: Promise<{ date: string; supplier: string }>;
 }) {
+  const L = await getL();
   const { date, supplier } = await params;
   const decodedSupplier = decodeURIComponent(supplier);
 
@@ -56,8 +58,8 @@ export default async function EditPurchaseMemoPage({
   if (memoTxns.length === 0) {
     return (
       <div className="p-12 text-center text-muted-foreground">
-        <h2>Memo not found or deleted.</h2>
-        <Link href="/dashboard/inventory/purchase/history" className="text-primary hover:underline mt-4 inline-block">Go Back</Link>
+        <h2>{L("মেমো পাওয়া যায়নি বা মুছে ফেলা হয়েছে।", "Memo not found or deleted.")}</h2>
+        <Link href="/dashboard/inventory/purchase/history" className="text-primary hover:underline mt-4 inline-block">{L("ফিরে যান", "Go Back")}</Link>
       </div>
     );
   }
@@ -119,7 +121,7 @@ export default async function EditPurchaseMemoPage({
   return (
     <div className="space-y-4 max-w-4xl mx-auto pb-12">
       <PageHeader
-        title="Edit Purchase Memo"
+        title={L("মেমো ঠিক করুন", "Edit purchase memo")}
         subtitle={`${decodedSupplier} • ${date}`}
         icon={ReceiptText}
         back="/dashboard/inventory/purchase/history"

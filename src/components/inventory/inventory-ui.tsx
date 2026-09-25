@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import { Tr } from "@/i18n/Tr";
 import {
   Wheat,
   Pill,
@@ -8,7 +9,6 @@ import {
   Layers,
   AlertTriangle,
   ShieldAlert,
-  CheckCircle2,
 } from "lucide-react";
 
 export const CATEGORY_CONFIG: Record<
@@ -64,6 +64,8 @@ export const CATEGORY_CONFIG: Record<
   },
 };
 
+const CATEGORY_SHORT_BN: Record<string, string> = { feed: "খাবার", roughage: "খড়/ঘাস", medicine: "ওষুধ", equipment: "যন্ত্রপাতি", other: "অন্যান্য", supplies: "সামগ্রী" };
+
 export function CategoryBadge({
   category,
   className,
@@ -84,7 +86,7 @@ export function CategoryBadge({
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", conf.dot)} />
       <Icon className="h-3 w-3 opacity-80" />
-      <span>{conf.label.split(" ")[0]}</span>
+      <span><Tr bn={CATEGORY_SHORT_BN[category] ?? conf.label.split(" ")[0]} en={conf.label.split(" ")[0]} /></span>
     </span>
   );
 }
@@ -200,14 +202,14 @@ export function StockHealthIndicator({
         </span>
         {isOut ? (
           <span className="font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
-            <ShieldAlert className="h-3 w-3" /> Depleted
+            <ShieldAlert className="h-3 w-3" /> <Tr bn="শেষ" en="Depleted" />
           </span>
         ) : isLow ? (
           <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" /> Low Stock
+            <AlertTriangle className="h-3 w-3" /> <Tr bn="কম আছে" en="Low stock" />
           </span>
         ) : (
-          <span className="text-muted-foreground/70 font-medium">Optimal</span>
+          <span className="text-muted-foreground/70 font-medium"><Tr bn="যথেষ্ট" en="Enough" /></span>
         )}
       </div>
 

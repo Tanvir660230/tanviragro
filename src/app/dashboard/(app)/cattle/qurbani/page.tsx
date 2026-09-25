@@ -4,8 +4,9 @@ import { Moon } from "lucide-react";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { QurbaniBoardClient } from "@/components/cattle/QurbaniBoardClient";
+import { getL } from "@/i18n/server-text";
 
-export const metadata: Metadata = { title: "Qurbani Board" };
+export const metadata: Metadata = { title: "কোরবানি" };
 
 // Approximate Eid-ul-Adha dates (Bangladesh moon sighting) — kept in sync with EidCountdownCard
 const EID_DATES = [
@@ -106,6 +107,7 @@ function QurbaniSkeleton() {
 }
 
 async function QurbaniBoardSection() {
+  const L = await getL();
   const supabase = await getServerClient();
   const businessId = await getCachedBusinessId();
 
@@ -195,7 +197,7 @@ async function QurbaniBoardSection() {
     <>
       <PageHeader
         title="Qurbani Board"
-        subtitle={`${cattle.length} marked · Eid in ${daysToEid} days`}
+        subtitle={L(`${cattle.length}টি বাছাই · ঈদের ${daysToEid} দিন বাকি`, `${cattle.length} marked · Eid in ${daysToEid} days`)}
         icon={Moon}
         back="/dashboard/cattle"
         badge={cattle.length || undefined}

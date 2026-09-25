@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { useL } from "@/i18n/text";
 
 export type CattleWorkspaceTabId =
   | "overview"
@@ -61,6 +62,7 @@ export function CattleDetailTabs({
   weightLogsCount,
   photosCount,
 }: Props) {
+  const L = useL();
   const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
@@ -76,19 +78,19 @@ export function CattleDetailTabs({
     },
     {
       id: "weight",
-      label: "Weight & Growth",
+      label: L("ওজন ও বৃদ্ধি", "Weight & growth"),
       icon: Scale,
       badge: weightLogsCount !== undefined ? weightLogsCount : undefined,
     },
-    { id: "feed", label: "Feed & Ration", icon: Utensils },
-    { id: "finance", label: "Financial 360°", icon: Receipt },
+    { id: "feed", label: L("খাবার", "Feed"), icon: Utensils },
+    { id: "finance", label: L("টাকার হিসাব", "Money"), icon: Receipt },
     {
       id: "gallery",
       label: t.cattle_details.photos.photos || "Gallery",
       icon: Images,
       badge: photosCount !== undefined ? photosCount : undefined,
     },
-    { id: "timeline", label: "Timeline", icon: History },
+    { id: "timeline", label: L("সময়রেখা", "Timeline"), icon: History },
     { id: "identity", label: "QR & ID", icon: QrCode },
   ];
 

@@ -1,6 +1,5 @@
 'use client';
 
-import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LogOut } from 'lucide-react';
@@ -14,7 +13,6 @@ import {
   navGroupLabel,
 } from './nav-config';
 import { ExtendedUserRole, ROLE_BADGE_STYLE } from '@/constants/roles';
-import { useShell } from '@/components/layout/ShellContext';
 
 interface SidebarExpandedProps {
   isAdmin?: boolean;

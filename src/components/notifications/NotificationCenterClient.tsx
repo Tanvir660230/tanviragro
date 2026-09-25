@@ -3,16 +3,28 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
-  Bell, CheckCircle2, AlertCircle, AlertTriangle, Info,
-  HeartPulse, Package, Landmark, Shield, Scale, ChevronRight,
-  Filter, Search, Pin, Archive, Check, CheckCheck, Sparkles,
-  Calendar, ArrowUpDown, Trash2, ShieldAlert, Clock, RefreshCw
+  Bell,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+  HeartPulse,
+  Package,
+  Landmark,
+  Shield,
+  Scale,
+  ChevronRight,
+  Search,
+  Pin,
+  Archive,
+  Check,
+  CheckCheck,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ALERT_HIERARCHY, AlertSeverity, compareSeverity } from "@/lib/alerts/hierarchy";
+import { ALERT_HIERARCHY, compareSeverity } from "@/lib/alerts/hierarchy";
 import { NotificationItem, NotificationCategory, NotificationFilterState } from "@/lib/notifications/types";
+import { useL } from "@/i18n/text";
 
 const ICON_MAP = {
   heart: HeartPulse,
@@ -41,6 +53,7 @@ export function NotificationCenterClient({
 }: {
   initialNotifications: NotificationItem[];
 }) {
+  const L = useL();
   const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<NotificationCategory>("all");
@@ -153,24 +166,24 @@ export function NotificationCenterClient({
       {/* KPI Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total Active</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{L("মোট সক্রিয়", "Total Active")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{activeItems.length}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Across all modules</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("সব অংশ মিলিয়ে", "Across all modules")}</p>
         </div>
         <div className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.04] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">Critical Priority</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">{L("জরুরি", "Critical Priority")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-rose-700 dark:text-rose-400 mt-1">{criticalCount}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Immediate attention</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("এখনই দেখুন", "Immediate attention")}</p>
         </div>
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Unread</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">{L("না পড়া", "Unread")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{unreadCount}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">New notices</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("নতুন", "New notices")}</p>
         </div>
         <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-primary">Pinned</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-primary">{L("পিন করা", "Pinned")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-primary mt-1">{pinnedCount}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">High focus</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("গুরুত্বপূর্ণ", "High focus")}</p>
         </div>
       </div>
 
@@ -189,8 +202,7 @@ export function NotificationCenterClient({
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              <span>{tab.label}</span>
-              <span className="text-[11px] font-normal opacity-70">({tab.labelBn})</span>
+              <span>{L(tab.labelBn, tab.label)}</span>
             </button>
           );
         })}
@@ -201,7 +213,7 @@ export function NotificationCenterClient({
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search alerts, tag, or item..."
+            placeholder={L("সতর্কতা, ট্যাগ বা জিনিস খুঁজুন…", "Search alerts, tag, or item...")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-8 text-xs rounded-xl"
@@ -222,7 +234,7 @@ export function NotificationCenterClient({
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {st}
+                {L(({ all: "সব", unread: "না পড়া", pinned: "পিন করা", archived: "আর্কাইভ" } as Record<string, string>)[st] ?? st, st)}
               </button>
             ))}
           </div>
@@ -236,7 +248,7 @@ export function NotificationCenterClient({
               className="h-8 text-xs gap-1 rounded-xl cursor-pointer"
             >
               <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Mark All Read</span>
+              <span>{L("সব পড়া হয়েছে", "Mark all read")}</span>
             </Button>
           )}
         </div>
@@ -248,11 +260,11 @@ export function NotificationCenterClient({
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-950/40 mx-auto mb-3">
             <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <p className="text-sm font-bold text-foreground">No alerts in this view</p>
+          <p className="text-sm font-bold text-foreground">{L("এখানে কোনো সতর্কতা নেই", "No alerts in this view")}</p>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
             {activeState === "archived"
-              ? "Archived notices will appear here."
-              : "Everything is running smoothly with no pending alerts matching your criteria."}
+              ? L("আর্কাইভ করা সতর্কতা এখানে দেখা যাবে।", "Archived notices will appear here.")
+              : L("সব ঠিক আছে — কোনো বাকি সতর্কতা নেই।", "Everything is fine — no pending alerts.")}
           </p>
         </div>
       ) : (
@@ -290,7 +302,7 @@ export function NotificationCenterClient({
                           sev.colorClass.badge
                         )}
                       >
-                        {sev.labelEn}
+                        {L(sev.labelBn, sev.labelEn)}
                       </span>
                       <h4
                         className={cn(
@@ -302,7 +314,7 @@ export function NotificationCenterClient({
                       </h4>
                       {item.isPinned && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">
-                          <Pin className="h-2.5 w-2.5 rotate-45" /> Pinned
+                          <Pin className="h-2.5 w-2.5 rotate-45" /> {L("পিন করা", "Pinned")}
                         </span>
                       )}
                     </div>
@@ -315,30 +327,30 @@ export function NotificationCenterClient({
                 <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
                   <button
                     onClick={(e) => handleTogglePin(item.id, e)}
-                    title={item.isPinned ? "Unpin notice" : "Pin notice to top"}
+                    title={item.isPinned ? L("পিন সরান", "Unpin") : L("উপরে পিন করুন", "Pin to top")}
                     className={cn(
                       "p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer",
                       item.isPinned && "text-primary bg-primary/10"
                     )}
-                    aria-label={item.isPinned ? "Unpin" : "Pin"}
+                    aria-label={item.isPinned ? L("পিন সরান", "Unpin") : L("পিন করুন", "Pin")}
                   >
                     <Pin className="h-3.5 w-3.5 rotate-45" />
                   </button>
 
                   <button
                     onClick={(e) => handleToggleRead(item.id, e)}
-                    title={item.isRead ? "Mark unread" : "Mark as read"}
+                    title={item.isRead ? L("না পড়া করুন", "Mark unread") : L("পড়া হয়েছে", "Mark as read")}
                     className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                    aria-label={item.isRead ? "Mark unread" : "Mark as read"}
+                    aria-label={item.isRead ? L("না পড়া করুন", "Mark unread") : L("পড়া হয়েছে", "Mark as read")}
                   >
                     {item.isRead ? <Check className="h-3.5 w-3.5" /> : <CheckCheck className="h-3.5 w-3.5 text-primary" />}
                   </button>
 
                   <button
                     onClick={(e) => handleToggleArchive(item.id, e)}
-                    title={item.isArchived ? "Unarchive" : "Archive notice"}
+                    title={item.isArchived ? L("ফেরত আনুন", "Unarchive") : L("আর্কাইভ করুন", "Archive")}
                     className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                    aria-label={item.isArchived ? "Unarchive" : "Archive"}
+                    aria-label={item.isArchived ? L("ফেরত আনুন", "Unarchive") : L("আর্কাইভ করুন", "Archive")}
                   >
                     <Archive className="h-3.5 w-3.5" />
                   </button>
@@ -347,7 +359,7 @@ export function NotificationCenterClient({
                     href={item.href}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline ml-1 px-2.5 py-1 rounded-lg bg-primary/5 hover:bg-primary/10 transition-colors"
                   >
-                    <span>{item.actionLabel || "View"}</span>
+                    <span>{item.actionLabel || L("দেখুন", "View")}</span>
                     <ChevronRight className="h-3 w-3" />
                   </Link>
                 </div>

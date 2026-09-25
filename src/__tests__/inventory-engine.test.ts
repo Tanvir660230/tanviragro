@@ -2,12 +2,7 @@ import { CostingEngine } from "@/lib/inventory/costing-engine";
 import { StockLedgerEngine } from "@/lib/inventory/stock-ledger";
 import { AdjustmentEngine } from "@/lib/inventory/adjustment-engine";
 import { InventoryEventBus } from "@/lib/inventory/events";
-import {
-  InsufficientStockError,
-  UnitConversionError,
-  BatchExpiredError,
-  ReservationConflictError,
-} from "@/lib/inventory/errors";
+import { InsufficientStockError } from "@/lib/inventory/errors";
 
 describe("Phase 4: Costing & Valuation Engine", () => {
   test("Computes exact FIFO consumption cost across multiple purchase batches", () => {

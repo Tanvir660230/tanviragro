@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import type { MonthlyPoint } from "@/lib/supabase/queries/analytics";
 import type { SaleRecord } from "./PLSummary";
+import { useL } from "@/i18n/text";
 
 interface Props {
   monthlyData: MonthlyPoint[];
@@ -37,6 +38,7 @@ export function FinanceAnalyticsPanel({
   feedCostByCattle = {},
   directCostByCattle = {},
 }: Props) {
+  const L = useL();
   const safeRev = (r: SaleRecord) => Number.isFinite(r.sale_price_total) ? r.sale_price_total : 0;
   const safeCost = (r: SaleRecord) => Number.isFinite(r.purchase_price) ? r.purchase_price! : 0;
   const safeFeed = (r: SaleRecord) => feedCostByCattle[r.cattle_id] ?? 0;
@@ -59,7 +61,7 @@ export function FinanceAnalyticsPanel({
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="rounded-xl shadow-card ring-1 ring-black/5">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold tracking-tight">Revenue vs Cost Trend</CardTitle>
+            <CardTitle className="text-sm font-semibold tracking-tight">{L("বিক্রি বনাম খরচ", "Revenue vs Cost Trend")}</CardTitle>
           </CardHeader>
           <CardContent>
             <PLTrendChart data={monthlyData} />
@@ -68,7 +70,7 @@ export function FinanceAnalyticsPanel({
 
         <Card className="rounded-xl shadow-card ring-1 ring-black/5">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold tracking-tight">Cost Breakdown</CardTitle>
+            <CardTitle className="text-sm font-semibold tracking-tight">{L("খরচের ভাগ", "Cost Breakdown")}</CardTitle>
           </CardHeader>
           <CardContent>
             <CostBreakdownChart
@@ -93,7 +95,7 @@ export function FinanceAnalyticsPanel({
 
       {/* Row 4: Per-head ROI */}
       <div>
-        <h3 className="text-base font-semibold tracking-tight mb-3">Per-Head ROI Ranking</h3>
+        <h3 className="text-base font-semibold tracking-tight mb-3">{L("প্রতি গরুর লাভ", "Per-Head ROI Ranking")}</h3>
         <PerHeadROITable sales={sales} totalFixedCosts={totalFixedCosts} feedCostByCattle={feedCostByCattle} directCostByCattle={directCostByCattle} />
       </div>
     </div>

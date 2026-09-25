@@ -2,13 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, History, ReceiptText, Calendar, ArrowRight } from "lucide-react";
+import { History, ReceiptText, Calendar, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { format } from "date-fns";
 import { undonePurchaseIds } from "@/lib/inventory/purchase-rows";
+import { getL } from "@/i18n/server-text";
 
 export const metadata = {
-  title: "Purchase History | Tanvir Agro",
+  title: "কেনার ইতিহাস",
 };
 
 type PurchaseTx = {
@@ -33,6 +33,7 @@ type MemoGroup = {
 };
 
 export default async function PurchaseHistoryPage() {
+  const L = await getL();
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) redirect("/login");
@@ -64,7 +65,7 @@ export default async function PurchaseHistoryPage() {
   (txns || []).filter((tx) => !undone.has(tx.id)).forEach((tx) => {
     // Extract supplier from notes
     // Notes format: "Invoice Memo. Supplier: Supplier Name." or "Invoice Memo. Supplier: Supplier Name. | Extra"
-    let supplierName = "Unknown Supplier";
+    let supplierName = L("অজানা দোকান", "Unknown supplier");
     const supplierMatch = tx.notes?.match(/Supplier:\s*(.*?)(?:\. | \| |\.?$|$)/);
     if (supplierMatch && supplierMatch[1]) {
       supplierName = supplierMatch[1].trim();
@@ -99,20 +100,20 @@ export default async function PurchaseHistoryPage() {
     <div className="space-y-4 max-w-5xl mx-auto pb-12">
       <PageHeader
         title="Purchase History"
-        subtitle="View and modify past bulk purchase memos."
+        subtitle={L("আগের কেনার মেমো দেখুন ও ঠিক করুন।", "View and modify past bulk purchase memos.")}
         icon={History}
         back="/dashboard/inventory"
       />
 
       <div className="glass-panel border-primary/10 shadow-md">
         <div className="border-b border-border bg-muted/30 px-5 py-4 rounded-t-2xl">
-          <h2 className="text-sm font-semibold text-foreground">All Memos</h2>
+          <h2 className="text-sm font-semibold text-foreground">{L("সব মেমো", "All Memos")}</h2>
         </div>
         
         {memos.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             <ReceiptText className="mx-auto h-8 w-8 opacity-20 mb-3" />
-            <p>No purchase memos found.</p>
+            <p>{L("কোনো মেমো নেই।", "No purchase memos found.")}</p>
           </div>
         ) : (
           <div className="divide-y divide-border bg-background rounded-b-2xl">
@@ -133,22 +134,22 @@ export default async function PurchaseHistoryPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        Bought {format(new Date(memo.date), "MMM d, yyyy")}
+                        {L("কেনা", "Bought")} {memo.date.slice(0, 10)}
                       </span>
                       {memo.enteredOn !== memo.date.slice(0, 10) && (
-                        <span title="Late entries are normal: stock and cost use the purchase date">
-                          · entered {format(new Date(memo.enteredOn), "MMM d")}
+                        <span title={L("পরে লেখা স্বাভাবিক: স্টক ও খরচ কেনার তারিখ ধরেই হয়", "Late entries are normal: stock and cost use the purchase date")}>
+                          · {L("লেখা", "entered")} {String(memo.enteredOn).slice(0, 10)}
                         </span>
                       )}
                       <span>•</span>
-                      <span>{memo.itemCount} items</span>
+                      <span>{L(`${memo.itemCount}টি জিনিস`, `${memo.itemCount} items`)}</span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-right">
                   <div>
                     <div className="font-bold text-base">{memo.totalCost.toLocaleString(undefined, { maximumFractionDigits: 2 })} ৳</div>
-                    <div className="text-xs text-muted-foreground">Total Value</div>
+                    <div className="text-xs text-muted-foreground">{L("মোট দাম", "Total Value")}</div>
                   </div>
                   <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors opacity-50 group-hover:opacity-100" />
                 </div>

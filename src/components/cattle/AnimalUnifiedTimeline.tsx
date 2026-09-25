@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UnifiedTimelineEvent, TimelineEventCategory } from "@/lib/livestock/types";
+import { useL } from "@/i18n/text";
 
 interface Props {
   events: UnifiedTimelineEvent[];
@@ -25,16 +26,17 @@ interface Props {
 }
 
 export function AnimalUnifiedTimeline({ events }: Props) {
+  const L = useL();
   const [selectedCategory, setSelectedCategory] = useState<TimelineEventCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   const categories: Array<{ key: TimelineEventCategory; label: string }> = [
-    { key: "all", label: "All Events" },
-    { key: "lifecycle", label: "Lifecycle" },
-    { key: "growth", label: "Growth" },
-    { key: "health", label: "Health" },
-    { key: "breeding", label: "Breeding" },
-    { key: "financial", label: "Financial" },
+    { key: "all", label: L("সব", "All events") },
+    { key: "lifecycle", label: L("জীবনচক্র", "Lifecycle") },
+    { key: "growth", label: L("বৃদ্ধি", "Growth") },
+    { key: "health", label: L("স্বাস্থ্য", "Health") },
+    { key: "breeding", label: L("প্রজনন", "Breeding") },
+    { key: "financial", label: L("টাকা", "Financial") },
   ];
 
   const filteredEvents = events.filter((e) => {
@@ -113,7 +115,7 @@ export function AnimalUnifiedTimeline({ events }: Props) {
         <div className="relative w-full sm:w-56 shrink-0">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search events..."
+            placeholder={L("খুঁজুন…", "Search events...")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-8 text-xs bg-background"
@@ -125,8 +127,8 @@ export function AnimalUnifiedTimeline({ events }: Props) {
       {filteredEvents.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-8 rounded-xl border border-dashed border-border bg-card/50 text-center">
           <History className="h-8 w-8 text-muted-foreground/50 mb-2" />
-          <p className="text-xs font-semibold text-foreground">No timeline events found</p>
-          <p className="text-[11px] text-muted-foreground">No events match the selected category or search.</p>
+          <p className="text-xs font-semibold text-foreground">{L("কিছু পাওয়া যায়নি", "No timeline events found")}</p>
+          <p className="text-[11px] text-muted-foreground">{L("এই ধরনে বা খোঁজায় কিছু নেই।", "No events match the selected category or search.")}</p>
         </div>
       ) : (
         <div className="relative pl-6 space-y-3.5 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
@@ -152,8 +154,8 @@ export function AnimalUnifiedTimeline({ events }: Props) {
                 <p className="text-xs text-muted-foreground leading-relaxed">{evt.description}</p>
                 {evt.actor && (
                   <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span className="font-semibold text-foreground">Recorded by:</span>
-                    <span>{evt.actor.role || "User"}</span>
+                    <span className="font-semibold text-foreground">{L("লিখেছেন", "Recorded by")}:</span>
+                    <span>{evt.actor.role || L("ব্যবহারকারী", "User")}</span>
                   </div>
                 )}
               </div>

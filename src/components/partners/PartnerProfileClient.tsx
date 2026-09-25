@@ -14,7 +14,6 @@ import {
   Wrench,
   Pencil,
   Trash2,
-  ChevronRight,
   X,
   FileText,
 } from "lucide-react";
@@ -51,6 +50,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CapitalTimelineChart } from "@/components/partners/CapitalTimelineChart";
 import { EditPartnerProfileModal } from "@/components/partners/modals/EditPartnerProfileModal";
+import { useL } from "@/i18n/text";
+import { partnerTxnLabel, partnerTypeLabel } from "@/lib/partners/labels";
+import { Tr } from "@/i18n/Tr";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,11 +87,7 @@ function bdt(n: number) {
 }
 
 function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return d.slice(0, 10);
 }
 
 const AVATAR_COLORS = [
@@ -183,6 +182,8 @@ export function PartnerProfileClient({
   totalBusinessValue,
   hasMarketPrice,
 }: Props) {
+  const L = useL();
+  const { locale } = useTranslation();
   const router = useRouter();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -203,12 +204,12 @@ export function PartnerProfileClient({
 
   useEffect(() => {
     if (txnState?.success) {
-      toast.success("Transaction saved");
+      toast.success(L("লেনদেন সেভ হলো", "Transaction saved"));
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAddTxnOpen(false);
     }
     if (txnState?.error) toast.error(txnState.error);
-  }, [txnState]);
+  }, [txnState, L]);
 
   // Build running balance (oldest → newest), display newest first
   const chronological = [...transactions].sort(
@@ -240,20 +241,20 @@ export function PartnerProfileClient({
   };
 
   const filterTabs: { key: TxnFilter; label: string; count: number }[] = [
-    { key: "all", label: "All", count: filterCounts.all },
+    { key: "all", label: L("সব", "All"), count: filterCounts.all },
     {
       key: "investment",
-      label: "Investments",
+      label: L("জমা", "Investments"),
       count: filterCounts.investment,
     },
     {
       key: "withdrawal",
-      label: "Withdrawals",
+      label: L("তোলা", "Withdrawals"),
       count: filterCounts.withdrawal,
     },
     {
       key: "profit",
-      label: "Distributions",
+      label: L("লাভ/ক্ষতির ভাগ", "Distributions"),
       count: filterCounts.profit,
     },
   ];
@@ -279,7 +280,7 @@ export function PartnerProfileClient({
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success(`${p.name} removed`);
+        toast.success(L(`${p.name} সরানো হলো`, `${p.name} removed`));
         router.push("/dashboard/partners");
       }
     });
@@ -291,7 +292,7 @@ export function PartnerProfileClient({
     setDeletingTxnId(null);
     setConfirmTxnId(null);
     if (result?.error) toast.error(result.error);
-    else toast.success("Transaction deleted");
+    else toast.success(L("লেনদেন মুছে ফেলা হলো", "Transaction deleted"));
   }
 
   return (
@@ -322,7 +323,7 @@ export function PartnerProfileClient({
                       "inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full",
                       typeCfg.cls
                     )}>
-                      {typeCfg.label}
+                      {partnerTypeLabel(p.partner_type, locale)}
                     </span>
                     <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                       <Layers className="h-3 w-3" />
@@ -331,13 +332,13 @@ export function PartnerProfileClient({
                     {acc.pendingProfit > 0 && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                         <Clock className="h-3 w-3" />
-                        Profit due: {bdt(acc.pendingProfit)}
+                        {L("লাভ পাওনা", "Profit due")}: {bdt(acc.pendingProfit)}
                       </span>
                     )}
                     {acc.pendingLoss > 0 && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
                         <Clock className="h-3 w-3" />
-                        Loss due: {bdt(acc.pendingLoss)}
+                        {L("ক্ষতি বাকি", "Loss due")}: {bdt(acc.pendingLoss)}
                       </span>
                     )}
                   </div>
@@ -350,27 +351,27 @@ export function PartnerProfileClient({
                     className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Add Transaction</span>
-                    <span className="sm:hidden">Add</span>
+                    <span className="hidden sm:inline">{L("লেনদেন যোগ", "Add transaction")}</span>
+                    <span className="sm:hidden">{L("যোগ", "Add")}</span>
                   </button>
                   <button
                     onClick={() => setEditOpen(true)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    title="Edit"
+                    title={L("বদলান", "Edit")}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   {deleteConfirm ? (
                     <div className="flex items-center gap-1.5 text-xs border border-destructive/30 rounded-lg px-2.5 py-1.5 bg-destructive/5">
-                      <span className="text-destructive font-medium">Delete?</span>
-                      <button onClick={handleDelete} disabled={isDeleting} className="text-destructive font-bold hover:underline">Yes</button>
-                      <button onClick={() => setDeleteConfirm(false)} className="text-muted-foreground hover:underline">No</button>
+                      <span className="text-destructive font-medium">{L("মুছবেন?", "Delete?")}</span>
+                      <button onClick={handleDelete} disabled={isDeleting} className="text-destructive font-bold hover:underline">{L("হ্যাঁ", "Yes")}</button>
+                      <button onClick={() => setDeleteConfirm(false)} className="text-muted-foreground hover:underline">{L("না", "No")}</button>
                     </div>
                   ) : (
                     <button
                       onClick={() => setDeleteConfirm(true)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
-                      title="Delete"
+                      title={L("মুছুন", "Delete")}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -379,15 +380,15 @@ export function PartnerProfileClient({
               </div>
 
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm text-muted-foreground">
-                <span>Joined {fmtDate(p.joined_at)}</span>
+                <span>{L("যোগ দিয়েছেন", "Joined")} {fmtDate(p.joined_at)}</span>
                 <span>·</span>
-                <span>{acc.months} month{acc.months !== 1 ? "s" : ""} active</span>
+                <span>{L(`${acc.months} মাস ধরে`, `${acc.months} month${acc.months !== 1 ? "s" : ""} active`)}</span>
                 {!p.bears_loss && p.partner_type !== "labor" && (
                   <><span>·</span>
-                  <span className="text-amber-600 dark:text-amber-400 font-medium">No loss sharing</span></>
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">{L("ক্ষতির ভাগ নেই", "No loss sharing")}</span></>
                 )}
                 {p.share_mode === "manual" && (
-                  <><span>·</span><span>Fixed share</span></>
+                  <><span>·</span><span>{L("নির্দিষ্ট ভাগ", "Fixed share")}</span></>
                 )}
               </div>
 
@@ -411,13 +412,13 @@ export function PartnerProfileClient({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <ProfileStatCard
               icon={Banknote}
-              label="Total Invested"
+              label={L("মোট জমা", "Total Invested")}
               value={bdt(acc.totalInvested)}
               iconCls="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
             />
             <ProfileStatCard
               icon={isEquityPositive ? TrendingUp : TrendingDown}
-              label="Current Equity"
+              label={L("বর্তমান মূলধন", "Current Equity")}
               value={(isEquityPositive ? "" : "−") + bdt(acc.equity)}
               valueColor={isEquityPositive ? "green" : "red"}
               iconCls={isEquityPositive
@@ -428,17 +429,17 @@ export function PartnerProfileClient({
             />
             <ProfileStatCard
               icon={Layers}
-              label="Profit Share"
+              label={L("লাভের ভাগ", "Profit Share")}
               value={`${sharePct.toFixed(1)}%`}
               iconCls="text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-900/30"
             />
             <ProfileStatCard
               icon={Wallet}
-              label="Profit Received"
+              label={L("লাভ পেয়েছেন", "Profit Received")}
               value={bdt(acc.profitReceived)}
               valueColor="green"
               iconCls="text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30"
-              sub={acc.pendingProfit > 0 ? `Pending: ${bdt(acc.pendingProfit)}` : undefined}
+              sub={acc.pendingProfit > 0 ? L(`বাকি: ${bdt(acc.pendingProfit)}`, `Pending: ${bdt(acc.pendingProfit)}`) : undefined}
             />
           </div>
         );
@@ -449,11 +450,11 @@ export function PartnerProfileClient({
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Wallet className="h-4 w-4 text-muted-foreground" />
-            Capital Account
+            {L("মূলধনের হিসাব", "Capital Account")}
           </h3>
           {p.share_mode === "auto" && (
             <span className="text-xs text-muted-foreground">
-              Ratio-based allocation
+              {L("অনুপাত অনুযায়ী ভাগ", "Ratio-based allocation")}
             </span>
           )}
         </div>
@@ -461,7 +462,7 @@ export function PartnerProfileClient({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {p.partner_type !== "labor" && acc.totalInvested > 0 && (
             <PositionTile
-              label="Invested"
+              label={L("জমা", "Invested")}
               value={acc.totalInvested}
               sign="+"
               colorKey="blue"
@@ -469,7 +470,7 @@ export function PartnerProfileClient({
           )}
           {acc.laborValue > 0 && (
             <PositionTile
-              label="Labor Value"
+              label={L("শ্রমের মূল্য", "Labor Value")}
               value={acc.laborValue}
               sign="+"
               colorKey="amber"
@@ -478,7 +479,7 @@ export function PartnerProfileClient({
           )}
           {acc.withdrawn > 0 && (
             <PositionTile
-              label="Withdrawn"
+              label={L("তোলা", "Withdrawn")}
               value={acc.withdrawn}
               sign="−"
               colorKey="red"
@@ -486,7 +487,7 @@ export function PartnerProfileClient({
           )}
           {acc.profitReceived > 0 && (
             <PositionTile
-              label="Profit Paid Out"
+              label={L("লাভ দেওয়া হয়েছে", "Profit Paid Out")}
               value={acc.profitReceived}
               sign="+"
               colorKey="violet"
@@ -494,7 +495,7 @@ export function PartnerProfileClient({
           )}
           {acc.lossBorne > 0 && (
             <PositionTile
-              label="Loss Borne"
+              label={L("ক্ষতি বহন", "Loss Borne")}
               value={acc.lossBorne}
               sign="−"
               colorKey="orange"
@@ -502,7 +503,7 @@ export function PartnerProfileClient({
           )}
           {acc.pendingProfit > 0 && (
             <PositionTile
-              label="Pending Profit"
+              label={L("বাকি লাভ", "Pending Profit")}
               value={acc.pendingProfit}
               sign="+"
               colorKey="emerald"
@@ -511,7 +512,7 @@ export function PartnerProfileClient({
           )}
           {acc.pendingLoss > 0 && (
             <PositionTile
-              label="Pending Loss"
+              label={L("বাকি ক্ষতি", "Pending Loss")}
               value={acc.pendingLoss}
               sign="−"
               colorKey="orange"
@@ -525,7 +526,7 @@ export function PartnerProfileClient({
           <div className="mt-4 space-y-1.5 pt-4 border-t border-border/60">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Net Equity
+                {L("নিট মূলধন", "Net Equity")}
               </span>
               <span
                 className={cn(
@@ -555,7 +556,7 @@ export function PartnerProfileClient({
             </div>
             {!hasMarketPrice && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                Set market price in Settings to see current market value.
+                {L("বর্তমান বাজারমূল্য দেখতে \"খরচ ও টাকা\" পাতায় বাজারদর দিন।", "Set market price in Settings to see current market value.")}
               </p>
             )}
           </div>
@@ -569,21 +570,21 @@ export function PartnerProfileClient({
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium flex items-center gap-1.5 text-muted-foreground">
                   <Wrench className="h-3 w-3" />
-                  Labor Vesting
+                  {L("শ্রমের হিসাব", "Labor Vesting")}
                 </span>
                 {acc.months >= (p.cliff_months ?? 0) ? (
                   <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                    ✓ {acc.months} months vested
+                    ✓ {L(`${acc.months} মাস যোগ হয়েছে`, `${acc.months} months vested`)}
                   </span>
                 ) : (
                   <span className="text-amber-600 dark:text-amber-400 font-medium">
-                    ⏳ Cliff: {acc.months}/{p.cliff_months ?? 0} months
+                    ⏳ {L(`অপেক্ষা: ${acc.months}/${p.cliff_months ?? 0} মাস`, `Cliff: ${acc.months}/${p.cliff_months ?? 0} months`)}
                   </span>
                 )}
               </div>
               <div className="text-xs text-muted-foreground">
-                ৳{p.labor_value_monthly.toLocaleString("en-IN")}/month ×{" "}
-                {acc.months >= (p.cliff_months ?? 0) ? acc.months : 0} months ={" "}
+                ৳{p.labor_value_monthly.toLocaleString("en-IN")}/{L("মাস", "month")} ×{" "}
+                {acc.months >= (p.cliff_months ?? 0) ? acc.months : 0} {L("মাস", "months")} ={" "}
                 <span className="font-semibold text-foreground">
                   {bdt(acc.laborValue)}
                 </span>
@@ -608,11 +609,11 @@ export function PartnerProfileClient({
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              Capital Balance Over Time
+              {L("সময়ের সাথে মূলধন", "Capital Balance Over Time")}
             </h3>
             {withBalance.length > 0 && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                Latest: {bdt(withBalance[withBalance.length - 1].balance)}
+                {L("সর্বশেষ", "Latest")}: {bdt(withBalance[withBalance.length - 1].balance)}
               </span>
             )}
           </div>
@@ -630,14 +631,14 @@ export function PartnerProfileClient({
         {/* Header */}
         <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-semibold">Transaction History</h3>
+            <h3 className="text-sm font-semibold">{L("লেনদেনের তালিকা", "Transaction History")}</h3>
             <Link
               href={`/dashboard/partners/${p.id}/statement`}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border border-border/60 rounded-lg px-2.5 py-1 transition-colors"
-              title="Print Statement of Account"
+              title={L("হিসাব বিবরণী প্রিন্ট", "Print Statement of Account")}
             >
               <FileText className="h-3.5 w-3.5" />
-              Statement
+              {L("বিবরণী", "Statement")}
             </Link>
           </div>
           <span className="text-xs text-muted-foreground tabular-nums">
@@ -679,7 +680,7 @@ export function PartnerProfileClient({
         {filtered.length === 0 ? (
           <div className="py-14 text-center space-y-2">
             <Wallet className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-            <p className="text-sm text-muted-foreground">No transactions found</p>
+            <p className="text-sm text-muted-foreground">{L("কোনো লেনদেন নেই", "No transactions found")}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -687,19 +688,19 @@ export function PartnerProfileClient({
               <thead>
                 <tr className="bg-muted/30 border-b border-border/40">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Date
+                    {L("তারিখ", "Date")}
                   </th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Type
+                    {L("ধরন", "Type")}
                   </th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Amount
+                    {L("টাকা", "Amount")}
                   </th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
-                    Balance
+                    {L("ব্যালেন্স", "Balance")}
                   </th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">
-                    Notes
+                    {L("নোট", "Notes")}
                   </th>
                   <th className="w-10" />
                 </tr>
@@ -737,7 +738,7 @@ export function PartnerProfileClient({
                               meta.textCls
                             )}
                           >
-                            {meta.label}
+                            {partnerTxnLabel(txn.type, locale)}
                           </span>
                         </div>
                       </td>
@@ -762,7 +763,7 @@ export function PartnerProfileClient({
                               disabled={deletingTxnId === txn.id}
                               className="text-[11px] font-bold text-destructive hover:underline disabled:opacity-50"
                             >
-                              {deletingTxnId === txn.id ? "…" : "Yes"}
+                              {deletingTxnId === txn.id ? "…" : L("হ্যাঁ", "Yes")}
                             </button>
                             <button
                               onClick={() => setConfirmTxnId(null)}
@@ -792,7 +793,7 @@ export function PartnerProfileClient({
                     colSpan={2}
                     className="px-5 py-3 text-xs font-bold uppercase tracking-wide text-muted-foreground"
                   >
-                    Summary
+                    {L("সারসংক্ষেপ", "Summary")}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="space-y-0.5">
@@ -858,7 +859,7 @@ export function PartnerProfileClient({
             className="space-y-4"
           >
             <div className="space-y-1.5">
-              <Label>Transaction Type</Label>
+              <Label>{L("লেনদেনের ধরন", "Transaction Type")}</Label>
               <Select
                 value={txnType}
                 onValueChange={(v) =>
@@ -868,23 +869,23 @@ export function PartnerProfileClient({
                 <SelectTrigger>
                   <span className="truncate">
                     {txnType === "investment"
-                      ? "Capital In (Investment)"
-                      : "Capital Out (Withdrawal)"}
+                      ? L("মূলধন জমা", "Capital in (investment)")
+                      : L("টাকা তোলা", "Capital out (withdrawal)")}
                   </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="investment">
-                    Capital In (Investment)
+                    {L("মূলধন জমা", "Capital In (Investment)")}
                   </SelectItem>
                   <SelectItem value="withdrawal">
-                    Capital Out (Withdrawal)
+                    {L("টাকা তোলা", "Capital Out (Withdrawal)")}
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Amount (৳)</Label>
+                <Label>{L("টাকা (৳)", "Amount (৳)")}</Label>
                 <Input
                   name="amount"
                   type="number"
@@ -894,7 +895,7 @@ export function PartnerProfileClient({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Date</Label>
+                <Label>{L("তারিখ", "Date")}</Label>
                 <Input
                   name="recorded_at"
                   type="date"
@@ -905,11 +906,11 @@ export function PartnerProfileClient({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Notes (optional)</Label>
+              <Label>{L("নোট (ঐচ্ছিক)", "Notes (optional)")}</Label>
               <Textarea
                 name="notes"
                 maxLength={500}
-                placeholder="Cash, bank transfer, cheque..."
+                placeholder={L("নগদ, ব্যাংক, চেক…", "Cash, bank transfer, cheque...")}
                 rows={2}
               />
             </div>
@@ -922,14 +923,14 @@ export function PartnerProfileClient({
                 variant="outline"
                 onClick={() => setAddTxnOpen(false)}
               >
-                Cancel
+                {L("বাতিল", "Cancel")}
               </Button>
               <Button type="submit" disabled={txnPending}>
                 {txnPending
-                  ? "Saving..."
+                  ? L("সেভ হচ্ছে…", "Saving…")
                   : txnType === "investment"
-                  ? "Record Investment"
-                  : "Record Withdrawal"}
+                  ? L("জমা সেভ করুন", "Record investment")
+                  : L("তোলা সেভ করুন", "Record withdrawal")}
               </Button>
             </div>
           </form>
@@ -1049,7 +1050,7 @@ function PositionTile({
         <p className="text-[11px] font-medium uppercase tracking-wide opacity-70 leading-none">
           {label}
           {pending && (
-            <span className="ml-1 opacity-60">(pending)</span>
+            <span className="ml-1 opacity-60"><Tr bn="(বাকি)" en="(pending)" /></span>
           )}
         </p>
       </div>

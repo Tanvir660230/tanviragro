@@ -7,6 +7,7 @@ import { BudgetPeriodPicker } from "./BudgetPeriodPicker";
 import { getDictionary } from "@/i18n/getDictionary";
 import { cn } from "@/lib/utils";
 import { getCachedBusinessId } from "@/lib/supabase/cached";
+import { getL } from "@/i18n/server-text";
 
 const DEFAULT_ADG = 1.0; // kg/day — conservative fallback when no farm data exists
 
@@ -21,6 +22,7 @@ function fmtKg(n: number) {
 }
 
 export async function BudgetForecastPanel({ days = 90 }: { days?: number }) {
+  const L = await getL();
   const [supabase, dict] = await Promise.all([createClient(), getDictionary()]);
   const tb = dict.budget;
   const tr = (key: string, vars: Record<string, string>) =>
@@ -34,7 +36,7 @@ export async function BudgetForecastPanel({ days = 90 }: { days?: number }) {
   if (!businessId) {
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
-        Business account not found. Please refresh the page.
+        {L("খামার পাওয়া যায়নি। পাতাটি আবার খুলুন।", "Business account not found. Please refresh the page.")}
       </div>
     );
   }

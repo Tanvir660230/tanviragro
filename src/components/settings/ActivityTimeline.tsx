@@ -1,13 +1,24 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { 
-  Clock, Plus, ArrowRight, DollarSign, Package, Stethoscope, 
-  Syringe, Landmark, CreditCard, Filter, Search, Calendar, FileDown, CheckCircle2 
+import {
+  Clock,
+  Plus,
+  ArrowRight,
+  DollarSign,
+  Package,
+  Stethoscope,
+  Syringe,
+  Landmark,
+  CreditCard,
+  Search,
+  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 export interface ActivityItem {
   id: string;
@@ -30,19 +41,19 @@ const ICON_MAP = {
 };
 
 const CATEGORIES = [
-  { id: "all", label: "All Events" },
-  { id: "cattle", label: "Cattle & Sales", types: ["cattle_add", "cattle_sold"] },
-  { id: "finance", label: "Costs & Loans", types: ["cost_add", "loan"] },
-  { id: "inventory", label: "Feed & Supplies", types: ["inventory_purchase"] },
-  { id: "health", label: "Health & Vaccines", types: ["medical_treatment", "health_event"] },
-  { id: "partner", label: "Partners", types: ["partner_txn"] },
+  { id: "all", label: "All Events", bn: "সব" },
+  { id: "cattle", label: "Cattle & Sales", bn: "গরু ও বিক্রি", types: ["cattle_add", "cattle_sold"] },
+  { id: "finance", label: "Costs & Loans", bn: "খরচ ও ঋণ", types: ["cost_add", "loan"] },
+  { id: "inventory", label: "Feed & Supplies", bn: "খাবার ও স্টক", types: ["inventory_purchase"] },
+  { id: "health", label: "Health & Vaccines", bn: "স্বাস্থ্য ও টিকা", types: ["medical_treatment", "health_event"] },
+  { id: "partner", label: "Partners", bn: "অংশীদার", types: ["partner_txn"] },
 ];
 
 const SHOW_LIMIT = 25;
 
 const dhakaDayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" });
 
-function groupByDay(activities: ActivityItem[]) {
+function groupByDay(activities: ActivityItem[], L: (bn: string, en: string) => string, locale: string | undefined) {
   const todayKey = dhakaDayFmt.format(new Date());
   const yesterdayKey = dhakaDayFmt.format(new Date(Date.now() - 86400000));
 
@@ -52,10 +63,10 @@ function groupByDay(activities: ActivityItem[]) {
     const key = dhakaDayFmt.format(d);
     const label =
       key === todayKey
-        ? "Today"
+        ? L("আজ", "Today")
         : key === yesterdayKey
-          ? "Yesterday"
-          : d.toLocaleDateString("en-US", { timeZone: "Asia/Dhaka", month: "long", day: "numeric", year: "numeric" });
+          ? L("গতকাল", "Yesterday")
+          : d.toLocaleDateString(locale === "bn" ? "bn-BD-u-nu-latn" : "en-US", { timeZone: "Asia/Dhaka", month: "long", day: "numeric", year: "numeric" });
 
     const last = groups[groups.length - 1];
     if (last && last.key === key) last.items.push(act);
@@ -65,6 +76,8 @@ function groupByDay(activities: ActivityItem[]) {
 }
 
 export function ActivityTimeline({ activities }: { activities: ActivityItem[] }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const [activeCategory, setActiveCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -88,7 +101,7 @@ export function ActivityTimeline({ activities }: { activities: ActivityItem[] })
   }, [activities, activeCategory, searchQuery]);
 
   const displayed = showAll ? filtered : filtered.slice(0, SHOW_LIMIT);
-  const groups = groupByDay(displayed);
+  const groups = groupByDay(displayed, L, locale);
 
   return (
     <div className="space-y-6">
@@ -97,7 +110,7 @@ export function ActivityTimeline({ activities }: { activities: ActivityItem[] })
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search events, cow tag, partner, amount..."
+            placeholder={L("কাজ, গরুর ট্যাগ, অংশীদার বা টাকা খুঁজুন…", "Search events, cow tag, partner, amount...")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 h-9 text-xs"
@@ -119,7 +132,7 @@ export function ActivityTimeline({ activities }: { activities: ActivityItem[] })
                     : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                {cat.label}
+                {L(cat.bn, cat.label)}
               </button>
             );
           })}
@@ -130,8 +143,8 @@ export function ActivityTimeline({ activities }: { activities: ActivityItem[] })
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/70 p-12 text-center bg-muted/10">
           <Clock className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-          <p className="text-sm font-semibold text-foreground">No events match your criteria</p>
-          <p className="text-xs text-muted-foreground mt-1">Try resetting search keywords or selecting all event categories.</p>
+          <p className="text-sm font-semibold text-foreground">{L("কিছু পাওয়া যায়নি", "No events match your criteria")}</p>
+          <p className="text-xs text-muted-foreground mt-1">{L("খোঁজা মুছে \"সব\" বাছাই করুন।", "Try resetting search keywords or selecting all event categories.")}</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -143,7 +156,7 @@ export function ActivityTimeline({ activities }: { activities: ActivityItem[] })
                   {group.label}
                 </h3>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-                  {group.items.length} {group.items.length === 1 ? "event" : "events"}
+                  {L(`${group.items.length}টি`, `${group.items.length} ${group.items.length === 1 ? "event" : "events"}`)}
                 </span>
               </div>
 
@@ -187,7 +200,7 @@ export function ActivityTimeline({ activities }: { activities: ActivityItem[] })
                 onClick={() => setShowAll(true)}
                 className="text-xs font-medium"
               >
-                Show {filtered.length - SHOW_LIMIT} more logged events
+                {L(`আরও ${filtered.length - SHOW_LIMIT}টি দেখান`, `Show ${filtered.length - SHOW_LIMIT} more events`)}
               </Button>
             </div>
           )}

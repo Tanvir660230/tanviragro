@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Syringe } from "lucide-react";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
+import { selectAll } from "@/lib/supabase/select-all";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
   VaccinationPlatformWorkspace,
@@ -10,71 +11,75 @@ import {
   type VaccineInventoryItem,
 } from "@/components/cattle/VaccinationPlatformWorkspace";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { getL } from "@/i18n/server-text";
+import { addDays, startOfMonth, todayDhaka } from "@/lib/dates";
 
-export const metadata: Metadata = {
-  title: "Vaccinations | Health EHR",
-};
+export const metadata: Metadata = { title: "টিকা ও কাজ" };
 
 export default function HealthVaccinationsPage() {
   return (
     <div className="space-y-4">
-      <Suspense fallback={<div className="space-y-4 animate-fade-in-up"><div className="h-10 w-56 animate-shimmer rounded" /><div className="grid grid-cols-4 gap-4">{[0,1,2,3].map(i=><div key={i} className="h-24 animate-shimmer rounded-xl"/>)}</div><div className="h-[450px] animate-shimmer rounded-xl"/></div>}>
+      <Suspense fallback={<div className="space-y-4 animate-fade-in-up"><div className="h-10 w-56 animate-shimmer rounded" /><div className="grid grid-cols-4 gap-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-shimmer rounded-xl" />)}</div><div className="h-[450px] animate-shimmer rounded-xl" /></div>}>
         <VaccinationSection />
       </Suspense>
     </div>
   );
 }
 
+type EventRow = { id: string; cattle_id: string; title: string; event_type: string; scheduled_at: string; notes: string | null };
+
 async function VaccinationSection() {
+  const L = await getL();
   const supabase = await getServerClient();
   const businessId = await getCachedBusinessId();
-  if (!businessId) return <EmptyState icon={Syringe} title="No business found" />;
+  if (!businessId) return <EmptyState icon={Syringe} title={L("খামার পাওয়া যায়নি", "No business found")} />;
 
-  const today = new Date();
-  const todayISO = today.toISOString().slice(0, 10);
-  const in7ISO = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+  // the farm calendar (Dhaka), not the server's UTC date
+  const todayISO = todayDhaka();
+  const in7ISO = addDays(todayISO, 7);
 
-  const [{ data: rawEvents }, { count: completedThisMonth }, { data: allCattleRaw }, { data: inventoryRaw }, { data: txnsRaw }] = await Promise.all([
-    supabase.from("health_events").select("id, cattle_id, title, event_type, scheduled_at, notes").eq("business_id", businessId).is("completed_at", null).is("deleted_at", null).order("scheduled_at", { ascending: true }).limit(500),
-    supabase.from("health_events").select("*", { count: "exact", head: true }).eq("business_id", businessId).gte("completed_at", firstOfMonth).is("deleted_at", null),
-    supabase.from("cattle").select("id, tag_id, breed, status").eq("business_id", businessId).is("deleted_at", null).order("tag_id", { ascending: true }),
-    supabase.from("inventory_items").select("id, name, unit, category, low_stock_threshold").eq("business_id", businessId).is("deleted_at", null).order("name", { ascending: true }),
-    supabase.from("inventory_transactions").select("item_id, type, qty, inventory_items!inner(business_id)").eq("inventory_items.business_id", businessId),
+  const [rawEvents, { count: completedThisMonth }, { data: herd }, { data: stock }] = await Promise.all([
+    selectAll<EventRow>(() => supabase.from("health_events").select("id, cattle_id, title, event_type, scheduled_at, notes")
+      .eq("business_id", businessId).is("completed_at", null).is("deleted_at", null).order("scheduled_at", { ascending: true }).order("id")),
+    supabase.from("health_events").select("*", { count: "exact", head: true }).eq("business_id", businessId).gte("completed_at", startOfMonth(todayISO)).is("deleted_at", null),
+    supabase.from("cattle").select("id, tag_id, breed, status").eq("business_id", businessId).is("deleted_at", null).eq("status", "active").order("tag_id", { ascending: true }),
+    // medicine stock from THE stock ledger view (it used to add up raw rows with a wrong sign rule)
+    supabase.from("v_inventory_balance").select("item_id, name, unit, qty_on_hand").eq("business_id", businessId).eq("category", "medicine"),
   ]);
 
-  const stockMap: Record<string, number> = {};
-  for (const txn of txnsRaw ?? []) {
-    const q = Number(txn.qty) || 0;
-    stockMap[txn.item_id] = (stockMap[txn.item_id] ?? 0) + (txn.type === "purchase" ? q : -q);
-  }
-
-  const cattleList: CattleLite[] = (allCattleRaw ?? []).map((c) => ({ id: c.id, tag_id: c.tag_id, breed: c.breed ?? undefined, status: c.status ?? undefined }));
-  const cattleMap: Record<string, CattleLite> = {};
-  for (const c of cattleList) cattleMap[c.id] = c;
-
-  const events: HubEventItem[] = (rawEvents ?? []).map((e) => ({
-    id: e.id, cattle_id: e.cattle_id, title: e.title,
-    event_type: e.event_type as HubEventItem["event_type"],
-    scheduled_at: e.scheduled_at, notes: e.notes,
-    cattle: cattleMap[e.cattle_id] ? { tag_id: cattleMap[e.cattle_id].tag_id, breed: cattleMap[e.cattle_id].breed ?? null } : null,
-  }));
-
+  const cattleList: CattleLite[] = (herd ?? []).map((c) => ({ id: c.id, tag_id: c.tag_id, breed: c.breed ?? null, status: c.status ?? null }));
+  const byId = new Map(cattleList.map((c) => [c.id, c]));
+  const events: HubEventItem[] = rawEvents
+    .filter((e) => byId.has(e.cattle_id))
+    .map((e) => ({
+      id: e.id, cattle_id: e.cattle_id, title: e.title,
+      event_type: e.event_type as HubEventItem["event_type"],
+      scheduled_at: e.scheduled_at, notes: e.notes,
+      cattle: { tag_id: byId.get(e.cattle_id)!.tag_id, breed: byId.get(e.cattle_id)!.breed ?? null },
+    }));
   const overdueCount = events.filter((e) => e.scheduled_at < todayISO).length;
   const thisWeekCount = events.filter((e) => e.scheduled_at >= todayISO && e.scheduled_at <= in7ISO).length;
-
-  const vaccineInventory: VaccineInventoryItem[] = (inventoryRaw ?? [])
-    .filter((item) => {
-      const n = (item.name || "").toLowerCase();
-      const cat = (item.category || "").toLowerCase();
-      return cat.includes("med") || cat.includes("vaccine") || n.includes("vaccine") || n.includes("fmd") || n.includes("dose") || n.includes("anthrax") || n.includes("lsd");
-    })
-    .map((item) => ({ id: item.id, name: item.name, qty: Math.max(0, stockMap[item.id] ?? 0), unit: item.unit || "doses", min_threshold: item.low_stock_threshold ? Number(item.low_stock_threshold) : 5 }));
+  const vaccineStock: VaccineInventoryItem[] = (stock ?? [])
+    .filter((s) => s.item_id && s.name)
+    .map((s) => ({ id: s.item_id as string, name: s.name as string, unit: s.unit ?? "", qty: Math.max(0, Math.round(Number(s.qty_on_hand ?? 0) * 100) / 100) }));
 
   return (
     <>
-      <PageHeader title="Vaccination Platform" subtitle="Multi-dose protocols, mass campaigns, inventory FIFO, adverse registers" icon={Syringe} back="/dashboard/health" badge={overdueCount || undefined} badgeVariant="destructive" />
-      <VaccinationPlatformWorkspace events={events} allCattle={cattleList} inventoryItems={vaccineInventory} todayISO={todayISO} in7ISO={in7ISO} stats={{ overdue: overdueCount, thisWeek: thisWeekCount, completedThisMonth: completedThisMonth ?? 0 }} />
+      <PageHeader
+        title={L("টিকা ও কাজ", "Vaccines & tasks")}
+        subtitle={L("বাকি টিকা, কৃমিনাশক ও চেকআপ — হয়ে গেলে \"হয়ে গেছে\" চাপুন", "Vaccines, deworming and check-ups waiting — tap Done when finished")}
+        icon={Syringe}
+        badge={overdueCount || undefined}
+        badgeVariant="destructive"
+      />
+      <VaccinationPlatformWorkspace
+        events={events}
+        allCattle={cattleList}
+        inventoryItems={vaccineStock}
+        todayISO={todayISO}
+        in7ISO={in7ISO}
+        stats={{ overdue: overdueCount, thisWeek: thisWeekCount, completedThisMonth: completedThisMonth ?? 0 }}
+      />
     </>
   );
 }

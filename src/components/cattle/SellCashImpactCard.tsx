@@ -7,6 +7,7 @@ import {
   ArrowRight, BadgeDollarSign, Scale,
 } from "lucide-react";
 import type { Dictionary } from "@/i18n/getDictionary";
+import { getL } from "@/i18n/server-text";
 
 interface Props {
   businessId: string;
@@ -34,6 +35,7 @@ export async function SellCashImpactCard({
   breakEvenPerKg,
   t,
 }: Props) {
+  const L = await getL();
   const si = t.cattle_details.sell_impact;
   const supabase = await createClient();
   // cash from THE accounting engine: the same figure as the homepage and Finance
@@ -115,7 +117,7 @@ export async function SellCashImpactCard({
           <p className="text-xs text-muted-foreground mt-0.5">
             {isEstimated ? "~" : ""}{saleWeightKg} kg × ৳{marketPricePerKg}/kg
             {isEstimated && (
-              <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">(est. — last weighed {latestWeightKg} kg)</span>
+              <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">{L(`(আনুমানিক — শেষ ওজন ${latestWeightKg} কেজি)`, `(est. — last weighed ${latestWeightKg} kg)`)}</span>
             )}
           </p>
         </div>
@@ -176,8 +178,8 @@ export async function SellCashImpactCard({
               projectedBalance >= balance ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
             )}>
               {projectedBalance >= balance
-                ? `+${fmt(projectedBalance - balance)} more`
-                : `−${fmt(balance - projectedBalance)} less`}
+                ? L(`+${fmt(projectedBalance - balance)} বেশি`, `+${fmt(projectedBalance - balance)} more`)
+                : L(`−${fmt(balance - projectedBalance)} কম`, `−${fmt(balance - projectedBalance)} less`)}
             </p>
           </div>
         </div>

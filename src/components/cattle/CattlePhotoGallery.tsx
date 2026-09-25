@@ -3,7 +3,13 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, Loader2, Plus, Trash2, ZoomIn, X, Download } from "lucide-react";
+import {
+  Camera,
+  Loader2,
+  Plus,
+  Trash2,
+  ZoomIn,
+} from "lucide-react";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { Button, buttonVariants } from "@/components/ui/button";
 

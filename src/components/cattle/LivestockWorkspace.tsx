@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -33,6 +33,7 @@ import { toggleQuarantine } from "@/app/dashboard/(app)/cattle/[id]/actions";
 import { toast } from "sonner";
 import { fmtBDT } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useL } from "@/i18n/text";
 
 interface Props {
   cattle: CattleRowEnriched[];
@@ -48,6 +49,7 @@ interface Props {
 }
 
 export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, embedded = false }: Props) {
+  const L = useL();
   const router = useRouter();
 
   const [selectedCattleForDeath, setSelectedCattleForDeath] = useState<CattleRowEnriched | null>(null);
@@ -129,7 +131,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
     () => [
       {
         id: "tag_id",
-        header: "Tag & Identifier",
+        header: L("ট্যাগ", "Tag"),
         accessorKey: "tag_id",
         sortable: true,
         filterable: true,
@@ -149,12 +151,12 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
                 <span>{row.tag_id}</span>
                 {row.is_qurbani_marked && (
                   <Badge variant="outline" className="text-[10px] px-1 py-0 border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10">
-                    Qurbani
+                    {L("কোরবানি", "Qurbani")}
                   </Badge>
                 )}
               </Link>
               <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <span>{row.breed || "Standard"}</span>
+                <span>{row.breed || L("দেশি", "Standard")}</span>
                 <span>•</span>
                 <span className="capitalize">{row.gender}</span>
               </div>
@@ -164,7 +166,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "status",
-        header: "Lifecycle Status",
+        header: L("অবস্থা", "Status"),
         accessorKey: "status",
         sortable: true,
         filterable: true,
@@ -173,7 +175,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
           if (row.is_quarantined) {
             return (
               <Badge variant="destructive" className="text-[11px] gap-1 font-semibold">
-                <AlertTriangle className="h-3 w-3" /> Quarantined
+                <AlertTriangle className="h-3 w-3" /> {L("আলাদা রাখা", "Quarantined")}
               </Badge>
             );
           }
@@ -181,13 +183,13 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
             case "active":
               return (
                 <Badge variant="outline" className="text-[11px] border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 font-semibold gap-1">
-                  <CheckCircle2 className="h-3 w-3" /> Active
+                  <CheckCircle2 className="h-3 w-3" /> {L("সক্রিয়", "Active")}
                 </Badge>
               );
             case "sold":
-              return <Badge variant="secondary" className="text-[11px] font-semibold">Sold</Badge>;
+              return <Badge variant="secondary" className="text-[11px] font-semibold">{L("বিক্রি", "Sold")}</Badge>;
             case "dead":
-              return <Badge variant="destructive" className="text-[11px] font-semibold">Deceased</Badge>;
+              return <Badge variant="destructive" className="text-[11px] font-semibold">{L("মৃত", "Deceased")}</Badge>;
             default:
               return <Badge variant="outline">{row.status}</Badge>;
           }
@@ -195,7 +197,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "current_weight",
-        header: "Live Weight",
+        header: L("ওজন", "Live weight"),
         accessorFn: (row) => row.latestWeight ?? row.initial_weight_kg ?? 0,
         sortable: true,
         align: "right",
@@ -219,7 +221,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "adg",
-        header: "Daily Gain (ADG)",
+        header: L("দৈনিক বৃদ্ধি", "Daily gain"),
         accessorFn: (row) => row.adg ?? -1,
         sortable: true,
         align: "right",
@@ -247,20 +249,20 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "days_in_pen",
-        header: "Days on Feed",
+        header: L("খামারে দিন", "Days on feed"),
         accessorKey: "daysInPen",
         sortable: true,
         align: "center",
         width: 110,
         cell: ({ row }) => (
           <div className="text-center font-mono text-xs text-muted-foreground">
-            {row.daysInPen !== null ? `${row.daysInPen} days` : "—"}
+            {row.daysInPen !== null ? L(`${row.daysInPen} দিন`, `${row.daysInPen} days`) : "—"}
           </div>
         ),
       },
       {
         id: "total_cost",
-        header: "Total Invested",
+        header: L("মোট খরচ", "Total invested"),
         accessorFn: (row) => Number(row.purchase_price || 0) + (row.totalFeedCost || 0),
         sortable: true,
         align: "right",
@@ -270,13 +272,13 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
           return (
             <div className="text-right">
               <div className="font-mono font-semibold text-foreground text-xs">{fmtBDT(total)}</div>
-              <div className="text-[10px] text-muted-foreground">Feed: {fmtBDT(row.totalFeedCost || 0)}</div>
+              <div className="text-[10px] text-muted-foreground">{L("খাবার", "Feed")}: {fmtBDT(row.totalFeedCost || 0)}</div>
             </div>
           );
         },
       },
     ],
-    []
+    [L]
   );
 
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -285,7 +287,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
     () => [
       {
         id: "dossier",
-        label: "View Dossier",
+        label: L("গরুর পাতা", "Open"),
         icon: <Eye className="h-4 w-4" />,
         action: (row: CattleRowEnriched) => {
           router.push(`/dashboard/cattle/${row.id}`);
@@ -293,7 +295,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "weight",
-        label: "Record Weight",
+        label: L("ওজন লিখুন", "Record weight"),
         icon: <Scale className="h-4 w-4" />,
         action: (row: CattleRowEnriched) => {
           router.push(`/dashboard/cattle/${row.id}?tab=weight`);
@@ -301,7 +303,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "health",
-        label: "Health Protocol",
+        label: L("টিকা ও কাজ", "Health"),
         icon: <HeartPulse className="h-4 w-4" />,
         action: (row: CattleRowEnriched) => {
           router.push(`/dashboard/cattle/${row.id}?tab=health`);
@@ -309,7 +311,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "quarantine",
-        label: "Toggle Quarantine",
+        label: L("আলাদা রাখা / ফেরত", "Toggle quarantine"),
         icon: <AlertTriangle className="h-4 w-4" />,
         action: async (row: CattleRowEnriched) => {
           try {
@@ -318,11 +320,11 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
             if (res?.error) {
               toast.error(res.error);
             } else {
-              toast.success(row.is_quarantined ? `Cattle #${row.tag_id} released from quarantine` : `Cattle #${row.tag_id} moved to quarantine`);
+              toast.success(row.is_quarantined ? L(`#${row.tag_id} আবার দলে ফিরল`, `Cattle #${row.tag_id} released from quarantine`) : L(`#${row.tag_id} আলাদা রাখা হলো`, `Cattle #${row.tag_id} moved to quarantine`));
               router.refresh();
             }
           } catch {
-            toast.error("Failed to toggle quarantine");
+            toast.error(L("বদলানো যায়নি", "Failed to toggle quarantine"));
           } finally {
             setPendingAction(null);
           }
@@ -330,36 +332,36 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "deceased",
-        label: "Record Deceased",
+        label: L("মৃত লিখুন", "Record deceased"),
         icon: <Trash2 className="h-4 w-4 text-destructive" />,
         danger: true,
         action: async (row: CattleRowEnriched) => {
-          if (!window.confirm(`Are you sure you want to record cattle #${row.tag_id} as deceased?`)) return;
+          if (!window.confirm(L(`#${row.tag_id} গরুটিকে মৃত হিসেবে লিখবেন?`, `Record cattle #${row.tag_id} as deceased?`))) return;
           try {
             setPendingAction(row.id);
             const res = await markAsDeceased(row.id);
             if (res?.error) {
               toast.error(res.error);
             } else {
-              toast.success(`Cattle #${row.tag_id} marked as deceased`);
+              toast.success(L(`#${row.tag_id} মৃত হিসেবে লেখা হলো`, `Cattle #${row.tag_id} marked as deceased`));
               router.refresh();
             }
           } catch {
-            toast.error("Failed to record death");
+            toast.error(L("লেখা যায়নি", "Failed to record death"));
           } finally {
             setPendingAction(null);
           }
         },
       },
     ],
-    [router]
+    [router, L]
   );
 
   const bulkActionsList: BulkAction<CattleRowEnriched>[] = useMemo(
     () => [
       {
         id: "bulk_weigh",
-        label: "Bulk Weigh",
+        label: L("একসাথে ওজন", "Bulk weigh"),
         icon: <Scale className="h-4 w-4" />,
         action: (_rows: CattleRowEnriched[], selectedIds: string[]) => {
           setActiveSelectedIds(selectedIds);
@@ -368,7 +370,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       },
       {
         id: "batch_ops",
-        label: "Batch Operations",
+        label: L("একসাথে কাজ", "Batch operations"),
         icon: <Layers className="h-4 w-4" />,
         action: (_rows: CattleRowEnriched[], selectedIds: string[]) => {
           setActiveSelectedIds(selectedIds);
@@ -376,7 +378,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
         },
       },
     ],
-    []
+    [L]
   );
 
   return (
@@ -546,10 +548,10 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
         data={displayedData}
         columns={columnsConfig}
         rowKey="id"
-        title="Livestock Inventory Ledger"
-        subtitle={`Showing ${displayedData.length} records matching current criteria`}
+        title={L("গরুর তালিকা", "Cattle list")}
+        subtitle={L(`${displayedData.length}টি গরু`, `${displayedData.length} animals`)}
         enableGlobalSearch={true}
-        searchPlaceholder="Search by ear tag, breed, status, RFID..."
+        searchPlaceholder={L("ট্যাগ, জাত বা অবস্থা খুঁজুন…", "Search by ear tag, breed, status, RFID...")}
         enableSelection={true}
         enableExport={true}
         enableDensitySelector={true}

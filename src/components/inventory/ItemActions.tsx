@@ -34,6 +34,7 @@ import { enqueue } from "@/lib/offlineQueue";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { ZeroPriceConfirm } from "./ledger-fields";
 import { todayDhaka } from "@/lib/dates";
+import { useL } from "@/i18n/text";
 
 export interface CattleOption {
   id: string;
@@ -60,6 +61,7 @@ function AddStockForm({
   formKey: number;
   onSuccess: () => void;
 }) {
+  const L = useL();
   const router = useRouter();
   const { t } = useTranslation();
   const tr = t.inventory.actions;
@@ -84,8 +86,8 @@ function AddStockForm({
 
       <div className="grid grid-cols-2 gap-2 text-xs">
         {([
-          ["purchase", "Bought", "Purchase — reduces cash"],
-          ["own_production", "Harvested from own land", "৳0 — land rent is an expense"],
+          ["purchase", L("কেনা", "Bought"), L("কেনা — নগদ কমে", "Purchase — reduces cash")],
+          ["own_production", L("নিজের জমি থেকে", "Harvested from own land"), L("৳0 — জমির ভাড়া আলাদা খরচ", "৳0 — land rent is an expense")],
         ] as const).map(([value, title, sub]) => (
           <button
             key={value}
@@ -136,12 +138,12 @@ function AddStockForm({
           type="number"
           min="0"
           step="0.01"
-          placeholder="e.g. 45.50 (optional)"
+          placeholder={L("যেমন 45.50 (ঐচ্ছিক)", "e.g. 45.50 (optional)")}
           value={unitCost}
           onChange={(e) => setUnitCost(e.target.value)}
         />
         {unitCost.trim() === "" && (
-          <p className="text-xs text-muted-foreground">No price entered: saved as <strong>cost missing</strong>, not as free.</p>
+          <p className="text-xs text-muted-foreground">{L("দাম না দিলে \"দাম জানা নেই\" হিসেবে সেভ হবে, বিনামূল্যে নয়।", "No price entered: saved as cost missing, not as free.")}</p>
         )}
       </div>
       <ZeroPriceConfirm unitCost={unitCost} idPrefix="stk" />
@@ -152,7 +154,7 @@ function AddStockForm({
         <Textarea
           id="stk_notes"
           name="notes"
-          placeholder="Supplier, invoice no. (optional)"
+          placeholder={L("দোকান, মেমো নং (ঐচ্ছিক)", "Supplier, invoice no. (optional)")}
           rows={2}
           maxLength={500}
         />
@@ -221,6 +223,7 @@ function LogConsumptionForm({
   onSuccess: () => void;
   onOptimisticConsume?: (qty: number) => void;
 }) {
+  const L = useL();
   const router = useRouter();
   const { t } = useTranslation();
   const tr = t.inventory.actions;
@@ -319,7 +322,7 @@ function LogConsumptionForm({
         <Textarea
           id="con_notes"
           name="notes"
-          placeholder="Morning / evening feed, etc. (optional)"
+          placeholder={L("সকাল / বিকেলের খাবার ইত্যাদি (ঐচ্ছিক)", "Morning / evening feed, etc. (optional)")}
           rows={2}
           maxLength={500}
         />

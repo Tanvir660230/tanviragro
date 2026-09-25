@@ -2,6 +2,7 @@ import Link from "next/link";
 import { TrendingUp, ArrowRight } from "lucide-react";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { fmtBDT } from "@/lib/format";
+import { getL } from "@/i18n/server-text";
 
 function fmt(n: number) {
   if (n >= 10_000_000) return `৳${(n / 10_000_000).toFixed(1)}Cr`;
@@ -11,6 +12,7 @@ function fmt(n: number) {
 }
 
 export async function SellTodaySummary({ overheadPerHead = 0 }: { overheadPerHead?: number } = {}) {
+  const L = await getL();
   const supabase = await getServerClient();
   const businessId = await getCachedBusinessId();
   if (!businessId) return null;
@@ -219,7 +221,7 @@ export async function SellTodaySummary({ overheadPerHead = 0 }: { overheadPerHea
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Set market price — from the cattle list page
+                  {L("বাজারদর দিন — গরুর তালিকা পাতা থেকে", "Set market price — from the cattle list page")}
                 </p>
               )}
             </div>

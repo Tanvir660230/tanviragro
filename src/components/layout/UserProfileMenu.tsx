@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
@@ -12,8 +12,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  LayoutDashboard, User, Settings, Keyboard, HelpCircle,
-  Languages, LogOut, Sun, Moon, Monitor,
+  LayoutDashboard,
+  User,
+  Settings,
+  Keyboard,
+  Languages,
+  LogOut,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { logout } from "@/app/(auth)/login/actions";
 import { useTranslation } from "@/i18n/I18nProvider";

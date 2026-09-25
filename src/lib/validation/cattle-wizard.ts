@@ -36,6 +36,8 @@ export interface AnimalWizardOrigin {
   purchaseDate: string;
   purchasePrice: number;
   initialWeightKg: number;
+  /** was the purchase weight put on a scale/tape, or guessed? (growth ignores guessed weights) */
+  initialWeightType?: "measured" | "estimated" | "unknown";
   vendorId: string | null;
   vendorName: string;
   birthWeightKg: number | null;
@@ -89,6 +91,7 @@ export const DEFAULT_WIZARD_STATE: AnimalWizardState = {
     purchaseDate: new Date().toISOString().split("T")[0],
     purchasePrice: 0,
     initialWeightKg: 0,
+    initialWeightType: "measured",
     vendorId: null,
     vendorName: "",
     birthWeightKg: null,

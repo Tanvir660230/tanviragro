@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useL } from "@/i18n/text";
 
 export function AddCapitalTxnDialog({
   open,
@@ -32,13 +33,14 @@ export function AddCapitalTxnDialog({
   setOpen: (o: boolean) => void;
   partners: { id: string; name: string }[];
 }) {
+  const L = useL();
   const [txnType, setTxnType] = useState<"investment" | "withdrawal">("investment");
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
   const [state, action, pending] = useActionState(addPartnerTransaction, undefined);
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Transaction saved");
+      toast.success(L("লেনদেন সেভ হলো", "Transaction saved"));
       setTimeout(() => {
         setOpen(false);
         setSelectedPartnerId("");
@@ -46,7 +48,7 @@ export function AddCapitalTxnDialog({
       }, 0);
     }
     if (state?.error) toast.error(state.error);
-  }, [state, setOpen]);
+  }, [state, setOpen, L]);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -54,11 +56,11 @@ export function AddCapitalTxnDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger className={cn(buttonVariants({ size: "sm" }), "gap-1.5 text-xs h-9")}>
         <Plus className="h-4 w-4" />
-        Add Transaction
+        {L("লেনদেন যোগ", "Add Transaction")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record Capital Transaction</DialogTitle>
+          <DialogTitle>{L("মূলধনের লেনদেন", "Record Capital Transaction")}</DialogTitle>
         </DialogHeader>
         <form action={action} className="space-y-4 pt-1">
           <div className="space-y-1.5">
@@ -71,7 +73,7 @@ export function AddCapitalTxnDialog({
             >
               <SelectTrigger>
                 <span>
-                  {partners.find((p) => p.id === selectedPartnerId)?.name ?? "Select partner"}
+                  {partners.find((p) => p.id === selectedPartnerId)?.name ?? L("অংশীদার বাছুন", "Select partner")}
                 </span>
               </SelectTrigger>
               <SelectContent>
@@ -96,13 +98,13 @@ export function AddCapitalTxnDialog({
               <SelectTrigger>
                 <span>
                   {txnType === "investment"
-                    ? "Capital In (Deposit)"
-                    : "Capital Out (Withdrawal)"}
+                    ? L("মূলধন জমা", "Capital in (deposit)")
+                    : L("টাকা তোলা", "Capital out (withdrawal)")}
                 </span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="investment">Capital In (Deposit)</SelectItem>
-                <SelectItem value="withdrawal">Capital Out (Withdrawal)</SelectItem>
+                <SelectItem value="investment">{L("মূলধন জমা", "Capital In (Deposit)")}</SelectItem>
+                <SelectItem value="withdrawal">{L("টাকা তোলা", "Capital Out (Withdrawal)")}</SelectItem>
               </SelectContent>
             </Select>
             <input type="hidden" name="type" value={txnType} />
@@ -137,12 +139,12 @@ export function AddCapitalTxnDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="cl-notes">Notes</Label>
+            <Label htmlFor="cl-notes">{L("নোট", "Notes")}</Label>
             <Textarea
               id="cl-notes"
               name="notes"
               rows={2}
-              placeholder="Optional notes (e.g. Bank transfer ref)"
+              placeholder={L("নোট (যেমন ব্যাংকের রেফারেন্স)", "Optional notes (e.g. Bank transfer ref)")}
             />
           </div>
 
@@ -157,14 +159,14 @@ export function AddCapitalTxnDialog({
               size="sm"
               onClick={() => setOpen(false)}
             >
-              Cancel
+              {L("বাতিল", "Cancel")}
             </Button>
             <Button
               type="submit"
               size="sm"
               disabled={pending || !selectedPartnerId}
             >
-              {pending ? "Saving..." : "Save Transaction"}
+              {pending ? L("সেভ হচ্ছে…", "Saving…") : L("সেভ করুন", "Save transaction")}
             </Button>
           </div>
         </form>

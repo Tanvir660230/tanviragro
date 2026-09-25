@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, WifiOff, RefreshCw, FolderOpen, Sigma } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataGridRow } from "./DataGridRow";
+import { useL } from "@/i18n/text";
 import { ROW_MARKERS, type GridColumn, type RowAction, type GridDensity, type GroupHeadMeta, type GroupFootMeta } from "./types";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export interface DataGridBodyProps<T extends Record<string, any>> {
 }
 
 export function DataGridBody<T extends Record<string, any>>(props: DataGridBodyProps<T>) {
+  const L = useL();
   const {
     data,
     columns,
@@ -65,8 +67,8 @@ export function DataGridBody<T extends Record<string, any>>(props: DataGridBodyP
     error,
     onRetry,
     isOffline,
-    emptyTitle = "No records found",
-    emptyDescription = "There are no records matching your criteria.",
+    emptyTitle,
+    emptyDescription,
     emptyAction,
     emptyIcon,
     renderGroupHeader,
@@ -106,7 +108,7 @@ export function DataGridBody<T extends Record<string, any>>(props: DataGridBodyP
               <AlertCircle className="h-8 w-8" />
               <div className="font-semibold">Failed to load data</div>
               <div className="text-xs text-muted-foreground">
-                {typeof error === "string" ? error : error?.message || "An unexpected error occurred."}
+                {typeof error === "string" ? error : error?.message || L("কিছু একটা ভুল হয়েছে।", "An unexpected error occurred.")}
               </div>
               {onRetry && (
                 <Button
@@ -156,8 +158,8 @@ if (isLoading) {
         <TableRow>
           <TableCell colSpan={totalCols} className="p-10 text-center">
             <EmptyState
-              title={emptyTitle}
-              description={emptyDescription}
+              title={emptyTitle ?? L("কিছু পাওয়া যায়নি", "No records found")}
+              description={emptyDescription ?? L("এই শর্তে কোনো রেকর্ড নেই।", "There are no records matching your criteria.")}
               action={emptyAction}
               icon={emptyIcon}
               compact

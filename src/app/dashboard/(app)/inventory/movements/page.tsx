@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { ArrowRightLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MovementsClient } from "@/components/inventory/MovementsClient";
+import { getL } from "@/i18n/server-text";
 
-export const metadata: Metadata = { title: "Stock Movements | Inventory" };
+export const metadata: Metadata = { title: "লেনদেন" };
 
 export default async function MovementsPage() {
+  const L = await getL();
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) redirect("/login");
@@ -31,7 +33,7 @@ export default async function MovementsPage() {
     <div className="space-y-4 pb-12">
       <PageHeader
         title="Stock Movements"
-        subtitle="Unified traceable timeline of every purchase, consumption, transfer and adjustment."
+        subtitle={L("প্রতিটি কেনা, খাওয়ানো, মিক্স ও গণনার পুরো তালিকা।", "Unified traceable timeline of every purchase, consumption, transfer and adjustment.")}
         icon={ArrowRightLeft}
         back="/dashboard/inventory"
       />

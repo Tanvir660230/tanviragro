@@ -2,17 +2,18 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import { BulkCostClient } from "@/components/finance/BulkCostClient";
-import { ArrowLeft, FileDiff } from "lucide-react";
-import Link from "next/link";
+import { FileDiff } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getL } from "@/i18n/server-text";
 
 export const metadata = {
   title: "Bulk Add Costs | Tanvir Agro",
 };
 
 export default async function BulkCostPage() {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.COST_ENTRY_CREATE);
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
@@ -22,7 +23,7 @@ export default async function BulkCostPage() {
     <div className="space-y-4 max-w-6xl mx-auto pb-12">
       <PageHeader
         title="Add Bulk Expenses"
-        subtitle="Quickly log multiple expenses (salary, rent, electricity) or assets at once."
+        subtitle={L("একসাথে কয়েকটি খরচ (বেতন, ভাড়া, বিদ্যুৎ) বা সম্পদ লিখুন।", "Quickly log multiple expenses (salary, rent, electricity) or assets at once.")}
         icon={FileDiff}
         back="/dashboard/finance"
       />

@@ -11,6 +11,8 @@ import { deletePartner } from "@/app/dashboard/(app)/partners/actions";
 import { EditPartnerDialog } from "@/components/partners/modals/EditPartnerDialog";
 import { Badge, QuickStat, TYPE_CONFIG, TXN_ICON, TXN_LABEL, TXN_TEXT, TXN_SIGN } from "@/components/partners/partner-ui";
 import { toast } from "sonner";
+import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 export interface CattleValuation {
   activeCattleCount: number;
@@ -48,6 +50,8 @@ export function PartnerCard({
   cattleValuation: CattleValuation;
   t: Dictionary;
 }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
 
@@ -55,7 +59,7 @@ export function PartnerCard({
     startDeleteTransition(async () => {
       const result = await deletePartner(p.id);
       if (result?.error) toast.error(result.error);
-      else toast.success(`${p.name} removed`);
+      else toast.success(L(`${p.name} সরানো হলো`, `${p.name} removed`));
     });
   }
 
@@ -108,16 +112,13 @@ export function PartnerCard({
                   : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                 }>
                   <Clock className="h-3 w-3" />
-                  {isLoss ? "Loss due" : "Profit due"}
+                  {isLoss ? L("ক্ষতি বাকি", "Loss due") : L("লাভ পাওনা", "Profit due")}
                 </Badge>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Joined{" "}
-              {new Date(p.joined_at + "T00:00:00").toLocaleDateString("en-US", {
-                month: "short", year: "numeric",
-              })}
-              {" · "}{months}mo active
+              {L("যোগ", "Joined")} {p.joined_at.slice(0, 7)}
+              {" · "}{L(`${months} মাস`, `${months}mo active`)}
             </p>
           </div>
 
@@ -149,12 +150,12 @@ export function PartnerCard({
         {/* ── Key metrics row ── */}
         <div className="grid grid-cols-3 gap-2">
           {type !== "labor" ? (
-            <QuickStat label="Invested" value={bdt(acc.totalInvested)} />
+            <QuickStat label={L("জমা", "Invested")} value={bdt(acc.totalInvested)} />
           ) : (
-            <QuickStat label="Labor Value" value={bdt(acc.laborValue)} />
+            <QuickStat label={L("শ্রমের মূল্য", "Labor Value")} value={bdt(acc.laborValue)} />
           )}
           <QuickStat
-            label="Equity"
+            label={L("মূলধন", "Equity")}
             value={(acc.equity >= 0 ? "" : "−") + bdt(acc.equity)}
             color={acc.equity >= 0 ? "green" : "red"}
           />
@@ -165,7 +166,7 @@ export function PartnerCard({
               color={roi >= 0 ? "green" : "red"}
             />
           ) : (
-            <QuickStat label="Share" value={`${sharePct.toFixed(1)}%`} />
+            <QuickStat label={L("ভাগ", "Share")} value={`${sharePct.toFixed(1)}%`} />
           )}
         </div>
         {/* ── Status row (pending + vesting inline) ── */}
@@ -179,7 +180,7 @@ export function PartnerCard({
                   : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
               )}>
                 <Clock className="h-3 w-3" />
-                {isLoss ? "Loss due" : "Profit due"}: {bdt(pendingAmt)}
+                {isLoss ? L("ক্ষতি বাকি", "Loss due") : L("লাভ পাওনা", "Profit due")}: {bdt(pendingAmt)}
               </span>
             )}
             {type !== "capital" && p.labor_value_monthly && p.labor_value_monthly > 0 && (
@@ -190,7 +191,7 @@ export function PartnerCard({
                   : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
               )}>
                 <Wrench className="h-3 w-3" />
-                {cliffPassed ? `${vestedMonths}mo vested` : `Cliff: ${months}/${cliff}mo`}
+                {cliffPassed ? L(`${vestedMonths} মাস যোগ হয়েছে`, `${vestedMonths}mo vested`) : L(`অপেক্ষা: ${months}/${cliff} মাস`, `Cliff: ${months}/${cliff}mo`)}
               </span>
             )}
           </div>
@@ -210,7 +211,7 @@ export function PartnerCard({
                   {TXN_SIGN[txn.type]}{bdt(txn.amount)}
                 </span>
                 <span className="text-muted-foreground tabular-nums shrink-0 w-12 text-right">
-                  {new Date(txn.recorded_at + "T00:00:00").toLocaleDateString("en-US", {
+                  {new Date(txn.recorded_at + "T00:00:00").toLocaleDateString(locale === "bn" ? "bn-BD-u-nu-latn" : "en-US", {
                     month: "short", day: "numeric",
                   })}
                 </span>
@@ -219,14 +220,14 @@ export function PartnerCard({
             {transactions.length > 3 && (
               <div className="px-3 py-1.5 border-t border-border/30 bg-muted/20">
                 <Link href={`/dashboard/partners/${p.id}`} className="text-[11px] text-primary hover:underline font-medium">
-                  +{transactions.length - 3} more →
+                  {L(`আরও ${transactions.length - 3}টি →`, `+${transactions.length - 3} more →`)}
                 </Link>
               </div>
             )}
           </div>
         ) : (
           <div className="rounded-xl bg-muted/20 border border-dashed border-border/50 px-3 py-3 text-center">
-            <p className="text-xs text-muted-foreground">No transactions yet</p>
+            <p className="text-xs text-muted-foreground">{L("এখনো কোনো লেনদেন নেই", "No transactions yet")}</p>
           </div>
         )}
 
@@ -238,7 +239,7 @@ export function PartnerCard({
           href={`/dashboard/partners/${p.id}`}
           className="mt-auto flex items-center justify-between w-full rounded-xl border border-border/60 bg-muted/30 hover:bg-primary/5 hover:border-primary/30 px-3 py-2.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-all group"
         >
-          <span>Full Profile &amp; Transactions</span>
+          <span>{L("পুরো প্রোফাইল ও লেনদেন", "Full profile & transactions")}</span>
           <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
         </Link>
       </div>

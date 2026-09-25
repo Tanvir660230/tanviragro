@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useL } from "@/i18n/text";
 import type { GridColumn, RowAction } from "./types";
 
 export interface DataGridCardViewProps<T extends Record<string, any>> {
@@ -39,6 +40,7 @@ export interface DataGridCardViewProps<T extends Record<string, any>> {
 }
 
 export function DataGridCardView<T extends Record<string, any>>(props: DataGridCardViewProps<T>) {
+  const L = useL();
   const {
     data,
     columns,
@@ -58,8 +60,8 @@ export function DataGridCardView<T extends Record<string, any>>(props: DataGridC
     error,
     onRetry,
     isOffline,
-    emptyTitle = "No records found",
-    emptyDescription = "There are no records matching your criteria.",
+    emptyTitle,
+    emptyDescription,
     emptyAction,
     emptyIcon,
   } = props;
@@ -80,11 +82,11 @@ export function DataGridCardView<T extends Record<string, any>>(props: DataGridC
         <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
         <div className="font-semibold text-destructive">Failed to load data</div>
         <div className="text-xs text-muted-foreground mt-1">
-          {typeof error === "string" ? error : error?.message || "An error occurred"}
+          {typeof error === "string" ? error : error?.message || L("কিছু একটা ভুল হয়েছে", "An error occurred")}
         </div>
         {onRetry && (
           <Button variant="outline" size="sm" onClick={onRetry} className="mt-3 text-xs">
-            Retry
+            {L("আবার চেষ্টা", "Retry")}
           </Button>
         )}
       </div>
@@ -111,7 +113,7 @@ export function DataGridCardView<T extends Record<string, any>>(props: DataGridC
   if (data.length === 0) {
     return (
       <div className="p-8 text-center bg-card rounded-xl border border-border">
-        <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} icon={emptyIcon} compact />
+        <EmptyState title={emptyTitle ?? L("কিছু পাওয়া যায়নি", "No records found")} description={emptyDescription ?? L("এই শর্তে কোনো রেকর্ড নেই।", "There are no records matching your criteria.")} action={emptyAction} icon={emptyIcon} compact />
       </div>
     );
   }
@@ -161,7 +163,7 @@ export function DataGridCardView<T extends Record<string, any>>(props: DataGridC
                 <div className="font-semibold text-sm truncate text-foreground">
                   {titleCol?.cell
                     ? titleCol.cell({ row, value: titleCol.accessorKey ? row[titleCol.accessorKey] : undefined, index: idx, isExpanded, toggleExpand: () => toggleExpandRow(rowId) })
-                    : titleCol?.accessorKey ? String(row[titleCol.accessorKey] ?? "") : `Item #${idx + 1}`}
+                    : titleCol?.accessorKey ? String(row[titleCol.accessorKey] ?? "") : L(`#${idx + 1}`, `Item #${idx + 1}`)}
                 </div>
               </div>
 
@@ -228,7 +230,7 @@ export function DataGridCardView<T extends Record<string, any>>(props: DataGridC
                   className="flex items-center gap-1 text-xs text-primary font-medium hover:underline"
                 >
                   {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  <span>{isExpanded ? "Hide Details" : "View Details"}</span>
+                  <span>{isExpanded ? L("বিস্তারিত লুকান", "Hide details") : L("বিস্তারিত দেখুন", "View details")}</span>
                 </button>
                 {isExpanded && <div className="mt-2 pt-2 text-xs">{renderExpandedRow(row)}</div>}
               </div>

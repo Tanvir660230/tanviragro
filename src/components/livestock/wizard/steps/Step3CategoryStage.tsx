@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { AnimalWizardCategoryStage } from "@/lib/validation/cattle-wizard";
 import { Sparkles, Target, TrendingUp } from "lucide-react";
+import { useL } from "@/i18n/text";
 
 interface Props {
   data: AnimalWizardCategoryStage;
@@ -12,13 +13,14 @@ interface Props {
 }
 
 export function Step3CategoryStage({ data, onChange, errors }: Props) {
+  const L = useL();
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Category */}
         <div className="space-y-1.5">
           <Label htmlFor="category" className="text-xs font-semibold">
-            Livestock Stage / Purpose
+            {L("উদ্দেশ্য", "Livestock Stage / Purpose")}
           </Label>
           <select
             id="category"
@@ -26,12 +28,12 @@ export function Step3CategoryStage({ data, onChange, errors }: Props) {
             onChange={(e) => onChange({ category: e.target.value as any })}
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
           >
-            <option value="fattening">Beef Fattening</option>
-            <option value="qurbani">Qurbani Target Segment</option>
-            <option value="dairy">Dairy / Milking</option>
-            <option value="breeder">Breeder / Bull</option>
-            <option value="calf">Calf Rearing</option>
-            <option value="general">General Herd</option>
+            <option value="fattening">{L("মোটাতাজা করা", "Beef Fattening")}</option>
+            <option value="qurbani">{L("কোরবানির জন্য", "Qurbani Target Segment")}</option>
+            <option value="dairy">{L("দুধ", "Dairy / Milking")}</option>
+            <option value="breeder">{L("প্রজনন", "Breeder / Bull")}</option>
+            <option value="calf">{L("বাছুর পালন", "Calf Rearing")}</option>
+            <option value="general">{L("সাধারণ", "General Herd")}</option>
           </select>
         </div>
 
@@ -46,7 +48,7 @@ export function Step3CategoryStage({ data, onChange, errors }: Props) {
             />
             <div className="flex items-center gap-1.5 text-xs font-medium">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-              <span>Flag as Premium Qurbani Market Target</span>
+              <span>{L("কোরবানির তালিকায় রাখুন", "Flag as Premium Qurbani Market Target")}</span>
             </div>
           </label>
         </div>
@@ -55,7 +57,7 @@ export function Step3CategoryStage({ data, onChange, errors }: Props) {
         <div className="space-y-1.5">
           <Label htmlFor="targetWeightKg" className="text-xs font-semibold flex items-center gap-1.5">
             <Target className="h-3.5 w-3.5 text-muted-foreground" />
-            Target Final Weight (kg)
+            {L("লক্ষ্য ওজন (কেজি)", "Target Final Weight (kg)")}
           </Label>
           <Input
             id="targetWeightKg"
@@ -71,7 +73,7 @@ export function Step3CategoryStage({ data, onChange, errors }: Props) {
         <div className="space-y-1.5">
           <Label htmlFor="expectedDailyGainKg" className="text-xs font-semibold flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-            Expected ADG (kg/day)
+            {L("দৈনিক ওজন বৃদ্ধি (কেজি/দিন)", "Expected ADG (kg/day)")}
           </Label>
           <Input
             id="expectedDailyGainKg"

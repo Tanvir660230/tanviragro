@@ -4,356 +4,147 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
-import { LivestockEventBus } from "@/lib/livestock/events";
-import {
-  VaccinationEngine,
-  type AdministrationRoute,
-  type ReactionSeverity,
-  type ReactionType,
-  type VaccineCode,
-  type VaccinationExecutionParams,
-} from "@/lib/livestock/vaccination-engine";
-import type { HealthEventType } from "@/types/database";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
-import { todayDhaka } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
 import { computeFIFOUnitCost } from "@/lib/inventory-fifo";
+import type { HealthEventType } from "@/types/database";
 
 export interface VaccinationActionResult {
   success?: boolean;
   error?: string;
-  warning?: string;
-  eventId?: string;
-  boosterEventId?: string;
-  affectedCattleCount?: number;
+  /** how many animals got the dose */
+  count?: number;
+  /** of those, how many closed a task that was already scheduled */
+  closedScheduled?: number;
 }
 
-export async function administerVaccinationAction(
-  payload: VaccinationExecutionParams
-): Promise<VaccinationActionResult> {
-  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
-  if (permissionDenied) return { error: permissionDenied };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Authentication required" };
-
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business workspace not found" };
-
-  const lockErr = await checkFinancialLock(supabase, businessId, payload.administeredAt);
-  if (lockErr) return { error: lockErr };
-
-  const { data: cattle, error: cattleErr } = await supabase
-    .from("cattle")
-    .select("id, tag_id, status, business_id")
-    .eq("id", payload.cattleId)
-    .single();
-
-  if (cattleErr || !cattle || cattle.business_id !== businessId) {
-    return { error: "Livestock record not found or access unauthorized" };
-  }
-
-  const totalCost = 0;
-
-  if (payload.vaccineItemId) {
-    const { data: item, error: itemErr } = await supabase
-      .from("inventory_items")
-      .select("id, name, unit")
-      .eq("id", payload.vaccineItemId)
-      .eq("business_id", businessId)
-      .single();
-
-    if (!itemErr && item) {
-      const consumedQty = Math.max(0.1, payload.doseAdministeredMl);
-      const unitCost = await computeFIFOUnitCost(supabase, item.id, consumedQty);
-      await supabase.from("inventory_transactions").insert({
-        item_id: item.id,
-        cattle_id: payload.cattleId,
-        type: "consumption",
-        qty: consumedQty,
-        unit_cost: unitCost ?? undefined,
-        recorded_at: payload.administeredAt,
-        notes: `Vaccination: ${payload.vaccineName} | Batch: ${payload.batchNumber || "N/A"} | Certifier: ${payload.administeredBy}`,
-      });
-    }
-  }
-
-  const notesDetail = [
-    `Vaccine: ${payload.vaccineName}`,
-    `Dose: ${payload.doseAdministeredMl}ml (${payload.route})`,
-    payload.batchNumber ? `Batch #${payload.batchNumber}` : null,
-    payload.manufacturer ? `Mfr: ${payload.manufacturer}` : null,
-    `Administered by: ${payload.administeredBy}`,
-    payload.notes ? `Notes: ${payload.notes}` : null,
-  ]
-    .filter(Boolean)
-    .join(" | ");
-
-  const { data: insertedEvent, error: eventErr } = await supabase
-    .from("health_events")
-    .insert({
-      business_id: businessId,
-      cattle_id: payload.cattleId,
-      title: `${payload.vaccineName} (Vaccinated)`,
-      event_type: "vaccine",
-      scheduled_at: payload.administeredAt,
-      completed_at: payload.administeredAt,
-      notes: notesDetail,
-    })
-    .select("id")
-    .single();
-
-  if (eventErr) {
-    return { error: "Failed to log vaccination health event: " + eventErr.message };
-  }
-
-  await supabase.from("cattle_treatments").insert({
-    cattle_id: payload.cattleId,
-    medicine_item_id: payload.vaccineItemId || null,
-    diagnosis: `Vaccination Protocol: ${payload.vaccineName}`,
-    dose_administered: payload.doseAdministeredMl,
-    dose_unit: "ml",
-    vet_fee: 0,
-    additional_medical_cost: totalCost,
-    treated_at: payload.administeredAt,
-    notes: `Batch: ${payload.batchNumber || "N/A"} | Certifier: ${payload.administeredBy}`,
-  });
-
-  let boosterEventId: string | undefined;
-  if (payload.scheduleBooster) {
-    const boosterDays = payload.boosterDays || 28;
-    const boosterDueDate = VaccinationEngine.calculateNextBoosterDate(
-      payload.administeredAt,
-      boosterDays
-    );
-
-    const { data: boosterData } = await supabase
-      .from("health_events")
-      .insert({
-        business_id: businessId,
-        cattle_id: payload.cattleId,
-        title: `${payload.vaccineName} — Booster Dose`,
-        event_type: "vaccine",
-        scheduled_at: boosterDueDate,
-        notes: `Booster for dose given on ${payload.administeredAt}. Previous Batch #${payload.batchNumber || "N/A"}. Route: ${payload.route}`,
-      })
-      .select("id")
-      .single();
-
-    if (boosterData) {
-      boosterEventId = boosterData.id;
-    }
-  }
-
-  await LivestockEventBus.publish(
-    "VaccinationCompleted",
-    businessId,
-    payload.cattleId,
-    {
-      vaccineName: payload.vaccineName,
-      route: payload.route,
-      batchNumber: payload.batchNumber,
-      administeredBy: payload.administeredBy,
-      doseMl: payload.doseAdministeredMl,
-      boosterScheduled: payload.scheduleBooster,
-    }
-  );
-
-  revalidatePath(`/dashboard/cattle/${payload.cattleId}`);
-  revalidatePath("/dashboard/cattle");
-  revalidatePath("/dashboard/cattle/health");
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard/compliance");
-  revalidateTag("accounting", { expire: 0 });
-
-  return {
-    success: true,
-    eventId: insertedEvent?.id,
-    boosterEventId,
-  };
-}
-
-export async function executeBatchVaccinationCampaignAction(payload: {
+export interface GiveVaccinePayload {
+  /** one or more animals */
   cattleIds: string[];
-  vaccineItemId?: string | null;
   vaccineName: string;
-  vaccineCode?: VaccineCode;
-  batchNumber?: string;
-  manufacturer?: string;
-  doseAdministeredMl: number;
-  route: AdministrationRoute;
-  administeredBy: string;
-  administeredAt: string;
-  scheduleBooster: boolean;
-  boosterDays?: number;
-}): Promise<VaccinationActionResult> {
+  givenAt: string;
+  doseMl?: number | null;
+  route?: string | null;
+  givenBy?: string | null;
+  notes?: string | null;
+  /** the scheduled task this dose completes (from the queue); otherwise a matching pending task is closed */
+  scheduledEventId?: string | null;
+  /** stock used: the item and the quantity per animal, in that item's own unit */
+  stockItemId?: string | null;
+  stockQtyPerAnimal?: number | null;
+  /** add a follow-up (booster) task this many days later */
+  boosterDays?: number | null;
+}
+
+function refresh() {
+  revalidatePath("/dashboard/health");
+  revalidatePath("/dashboard/health/vaccinations");
+  revalidatePath("/dashboard/health/treatments");
+  revalidatePath("/dashboard/compliance");
+  revalidatePath("/dashboard/cattle");
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
+  revalidateTag("accounting", { expire: 0 });
+}
+
+/**
+ * Record a vaccine given to one or several animals.
+ * For each animal it CLOSES the task that was waiting for this vaccine (the one tapped in the
+ * queue, or a pending task with the same name) instead of adding a second, completed copy —
+ * the old version left the scheduled task overdue and counted the dose twice.
+ */
+export async function giveVaccineAction(p: GiveVaccinePayload): Promise<VaccinationActionResult> {
   const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
   if (permissionDenied) return { error: permissionDenied };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Authentication required" };
-
   const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business workspace not found" };
+  if (!businessId) return { error: "Business not found" };
 
-  if (!payload.cattleIds || payload.cattleIds.length === 0) {
-    return { error: "No cattle selected for batch vaccination" };
-  }
+  const name = p.vaccineName.trim();
+  const ids = [...new Set(p.cattleIds)].filter(Boolean);
+  if (!name) return { error: "Vaccine name is required" };
+  if (!ids.length) return { error: "Select at least one animal" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(p.givenAt)) return { error: "Invalid date" };
 
-  const lockErr = await checkFinancialLock(supabase, businessId, payload.administeredAt);
+  const lockErr = await checkFinancialLock(supabase, businessId, p.givenAt);
   if (lockErr) return { error: lockErr };
 
-  if (payload.vaccineItemId) {
-    const { data: item } = await supabase
-      .from("inventory_items")
-      .select("id, name, unit")
-      .eq("id", payload.vaccineItemId)
-      .eq("business_id", businessId)
-      .single();
+  // only this farm's animals
+  const { data: herd } = await supabase.from("cattle").select("id").eq("business_id", businessId).in("id", ids);
+  const valid = (herd ?? []).map((c) => c.id);
+  if (valid.length !== ids.length) return { error: "Animal not found" };
 
-    if (item) {
-      const totalConsumed = payload.doseAdministeredMl * payload.cattleIds.length;
-      const unitCost = await computeFIFOUnitCost(supabase, item.id, totalConsumed);
-      await supabase.from("inventory_transactions").insert({
-        item_id: item.id,
-        type: "consumption",
-        qty: totalConsumed,
-        unit_cost: unitCost ?? undefined,
-        recorded_at: payload.administeredAt,
-        notes: `Batch Campaign: ${payload.vaccineName} administered to ${payload.cattleIds.length} head. Batch: ${payload.batchNumber || "N/A"}`,
+  const detail = [
+    p.doseMl ? `Dose: ${p.doseMl}ml${p.route ? ` (${p.route})` : ""}` : null,
+    p.givenBy?.trim() ? `By: ${p.givenBy.trim()}` : null,
+    p.notes?.trim() || null,
+  ].filter(Boolean).join(" | ") || null;
+
+  // the tasks this closes: the tapped one, else pending tasks with the same name
+  const { data: pending } = await supabase
+    .from("health_events")
+    .select("id, cattle_id, title, notes")
+    .eq("business_id", businessId)
+    .in("cattle_id", valid)
+    .is("completed_at", null)
+    .is("deleted_at", null)
+    .order("scheduled_at", { ascending: true });
+  const byAnimal = new Map<string, { id: string; notes: string | null }>();
+  for (const e of pending ?? []) {
+    const hit = p.scheduledEventId ? e.id === p.scheduledEventId : e.title.trim().toLowerCase() === name.toLowerCase();
+    if (hit && !byAnimal.has(e.cattle_id)) byAnimal.set(e.cattle_id, { id: e.id, notes: e.notes });
+  }
+
+  let closed = 0;
+  for (const cid of valid) {
+    const task = byAnimal.get(cid);
+    if (task) {
+      const { error } = await supabase.from("health_events")
+        .update({ completed_at: p.givenAt, notes: [task.notes, detail].filter(Boolean).join(" | ") || null })
+        .eq("id", task.id).eq("business_id", businessId);
+      if (error) return { error: "Could not update the task: " + error.message };
+      closed++;
+    } else {
+      const { error } = await supabase.from("health_events").insert({
+        business_id: businessId, cattle_id: cid, title: name, event_type: "vaccine" as HealthEventType,
+        scheduled_at: p.givenAt, completed_at: p.givenAt, notes: detail,
       });
+      if (error) return { error: "Could not save the vaccine: " + error.message };
     }
   }
 
-  const notesDetail = [
-    `Campaign: ${payload.vaccineName}`,
-    `Dose: ${payload.doseAdministeredMl}ml (${payload.route})`,
-    payload.batchNumber ? `Batch #${payload.batchNumber}` : null,
-    `Administered by: ${payload.administeredBy}`,
-  ]
-    .filter(Boolean)
-    .join(" | ");
-
-  const completedEvents = payload.cattleIds.map((cid) => ({
-    business_id: businessId,
-    cattle_id: cid,
-    title: `${payload.vaccineName} (Vaccinated)`,
-    event_type: "vaccine" as HealthEventType,
-    scheduled_at: payload.administeredAt,
-    completed_at: payload.administeredAt,
-    notes: notesDetail,
-  }));
-
-  const { error: insertErr } = await supabase.from("health_events").insert(completedEvents);
-  if (insertErr) {
-    return { error: "Failed to insert batch health events: " + insertErr.message };
+  // stock used (in the item's own unit)
+  const per = Number(p.stockQtyPerAnimal) || 0;
+  if (p.stockItemId && per > 0) {
+    const { data: item } = await supabase.from("inventory_items").select("id").eq("id", p.stockItemId).eq("business_id", businessId).maybeSingle();
+    if (item) {
+      const qty = per * valid.length;
+      const unitCost = await computeFIFOUnitCost(supabase, item.id, qty);
+      const { error } = await supabase.from("inventory_transactions").insert({
+        item_id: item.id,
+        cattle_id: valid.length === 1 ? valid[0] : null,
+        type: "consumption",
+        qty,
+        unit_cost: unitCost ?? undefined,
+        recorded_at: p.givenAt,
+        notes: `Vaccine: ${name} — ${valid.length} animal(s)`,
+      });
+      if (error) return { error: "Vaccine saved, but the stock could not be reduced: " + error.message };
+    }
   }
 
-  if (payload.scheduleBooster) {
-    const boosterDueDate = VaccinationEngine.calculateNextBoosterDate(
-      payload.administeredAt,
-      payload.boosterDays || 28
-    );
-    const boosterEvents = payload.cattleIds.map((cid) => ({
-      business_id: businessId,
-      cattle_id: cid,
-      title: `${payload.vaccineName} — Booster Dose`,
-      event_type: "vaccine" as HealthEventType,
-      scheduled_at: boosterDueDate,
-      notes: `Campaign booster following dose on ${payload.administeredAt}. Batch: ${payload.batchNumber || "N/A"}`,
-    }));
-
-    await supabase.from("health_events").insert(boosterEvents);
+  const booster = Number(p.boosterDays) || 0;
+  if (booster > 0) {
+    const due = addDays(p.givenAt, booster);
+    await supabase.from("health_events").insert(valid.map((cid) => ({
+      business_id: businessId, cattle_id: cid, title: `${name} — Booster`, event_type: "vaccine" as HealthEventType,
+      scheduled_at: due, notes: `Follow-up of the dose on ${p.givenAt}`,
+    })));
   }
 
-  const treatmentRows = payload.cattleIds.map((cid) => ({
-    cattle_id: cid,
-    medicine_item_id: payload.vaccineItemId || null,
-    diagnosis: `Mass Vaccination: ${payload.vaccineName}`,
-    dose_administered: payload.doseAdministeredMl,
-    dose_unit: "ml",
-    vet_fee: 0,
-    additional_medical_cost: 0,
-    treated_at: payload.administeredAt,
-    notes: `Batch #${payload.batchNumber || "N/A"} | Executed by ${payload.administeredBy}`,
-  }));
-
-  await supabase.from("cattle_treatments").insert(treatmentRows);
-
-  revalidatePath("/dashboard/cattle");
-  revalidatePath("/dashboard/cattle/health");
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard/compliance");
-  revalidateTag("accounting", { expire: 0 });
-
-  return {
-    success: true,
-    affectedCattleCount: payload.cattleIds.length,
-  };
+  refresh();
+  return { success: true, count: valid.length, closedScheduled: closed };
 }
-export async function recordVaccineAdverseEventAction(payload: {
-  cattleId: string;
-  cattleTag: string;
-  vaccineName: string;
-  batchNumber?: string;
-  reactionType: ReactionType;
-  severity: ReactionSeverity;
-  symptoms: string;
-  treatmentAdministered?: string;
-  veterinarianNotes?: string;
-  requiresQuarantine: boolean;
-  followUpDate?: string;
-}): Promise<VaccinationActionResult> {
-  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
-  if (permissionDenied) return { error: permissionDenied };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Authentication required" };
-
-  const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) return { error: "Business workspace not found" };
-
-  const todayISO = todayDhaka();
-
-  await supabase.from("cattle_treatments").insert({
-    cattle_id: payload.cattleId,
-    diagnosis: `Adverse Vaccine Reaction: ${payload.reactionType.toUpperCase()} (${payload.severity})`,
-    dose_administered: null,
-    dose_unit: undefined,
-    vet_fee: 0,
-    additional_medical_cost: 0,
-    treated_at: todayISO,
-    notes: `Vaccine: ${payload.vaccineName} | Symptoms: ${payload.symptoms} | Vet Notes: ${payload.veterinarianNotes || "N/A"}`,
-  });
-
-  const followUpAt = payload.followUpDate || todayISO;
-  await supabase.from("health_events").insert({
-    business_id: businessId,
-    cattle_id: payload.cattleId,
-    title: `Adverse Reaction Review: ${payload.reactionType}`,
-    event_type: "treatment",
-    scheduled_at: followUpAt,
-    notes: `Severity: ${payload.severity} | Symptoms: ${payload.symptoms} | Treatment: ${payload.treatmentAdministered || "None"}`,
-  });
-
-  if (payload.requiresQuarantine) {
-    await supabase
-      .from("cattle")
-      .update({ is_quarantined: true, updated_at: new Date().toISOString() })
-      .eq("id", payload.cattleId)
-      .eq("business_id", businessId);
-  }
-
-  revalidatePath(`/dashboard/cattle/${payload.cattleId}`);
-  revalidatePath("/dashboard/cattle/health");
-  revalidatePath("/dashboard/cattle");
-
-  return { success: true };
-}
-

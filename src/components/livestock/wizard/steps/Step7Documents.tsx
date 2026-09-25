@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { AnimalWizardDocument } from "@/lib/validation/cattle-wizard";
 import { FileText, Plus, Trash2, Link2 } from "lucide-react";
 import { useState } from "react";
+import { useL } from "@/i18n/text";
 
 interface Props {
   documents: AnimalWizardDocument[];
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function Step7Documents({ documents, notes, onDocumentsChange, onNotesChange }: Props) {
+  const L = useL();
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
   const [docType, setDocType] = useState("Certificate");
@@ -44,14 +46,14 @@ export function Step7Documents({ documents, notes, onDocumentsChange, onNotesCha
       {/* General Notes */}
       <div className="space-y-1.5">
         <Label htmlFor="generalNotes" className="text-xs font-semibold">
-          General Notes & Observations
+          {L("নোট", "General Notes & Observations")}
         </Label>
         <Textarea
           id="generalNotes"
           rows={3}
           value={notes}
           onChange={(e) => onNotesChange(e.target.value)}
-          placeholder="Enter any distinct marks, temperament notes, horns, or general remarks..."
+          placeholder={L("বিশেষ চিহ্ন, স্বভাব, শিং বা অন্য কিছু…", "Enter any distinct marks, temperament notes, horns, or general remarks...")}
         />
       </div>
 
@@ -59,14 +61,14 @@ export function Step7Documents({ documents, notes, onDocumentsChange, onNotesCha
       <div className="space-y-2">
         <Label className="text-xs font-semibold flex items-center gap-1.5">
           <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-          Document Links & Health Certificates
+          {L("কাগজপত্রের লিংক", "Document Links & Health Certificates")}
         </Label>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Input
             value={docName}
             onChange={(e) => setDocName(e.target.value)}
-            placeholder="Document title (e.g. DLS Certificate)"
+            placeholder={L("নাম (যেমন DLS সনদ)", "Document title (e.g. DLS Certificate)")}
             className="text-xs h-8"
           />
           <Input
@@ -81,9 +83,9 @@ export function Step7Documents({ documents, notes, onDocumentsChange, onNotesCha
               onChange={(e) => setDocType(e.target.value)}
               className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
             >
-              <option value="Certificate">Certificate</option>
-              <option value="Invoice">Receipt / Invoice</option>
-              <option value="Medical">Medical Report</option>
+              <option value="Certificate">{L("সনদ", "Certificate")}</option>
+              <option value="Invoice">{L("রসিদ / মেমো", "Receipt / Invoice")}</option>
+              <option value="Medical">{L("চিকিৎসার রিপোর্ট", "Medical Report")}</option>
             </select>
             <Button type="button" size="sm" onClick={addDoc} className="h-8 text-xs px-2.5">
               <Plus className="h-3.5 w-3.5" />

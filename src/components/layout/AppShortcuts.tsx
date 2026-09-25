@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useShell } from "./ShellContext";
-import { X, Command, Sparkles } from "lucide-react";
+import { X, Command } from "lucide-react";
 
 export function AppShortcuts() {
   const router = useRouter();

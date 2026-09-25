@@ -3,16 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Trash2, Shield, User, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Loader2, Trash2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { updateMemberRole, removeMember } from "@/app/dashboard/(app)/settings/team/actions";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { useL } from "@/i18n/text";
 
-const ROLE_BADGE: Record<string, string> = {
-  admin:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800",
-  manager: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-300 dark:border-blue-800",
-  worker:  "bg-muted text-muted-foreground border border-border",
-};
 
 interface Props {
   id: string;
@@ -22,6 +18,7 @@ interface Props {
 }
 
 export function MemberRow({ id, role, joinedAt, userId }: Props) {
+  const L = useL();
   const router = useRouter();
   const [updating, startUpdate] = useTransition();
   const [removing, startRemove] = useTransition();
@@ -34,7 +31,7 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
     startUpdate(async () => {
       const result = await updateMemberRole(id, newRole);
       if (result.error) { toast.error(result.error); setCurrentRole(role); }
-      else toast.success("Role updated successfully");
+      else toast.success(L("ভূমিকা বদলানো হলো", "Role updated successfully"));
     });
   }
 
@@ -43,7 +40,7 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
     startRemove(async () => {
       const result = await removeMember(id);
       if (result.error) toast.error(result.error);
-      else { toast.success("Member access revoked"); router.refresh(); }
+      else { toast.success(L("সদস্যকে সরানো হলো", "Member access revoked")); router.refresh(); }
     });
   }
 
@@ -56,8 +53,8 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
           <User className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate font-mono text-xs">User ID: {userId.slice(0, 12)}…</p>
-          <p className="text-xs text-muted-foreground">Joined {joinDate}</p>
+          <p className="text-sm font-semibold text-foreground truncate font-mono text-xs">{L("ইউজার", "User")}: {userId.slice(0, 12)}…</p>
+          <p className="text-xs text-muted-foreground">{L("যোগ", "Joined")} {joinDate}</p>
         </div>
       </div>
 
@@ -66,11 +63,11 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
           value={currentRole}
           onChange={handleRoleChange}
           disabled={updating || removing}
-          aria-label="Change user role"
+          aria-label={L("ভূমিকা বদলান", "Change user role")}
           className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 cursor-pointer shadow-sm"
         >
-          <option value="manager">Manager (Operations)</option>
-          <option value="worker">Worker (Staff)</option>
+          <option value="manager">{L("ম্যানেজার", "Manager (Operations)")}</option>
+          <option value="worker">{L("কর্মী", "Worker (Staff)")}</option>
         </select>
         {updating && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
         <Button
@@ -79,7 +76,7 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
           className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           disabled={removing || updating}
           onClick={() => setConfirmRemove(true)}
-          title="Revoke access"
+          title={L("সরিয়ে দিন", "Revoke access")}
         >
           {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
         </Button>
@@ -87,9 +84,9 @@ export function MemberRow({ id, role, joinedAt, userId }: Props) {
 
       <ConfirmDialog
         open={confirmRemove}
-        title="Revoke Team Member Access"
-        description="Are you sure you want to remove this user? They will immediately lose access to this farm workspace and all its data."
-        confirmLabel="Revoke Access"
+        title={L("সদস্যকে সরাবেন?", "Revoke Team Member Access")}
+        description={L("সরালে তিনি সাথে সাথে খামারের কোনো তথ্য আর দেখতে পারবেন না।", "Are you sure you want to remove this user? They will immediately lose access to this farm workspace and all its data.")}
+        confirmLabel={L("সরিয়ে দিন", "Revoke Access")}
         destructive
         onConfirm={handleRemove}
         onCancel={() => setConfirmRemove(false)}

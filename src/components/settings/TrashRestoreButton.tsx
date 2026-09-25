@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { RotateCcw, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   restoreCostEntry,
@@ -12,6 +12,7 @@ import {
   permanentlyDelete,
 } from "@/app/dashboard/(app)/settings/trash/actions";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { useL } from "@/i18n/text";
 
 interface Props {
   id: string;
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function TrashRestoreButton({ id, restoreAction, table }: Props) {
+  const L = useL();
   const router = useRouter();
   const [restoring, startRestore] = useTransition();
   const [deleting, startDelete] = useTransition();
@@ -32,7 +34,7 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
       else if (restoreAction === "inventory_item") result = await restoreInventoryItem(id);
       else                                      result = await restoreWeightLog(id);
       if (result.error) toast.error(result.error);
-      else { toast.success("Record restored successfully"); router.refresh(); }
+      else { toast.success(L("ফেরত আনা হলো", "Record restored successfully")); router.refresh(); }
     });
   }
 
@@ -41,7 +43,7 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
     startDelete(async () => {
       const result = await permanentlyDelete(table, id);
       if (result.error) toast.error(result.error);
-      else { toast.success("Record permanently removed"); router.refresh(); }
+      else { toast.success(L("চিরতরে মুছে ফেলা হলো", "Record permanently removed")); router.refresh(); }
     });
   }
 
@@ -53,10 +55,10 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
         className="gap-1.5 text-xs h-8 shadow-sm"
         disabled={restoring || deleting}
         onClick={handleRestore}
-        aria-label="Restore item"
+        aria-label={L("ফেরত আনুন", "Restore item")}
       >
         {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-        Restore
+        {L("ফেরত আনুন", "Restore")}
       </Button>
       <Button
         variant="ghost"
@@ -64,17 +66,17 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
         className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         disabled={restoring || deleting}
         onClick={() => setConfirmDelete(true)}
-        aria-label="Permanently delete item"
-        title="Permanently erase"
+        aria-label={L("চিরতরে মুছুন", "Permanently delete item")}
+        title={L("চিরতরে মুছুন", "Permanently erase")}
       >
         {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
       </Button>
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Permanently Delete Record"
-        description="This will erase this archived record from the database forever. This action is irreversible."
-        confirmLabel="Delete Forever"
+        title={L("চিরতরে মুছবেন?", "Permanently Delete Record")}
+        description={L("এটি চিরতরে মুছে যাবে, আর ফেরত আনা যাবে না।", "This will erase this archived record from the database forever. This action is irreversible.")}
+        confirmLabel={L("চিরতরে মুছুন", "Delete Forever")}
         destructive
         onConfirm={handlePermanentDelete}
         onCancel={() => setConfirmDelete(false)}

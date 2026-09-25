@@ -7,6 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useL } from "@/i18n/text";
 
 export interface EquityEntry {
   id: string;
@@ -37,6 +38,7 @@ function bdt(n: number) {
 }
 
 export function PartnerEquityChart({ entries, totalBusinessValue }: Props) {
+  const L = useL();
   const positiveEntries = entries.filter((e) => e.equity > 0);
   const totalEquity = positiveEntries.reduce((s, e) => s + e.equity, 0);
 
@@ -73,7 +75,7 @@ export function PartnerEquityChart({ entries, totalBusinessValue }: Props) {
             </Pie>
             <Tooltip
               formatter={(v, _n, props) => [
-                `${bdt(Number(v ?? 0))} (${((props?.payload as { sharePct?: number } | undefined)?.sharePct ?? 0).toFixed(1)}% profit share)`,
+                `${bdt(Number(v ?? 0))} (${((props?.payload as { sharePct?: number } | undefined)?.sharePct ?? 0).toFixed(1)}% ${L("লাভের ভাগ", "profit share")})`,
                 "",
               ]}
               contentStyle={{
@@ -91,14 +93,14 @@ export function PartnerEquityChart({ entries, totalBusinessValue }: Props) {
         {/* Center overlay */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-0.5">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            Total Equity
+            {L("মোট মূলধন", "Total Equity")}
           </p>
           <p className="text-base font-bold tabular-nums text-foreground leading-tight">
             {bdt(totalEquity)}
           </p>
           {totalBusinessValue > totalEquity && (
             <p className="text-[10px] text-muted-foreground tabular-nums">
-              of {bdt(totalBusinessValue)}
+              {L(`মোট ${bdt(totalBusinessValue)}-এর মধ্যে`, `of ${bdt(totalBusinessValue)}`)}
             </p>
           )}
         </div>
@@ -145,8 +147,8 @@ export function PartnerEquityChart({ entries, totalBusinessValue }: Props) {
             </div>
 
             <div className="flex justify-between text-[11px] text-muted-foreground">
-              <span>Invested: {bdt(entry.investedNet)}</span>
-              <span className="tabular-nums">{entry.pct.toFixed(1)}% of equity pool</span>
+              <span>{L("জমা", "Invested")}: {bdt(entry.investedNet)}</span>
+              <span className="tabular-nums">{L(`মোট মূলধনের ${entry.pct.toFixed(1)}%`, `${entry.pct.toFixed(1)}% of equity pool`)}</span>
             </div>
           </div>
         ))}

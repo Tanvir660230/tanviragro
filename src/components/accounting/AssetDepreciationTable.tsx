@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
+import { useL } from "@/i18n/text";
 export type AssetEntry = {
   id: string;
   description: string | null;
@@ -50,13 +51,14 @@ function fmtDate(d: string) {
 }
 
 export function AssetDepreciationTable({ assets }: { assets: AssetEntry[] }) {
+  const L = useL();
   const [open, setOpen] = useState(true);
 
   if (assets.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="font-semibold text-sm mb-2">সম্পদ অবচয় সূচি (Cost Entries)</h3>
-        <p className="text-sm text-muted-foreground">কোনো মূলধনী সম্পদ এখনো যোগ করা হয়নি।</p>
+        <h3 className="font-semibold text-sm mb-2">{L("অন্যান্য সম্পদের অবচয়", "Depreciation of other assets")}</h3>
+        <p className="text-sm text-muted-foreground">{L("কোনো মূলধনী সম্পদ এখনো যোগ করা হয়নি।", "No capital assets yet.")}</p>
       </div>
     );
   }
@@ -79,9 +81,9 @@ export function AssetDepreciationTable({ assets }: { assets: AssetEntry[] }) {
         className="flex w-full items-center justify-between px-5 py-4 hover:bg-muted/20 transition-colors"
       >
         <div>
-          <h3 className="font-semibold text-sm text-left">সম্পদ অবচয় সূচি (Depreciation Schedule)</h3>
+          <h3 className="font-semibold text-sm text-left">{L("অন্যান্য সম্পদের অবচয়", "Depreciation of other assets")}</h3>
           <p className="text-xs text-muted-foreground text-left mt-0.5">
-            {assets.length}টি সম্পদ · বার্ষিক অবচয় {bdt(totals.annualDep)} · বর্তমান মূল্য {bdt(totals.bookValue)}
+            {L(`${assets.length}টি সম্পদ · বার্ষিক অবচয় ${bdt(totals.annualDep)} · বর্তমান মূল্য ${bdt(totals.bookValue)}`, `${assets.length} assets · yearly depreciation ${bdt(totals.annualDep)} · book value ${bdt(totals.bookValue)}`)}
           </p>
         </div>
         {open ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
@@ -146,8 +148,8 @@ export function AssetDepreciationTable({ assets }: { assets: AssetEntry[] }) {
           </table>
 
           <div className="px-4 py-3 text-xs text-muted-foreground border-t border-border/40 space-y-0.5">
-            <p>ডিফল্ট মেয়াদ: অবকাঠামো ২০ বছর · যন্ত্রপাতি ৫ বছর · যানবাহন ৫ বছর · অন্যান্য ৭ বছর · জমি: অবচয় নেই</p>
-            <p>পদ্ধতি: সরল-রৈখিক (Straight-Line)</p>
+            <p>{L("ডিফল্ট মেয়াদ: অবকাঠামো ২০ বছর · যন্ত্রপাতি ৫ বছর · যানবাহন ৫ বছর · অন্যান্য ৭ বছর · জমি: অবচয় নেই", "Default life: infrastructure 20y · equipment 5y · vehicle 5y · other 7y · land: none")}</p>
+            <p>{L("পদ্ধতি: সমান হারে", "Method: straight-line")}</p>
           </div>
         </div>
       )}

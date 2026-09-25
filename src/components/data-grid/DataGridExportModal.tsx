@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Download, FileSpreadsheet, FileText, Printer } from "lucide-react";
+import { Download } from "lucide-react";
+import { useL } from "@/i18n/text";
 import { exportToCsv, exportToExcel, exportToPdf, printDataGrid } from "./export-utils";
 import type { GridColumn } from "./types";
 
@@ -27,6 +28,7 @@ export function DataGridExportModal<T extends Record<string, any>>({
   columns,
   title = "Export",
 }: DataGridExportModalProps<T>) {
+  const L = useL();
   const [format, setFormat] = useState<"csv" | "excel" | "pdf" | "print">("csv");
   const [scope, setScope] = useState<"filtered" | "selected" | "all">("filtered");
   const [visibleOnly, setVisibleOnly] = useState(true);
@@ -71,7 +73,7 @@ export function DataGridExportModal<T extends Record<string, any>>({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-bold">
             <Download className="h-4 w-4 text-primary" />
-            Export Data
+            {L("ডেটা নামান", "Export Data")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-1 text-sm">
@@ -119,8 +121,8 @@ export function DataGridExportModal<T extends Record<string, any>>({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button size="sm" onClick={handleExport} disabled={isExporting}>{isExporting ? "Exporting..." : "Download"}</Button>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>{L("বাতিল", "Cancel")}</Button>
+          <Button size="sm" onClick={handleExport} disabled={isExporting}>{isExporting ? L("নামানো হচ্ছে…", "Exporting…") : L("নামান", "Download")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

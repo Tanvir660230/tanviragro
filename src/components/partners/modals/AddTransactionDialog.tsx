@@ -23,6 +23,7 @@ import type { Dictionary } from "@/i18n/getDictionary";
 import { FormField, TXN_LABEL } from "@/components/partners/partner-ui";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useL } from "@/i18n/text";
 
 interface Props {
   partners: Partner[];
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function AddTransactionDialog({ partners, today, t }: Props) {
+  const L = useL();
   const [open, setOpen] = useState(false);
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
   const [txnType, setTxnType] = useState<"investment" | "withdrawal">("investment");
@@ -41,14 +43,14 @@ export function AddTransactionDialog({ partners, today, t }: Props) {
       setTimeout(() => {
         toast.success(
           txnType === "investment"
-            ? "Investment added"
-            : "Withdrawal added"
+            ? L("জমা যোগ হলো", "Investment added")
+            : L("তোলা যোগ হলো", "Withdrawal added")
         );
         setOpen(false);
         setSelectedPartnerId("");
       }, 0);
     }
-  }, [state, txnType]);
+  }, [state, txnType, L]);
 
   if (partners.length === 0) return null;
 

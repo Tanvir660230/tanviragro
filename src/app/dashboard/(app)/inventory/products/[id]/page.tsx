@@ -7,10 +7,14 @@ import { Package } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProductDetailView } from "@/components/inventory/ProductDetailView";
 import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
+import { getL, getLocale } from "@/i18n/server-text";
+import { costCategoryLabel } from "@/lib/expenses/labels";
 
-export const metadata: Metadata = { title: "Product Detail | Inventory" };
+export const metadata: Metadata = { title: "জিনিসের বিস্তারিত" };
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const L = await getL();
+  const locale = await getLocale();
   const { id } = await params;
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
@@ -38,10 +42,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <div className="space-y-4 pb-12">
       <PageHeader
         title={ledgerResult.item.name}
-        subtitle={`${ledgerResult.item.category} · ${ledgerResult.item.unit} · managed inventory item`}
+        subtitle={`${costCategoryLabel(ledgerResult.item.category, locale)} · ${ledgerResult.item.unit}`}
         icon={Package}
         back="/dashboard/inventory"
-        badge={summary?.isDiscontinued ? "Archived" : "Active"}
+        badge={summary?.isDiscontinued ? L("বন্ধ", "Archived") : L("চালু", "Active")}
       />
       <ProductDetailView
         item={ledgerResult.item}

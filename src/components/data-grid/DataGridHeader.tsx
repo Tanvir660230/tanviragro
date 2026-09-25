@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { TableHeader, TableRow, TableHead } from "@/components/ui/table";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import type { GridColumn, SortConfig } from "./types";

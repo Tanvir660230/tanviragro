@@ -9,10 +9,12 @@ import { todayDhaka } from "@/lib/dates";
 import { monthlyExpenseSummary } from "@/lib/expenses/categories";
 import { UtilityExpensesClient, type UtilityExpense, type UtilityAudit } from "@/components/finance/UtilityExpensesClient";
 import type { ExpenseCategory } from "@/types/database";
+import { getL } from "@/i18n/server-text";
 
 export const metadata: Metadata = { title: "Utility Expenses" };
 
 export default async function UtilityExpensesPage() {
+  const L = await getL();
   const ctx = await requirePagePermission(PERMISSIONS.FINANCE_VIEW);
   const supabase = await createClient();
 
@@ -57,7 +59,7 @@ export default async function UtilityExpensesPage() {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader
         title="Utility Expenses"
-        subtitle="Electricity, internet, gas, water and other utilities — kept separate from feed and cattle costs"
+        subtitle={L("বিদ্যুৎ, ইন্টারনেট, গ্যাস, পানি ইত্যাদি — খাবার ও গরুর খরচ থেকে আলাদা", "Electricity, internet, gas, water and other utilities — kept separate from feed and cattle costs")}
         icon={Zap}
         back="/dashboard/finance"
       />

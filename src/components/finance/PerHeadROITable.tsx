@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { fmtBDTFull, fmtDate } from "@/lib/format";
 import type { SaleRecord } from "./PLSummary";
+import { useL } from "@/i18n/text";
 
 const SHOW_LIMIT = 20;
 
@@ -25,12 +26,13 @@ export function PerHeadROITable({
   feedCostByCattle?: Record<string, number>;
   directCostByCattle?: Record<string, number>;
 }) {
+  const L = useL();
   const [showAll, setShowAll] = useState(false);
 
   if (!sales.length) {
     return (
       <p className="text-sm text-muted-foreground py-4 text-center">
-        No sales recorded yet.
+        {L("এখনো কোনো বিক্রি নেই।", "No sales recorded yet.")}
       </p>
     );
   }
@@ -68,13 +70,13 @@ export function PerHeadROITable({
           <tr className="border-b border-border bg-muted/40">
             {[
               { h: "#", left: true },
-              { h: "Cattle", left: true },
-              { h: "Sold", left: false },
-              { h: "Days in Pen", left: false },
-              { h: "Revenue", left: false },
-              ...(showFixedShare ? [{ h: "Fixed Share", left: false }] : []),
-              { h: "Net Profit", left: false },
-              { h: "Margin", left: false },
+              { h: L("গরু", "Cattle"), left: true },
+              { h: L("বিক্রি", "Sold"), left: false },
+              { h: L("খামারে দিন", "Days in pen"), left: false },
+              { h: L("বিক্রি দাম", "Revenue"), left: false },
+              ...(showFixedShare ? [{ h: L("নির্দিষ্ট খরচের ভাগ", "Fixed share"), left: false }] : []),
+              { h: L("নিট লাভ", "Net profit"), left: false },
+              { h: L("মার্জিন", "Margin"), left: false },
             ].map(({ h, left }) => (
               <th
                 key={h}
@@ -101,7 +103,7 @@ export function PerHeadROITable({
                 {fmtDate(s.sold_at, { day: "numeric", month: "short" })}
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                {s.days > 0 ? `${s.days}d` : "—"}
+                {s.days > 0 ? L(`${s.days} দিন`, `${s.days}d`) : "—"}
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums">
                 {fmtBDTFull(s.sale_price_total)}
@@ -146,13 +148,13 @@ export function PerHeadROITable({
             onClick={() => setShowAll(true)}
             className="text-sm text-primary hover:underline font-medium"
           >
-            Show {rows.length - SHOW_LIMIT} more sale{rows.length - SHOW_LIMIT !== 1 ? "s" : ""}
+            {L(`আরও ${rows.length - SHOW_LIMIT}টি বিক্রি দেখান`, `Show ${rows.length - SHOW_LIMIT} more sale${rows.length - SHOW_LIMIT !== 1 ? "s" : ""}`)}
           </button>
         </div>
       )}
       {showFixedShare && totalDays === 0 && (
         <p className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
-          Add cattle purchase dates to enable proportional fixed cost allocation.
+          {L("গরুর কেনার তারিখ দিলে নির্দিষ্ট খরচ দিন অনুযায়ী ভাগ হবে।", "Add cattle purchase dates to enable proportional fixed cost allocation.")}
         </p>
       )}
     </div>

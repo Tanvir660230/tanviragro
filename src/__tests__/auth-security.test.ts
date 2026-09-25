@@ -1,7 +1,6 @@
 import {
   hasPermission,
   hasAllPermissions,
-  hasAnyPermission,
   requirePermission,
   requireRole,
   hasMinimumRole,

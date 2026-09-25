@@ -5,15 +5,16 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { BarChart3, Receipt, TrendingUp, Landmark, Building2, History, Calculator } from "lucide-react";
 import { FinanceDateFilter } from "./FinanceDateFilter";
+import { useL } from "@/i18n/text";
 
 const TABS = [
-  { value: "pl",        label: "P&L",       icon: BarChart3  },
-  { value: "costs",     label: "Costs",     icon: Receipt    },
-  { value: "loans",     label: "Loans",     icon: Landmark   },
-  { value: "budget",    label: "Budget",    icon: TrendingUp },
-  { value: "assets",    label: "Assets",    icon: Building2  },
-  { value: "statement", label: "Statement", icon: History    },
-  { value: "whatif",    label: "What-if",   icon: Calculator },
+  { value: "pl",        label: "P&L", bn: "লাভ-ক্ষতি",       icon: BarChart3  },
+  { value: "costs",     label: "Costs", bn: "খরচ",     icon: Receipt    },
+  { value: "loans",     label: "Loans", bn: "ঋণ",     icon: Landmark   },
+  { value: "budget",    label: "Budget", bn: "বাজেট",    icon: TrendingUp },
+  { value: "assets",    label: "Assets", bn: "সম্পদ",    icon: Building2  },
+  { value: "statement", label: "Statement", bn: "নগদ বিবরণী", icon: History    },
+  { value: "whatif",    label: "What-if", bn: "যদি হয়",   icon: Calculator },
 ] as const;
 
 type Tab = (typeof TABS)[number]["value"];
@@ -45,6 +46,7 @@ export function FinanceTabs({
   assetCount?: number;
   loansCount?: number;
 }) {
+  const L = useL();
   const [active, setActive] = useState<Tab>("pl");
   const [visited, setVisited] = useState<ReadonlySet<Tab>>(new Set(["pl"] as Tab[]));
 
@@ -68,10 +70,10 @@ export function FinanceTabs({
       {/* ── Tab bar — modern segment pill style ── */}
       <div
         role="tablist"
-        aria-label="Finance sections"
+        aria-label={L("টাকার অংশ", "Finance sections")}
         className="flex min-w-0 overflow-x-auto scrollbar-none border-b border-border/60 bg-muted/25 p-1.5 gap-1 rounded-t-xl"
       >
-        {TABS.map(({ value, label, icon: Icon }) => {
+        {TABS.map(({ value, label, bn, icon: Icon }) => {
           const count =
             value === "pl"    ? salesCount  :
             value === "costs" ? costsCount  :
@@ -99,7 +101,7 @@ export function FinanceTabs({
                 "h-3.5 w-3.5 transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground/60"
               )} />
-              {label}
+              {L(bn, label)}
               {count !== undefined && count > 0 && (
                 <span className={cn(
                   "inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-bold leading-none",

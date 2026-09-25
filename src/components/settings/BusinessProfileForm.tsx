@@ -11,6 +11,7 @@ import {
   updateBusinessProfile,
   type SettingsFormState,
 } from "@/app/dashboard/(app)/settings/actions";
+import { useL } from "@/i18n/text";
 
 interface BusinessProfileFormProps {
   initialData: {
@@ -23,6 +24,7 @@ interface BusinessProfileFormProps {
 }
 
 export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
+  const L = useL();
   const [state, formAction, isPending] = useActionState<
     SettingsFormState,
     FormData
@@ -32,13 +34,13 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Business profile saved");
+      toast.success(L("খামারের তথ্য সেভ হলো", "Business profile saved"));
       router.refresh();
     }
     if (state?.error) {
       toast.error(state.error);
     }
-  }, [state?.success, state?.error, router]);
+  }, [state?.success, state?.error, router, L]);
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(initialData.logo_url || null);
   const [compressedFile, setCompressedFile] = useState<File | null>(null);
@@ -58,7 +60,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
         setCompressedFile(compressed);
       } catch (error) {
         console.error("Compression failed", error);
-        toast.error("Image compression failed. Please try a smaller file.");
+        toast.error(L("ছবি ছোট করা যায়নি। আরও ছোট ফাইল দিন।", "Image compression failed. Please try a smaller file."));
         setPreviewUrl(null);
       } finally {
         setIsCompressing(false);
@@ -87,7 +89,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
         <div
           role="button"
           tabIndex={0}
-          aria-label="Upload farm logo"
+          aria-label={L("খামারের লোগো দিন", "Upload farm logo")}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
@@ -105,7 +107,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
           )}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-medium">
             <Upload className="h-4 w-4 mb-0.5" />
-            <span>Upload</span>
+            <span>{L("আপলোড", "Upload")}</span>
           </div>
           {isCompressing && (
             <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
@@ -114,9 +116,9 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
           )}
         </div>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">Farm logo</p>
+          <p className="text-sm font-semibold text-foreground">{L("খামারের লোগো", "Farm logo")}</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            PNG, JPG, or WebP. Displayed on printable documents and invoices.
+            {L("PNG, JPG বা WebP — প্রিন্ট করা কাগজে দেখায়।", "PNG, JPG, or WebP. Displayed on printable documents and invoices.")}
           </p>
           <Button
             type="button"
@@ -127,7 +129,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
             disabled={isCompressing}
           >
             <Upload className="h-3 w-3" />
-            Choose image
+            {L("ছবি বাছুন", "Choose image")}
           </Button>
         </div>
         <input
@@ -145,7 +147,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5 md:col-span-2">
           <Label htmlFor="biz_name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Enterprise Name <span className="text-destructive">*</span>
+            {L("খামারের নাম", "Farm name")} <span className="text-destructive">*</span>
           </Label>
           <div className="relative">
             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -162,7 +164,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="biz_email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Official Email
+            {L("ইমেইল", "Official Email")}
           </Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -171,7 +173,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
               name="email"
               type="email"
               defaultValue={initialData.email || ""}
-              placeholder="e.g. contact@agrofarm.com"
+              placeholder={L("যেমন farm@gmail.com", "e.g. contact@agrofarm.com")}
               className="pl-9 h-10"
             />
           </div>
@@ -179,7 +181,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="biz_phone" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Contact Phone
+            {L("ফোন", "Contact Phone")}
           </Label>
           <div className="relative">
             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -195,7 +197,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
 
         <div className="space-y-1.5 md:col-span-2">
           <Label htmlFor="address" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Farm / Office Address
+            {L("খামার / অফিসের ঠিকানা", "Farm / Office Address")}
           </Label>
           <div className="relative">
             <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -203,7 +205,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
               id="address"
               name="address"
               defaultValue={initialData.address || ""}
-              placeholder="e.g. Savar, Dhaka, Bangladesh"
+              placeholder={L("যেমন সাভার, ঢাকা", "e.g. Savar, Dhaka, Bangladesh")}
               className="pl-9 h-10"
             />
           </div>
@@ -212,18 +214,18 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
 
       <div className="flex items-center justify-between pt-2 border-t border-border/40">
         <p className="text-xs text-muted-foreground">
-          Changes reflect immediately across all system reports and headers.
+          {L("সেভ করলে সব রিপোর্ট ও শিরোনামে সাথে সাথে বদলাবে।", "Changes reflect immediately across all system reports and headers.")}
         </p>
         <Button type="submit" disabled={isPending || isCompressing} className="gap-1.5 shadow-sm">
           {isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Saving...
+              {L("সেভ হচ্ছে…", "Saving...")}
             </>
           ) : (
             <>
               <CheckCircle2 className="h-4 w-4" />
-              Save Changes
+              {L("সেভ করুন", "Save Changes")}
             </>
           )}
         </Button>

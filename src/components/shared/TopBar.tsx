@@ -1,3 +1,4 @@
+import { todayDhaka, addDays } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedTopBarAlerts } from "@/lib/supabase/topbar-alerts";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
@@ -14,11 +15,11 @@ export async function TopBar() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const now = new Date();
-  const todayISO        = now.toISOString().slice(0, 10);
-  const in7DaysISO      = new Date(now.getTime() +  7 * 86400000).toISOString().slice(0, 10);
-  const in30DaysISO     = new Date(now.getTime() + 30 * 86400000).toISOString().slice(0, 10);
-  const sevenDaysAgoISO = new Date(now.getTime() -  7 * 86400000).toISOString().slice(0, 10);
+  // the farm's calendar (Dhaka), not the server's UTC date
+  const todayISO        = todayDhaka();
+  const in7DaysISO      = addDays(todayISO, 7);
+  const in30DaysISO     = addDays(todayISO, 30);
+  const sevenDaysAgoISO = addDays(todayISO, -7);
 
   const [{ data: bizData }, { data: profileData }] = await Promise.all([
     supabase.from("businesses").select("id, name, logo_url").eq("id", (await getCachedBusinessId()) ?? "").maybeSingle(),

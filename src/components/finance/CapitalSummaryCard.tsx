@@ -1,5 +1,6 @@
 import { getServerClient } from "@/lib/supabase/cached";
 import { getAccountingData, type AccountingData } from "@/lib/accounting/engine";
+import { getL } from "@/i18n/server-text";
 
 function bdt(n: number): string {
   if (!isFinite(n)) return "৳—";
@@ -27,6 +28,7 @@ export function capitalSummary(a: AccountingData) {
 }
 
 export async function CapitalSummaryCard() {
+  const L = await getL();
   let data: AccountingData;
   try {
     data = await getAccountingData(await getServerClient());
@@ -35,19 +37,19 @@ export async function CapitalSummaryCard() {
   }
   const s = capitalSummary(data);
   const tiles: { label: string; value: number; note: string }[] = [
-    { label: "Cash / bank", value: s.cash, note: "money on hand now" },
-    { label: "Operating expenses", value: s.operatingExpenses, note: "feed, vet, labour, utilities, transport, general" },
-    { label: "Depreciation", value: s.depreciation, note: "share of asset cost used up" },
-    { label: "Operating profit", value: s.operatingProfit, note: "sales − cattle sold − operating expenses − depreciation" },
-    { label: "Asset value", value: s.assetValue, note: "shed, machines, equipment after depreciation" },
-    { label: "Capital expenditure", value: s.capitalExpenditure, note: "paid for assets (not an expense)" },
-    { label: "Total cash outflow", value: s.totalCashOutflow, note: "everything paid out, incl. assets and cattle" },
+    { label: L("নগদ / ব্যাংক", "Cash / bank"), value: s.cash, note: L("এখন হাতে ও ব্যাংকে", "money on hand now") },
+    { label: L("চলতি খরচ", "Operating expenses"), value: s.operatingExpenses, note: L("খাবার, ডাক্তার, মজুরি, বিদ্যুৎ, পরিবহন, অন্যান্য", "feed, vet, labour, utilities, transport, general") },
+    { label: L("অবচয়", "Depreciation"), value: s.depreciation, note: L("সম্পদের দামের যতটা ক্ষয় হয়েছে", "share of asset cost used up") },
+    { label: L("চলতি লাভ/ক্ষতি", "Operating profit"), value: s.operatingProfit, note: L("বিক্রি − বিক্রি করা গরুর দাম − চলতি খরচ − অবচয়", "sales − cattle sold − operating expenses − depreciation") },
+    { label: L("সম্পদের মূল্য", "Asset value"), value: s.assetValue, note: L("শেড, মেশিন, যন্ত্রপাতি — অবচয়ের পর", "shed, machines, equipment after depreciation") },
+    { label: L("সম্পদ কেনায় খরচ", "Capital expenditure"), value: s.capitalExpenditure, note: L("সম্পদ কেনা (খরচ নয়)", "paid for assets (not an expense)") },
+    { label: L("মোট টাকা বেরিয়েছে", "Total cash outflow"), value: s.totalCashOutflow, note: L("সম্পদ ও গরুসহ যা যা দেওয়া হয়েছে", "everything paid out, incl. assets and cattle") },
   ];
   return (
-    <section className="rounded-xl border border-border/70 bg-card shadow-card" aria-label="Money summary">
+    <section className="rounded-xl border border-border/70 bg-card shadow-card" aria-label={L("টাকার সারসংক্ষেপ", "Money summary")}>
       <div className="flex items-baseline justify-between gap-3 border-b border-border/60 px-5 py-3">
-        <h2 className="text-sm font-semibold">Money summary</h2>
-        <p className="text-xs text-muted-foreground">All time · cash out ≠ expense ≠ asset value</p>
+        <h2 className="text-sm font-semibold">{L("টাকার সারসংক্ষেপ", "Money summary")}</h2>
+        <p className="text-xs text-muted-foreground">{L("শুরু থেকে · টাকা বেরোনো ≠ খরচ ≠ সম্পদের মূল্য", "All time · cash out ≠ expense ≠ asset value")}</p>
       </div>
       <div className="grid grid-cols-2 gap-px bg-border/60 sm:grid-cols-4 lg:grid-cols-7">
         {tiles.map((t) => (

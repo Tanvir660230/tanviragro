@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
-import { ArrowLeft, CheckCircle2, AlertTriangle, ShieldCheck, Scale, Building2, Landmark, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  ShieldCheck,
+  Scale,
+  Building2,
+  Landmark,
+  Wallet,
+} from "lucide-react";
 import { AssetDepreciationTable, type AssetEntry } from "@/components/accounting/AssetDepreciationTable";
-import { StatementReportHeader, fmtBDT } from "@/components/finance/finance-ui";
+import { StatementReportHeader } from "@/components/finance/finance-ui";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 
-export const metadata: Metadata = { title: "Balance Sheet Statement" };
+import { getL } from "@/i18n/server-text";
+export const metadata: Metadata = { title: "ব্যালেন্স শিট" };
 
 function fmt(n: number) {
   const abs = Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -71,6 +78,7 @@ function SectionHeader({
 }
 
 export default async function BalanceSheetPage() {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.ACCOUNTING_VIEW);
   const supabase = await createClient();
   const [{ balanceSheet: bs, trialBalance: tb, asOf }, businessId] = await Promise.all([
@@ -125,21 +133,11 @@ export default async function BalanceSheetPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      {/* Back link */}
-      <div className="print:hidden">
-        <Link
-          href="/dashboard/accounting"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Accounting Hub
-        </Link>
-      </div>
 
       {/* Statement Header */}
       <StatementReportHeader
         title="Balance Sheet"
-        subtitle="Statement of Financial Position · Standard Double-Entry"
+        subtitle={L("খামারের যা আছে (সম্পদ), যা দেনা (দায়) ও মালিকদের অংশ", "Statement of Financial Position · Standard Double-Entry")}
         asOfDate={asOf}
         isAuditedBalanced={tb.isBalanced}
       />
@@ -147,19 +145,19 @@ export default async function BalanceSheetPage() {
       {/* High-Level Executive Summary Pill Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.03] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Total Assets</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">{L("মোট সম্পদ", "Total Assets")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(bs.totalAssets)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Current + Non-Current Assets</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("চলতি + স্থায়ী সম্পদ", "Current + Non-Current Assets")}</p>
         </div>
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Total Liabilities</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">{L("মোট দায়", "Total Liabilities")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(bs.totalLiabilities)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Current &amp; Long-term obligations</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("স্বল্প ও দীর্ঘ মেয়াদি দেনা", "Current & Long-term obligations")}</p>
         </div>
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] p-4 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Total Equity</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">{L("মোট মূলধন", "Total Equity")}</p>
           <p className="text-2xl font-bold font-mono tabular-nums text-foreground mt-1">{fmt(bs.totalEquity)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Partner capital + Retained earnings</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{L("অংশীদারের টাকা + জমা লাভ/ক্ষতি", "Partner capital + Retained earnings")}</p>
         </div>
       </div>
 
@@ -167,29 +165,29 @@ export default async function BalanceSheetPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
           <div>
-            <SectionHeader icon={Building2} badge="1100-1200">Current Assets</SectionHeader>
+            <SectionHeader icon={Building2} badge="1100-1200">{L("চলতি সম্পদ", "Current Assets")}</SectionHeader>
             <div className="divide-y divide-border/30">
-              <Row label="Cash & Bank Balances" value={bs.cashAndBank} indent />
-              <Row label="Feed & Consumable Inventory" value={bs.feedInventory} indent />
+              <Row label={L("নগদ ও ব্যাংক", "Cash & Bank Balances")} value={bs.cashAndBank} indent />
+              <Row label={L("খাবার ও অন্যান্য স্টক", "Feed & Consumable Inventory")} value={bs.feedInventory} indent />
             </div>
           </div>
-          <Row label="TOTAL CURRENT ASSETS" value={bs.cashAndBank + bs.feedInventory} bold border highlight />
+          <Row label={L("মোট চলতি সম্পদ", "TOTAL CURRENT ASSETS")} value={bs.cashAndBank + bs.feedInventory} bold border highlight />
         </div>
         <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
           <div>
-            <SectionHeader icon={Scale} badge="1300-1500">Non-Current Assets</SectionHeader>
+            <SectionHeader icon={Scale} badge="1300-1500">{L("স্থায়ী সম্পদ", "Non-Current Assets")}</SectionHeader>
             <div className="divide-y divide-border/30">
-              <Row label="Livestock (Active, at cost)" value={bs.livestock} indent />
-              <Row label="Fixed Assets (Gross Cost)" value={bs.fixedAssets} indent />
-              <Row label="Less: Accumulated Depreciation" value={-bs.accumulatedDepreciation} indent />
-              <Row label="Net Fixed Assets" value={bs.netFixedAssets} indent />
+              <Row label={L("গরু (খামারে আছে, কেনা দামে)", "Livestock (Active, at cost)")} value={bs.livestock} indent />
+              <Row label={L("স্থায়ী সম্পদ (কেনা দাম)", "Fixed Assets (Gross Cost)")} value={bs.fixedAssets} indent />
+              <Row label={L("বাদ: মোট অবচয়", "Less: Accumulated Depreciation")} value={-bs.accumulatedDepreciation} indent />
+              <Row label={L("স্থায়ী সম্পদের বর্তমান মূল্য", "Net Fixed Assets")} value={bs.netFixedAssets} indent />
             </div>
           </div>
-          <Row label="TOTAL NON-CURRENT ASSETS" value={bs.livestock + bs.netFixedAssets} bold border highlight />
+          <Row label={L("মোট স্থায়ী সম্পদ", "TOTAL NON-CURRENT ASSETS")} value={bs.livestock + bs.netFixedAssets} bold border highlight />
         </div>
       </div>
       <div className="rounded-2xl bg-card border border-blue-500/30 p-4 shadow-sm flex items-center justify-between">
-        <span className="text-base font-bold text-foreground">TOTAL ASSETS</span>
+        <span className="text-base font-bold text-foreground">{L("মোট সম্পদ", "TOTAL ASSETS")}</span>
         <span className="text-xl font-bold font-mono tabular-nums text-foreground">{fmt(bs.totalAssets)}</span>
       </div>
 
@@ -199,35 +197,35 @@ export default async function BalanceSheetPage() {
           {/* Liabilities */}
           <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
             <div>
-              <SectionHeader icon={Landmark} badge="2000">Liabilities</SectionHeader>
+              <SectionHeader icon={Landmark} badge="2000">{L("দায়", "Liabilities")}</SectionHeader>
               <div className="divide-y divide-border/30">
-                {currentPrincipal > 0 && <Row label="Current Liabilities (due ≤ 1 yr)" value={currentPrincipal} indent />}
-                {longTermPrincipal > 0 && <Row label="Long-term Obligations (due > 1 yr)" value={longTermPrincipal} indent />}
-                {bs.accruedInterestPayable > 0 && <Row label="Accrued Interest Payable" value={bs.accruedInterestPayable} indent />}
+                {currentPrincipal > 0 && <Row label={L("স্বল্প মেয়াদি দেনা (১ বছরের মধ্যে)", "Current Liabilities (due ≤ 1 yr)")} value={currentPrincipal} indent />}
+                {longTermPrincipal > 0 && <Row label={L("দীর্ঘ মেয়াদি দেনা (১ বছর পরে)", "Long-term Obligations (due > 1 yr)")} value={longTermPrincipal} indent />}
+                {bs.accruedInterestPayable > 0 && <Row label={L("জমা সুদ (দিতে হবে)", "Accrued Interest Payable")} value={bs.accruedInterestPayable} indent />}
                 {currentPrincipal === 0 && longTermPrincipal === 0 && bs.accruedInterestPayable === 0 && (
-                  <div className="py-4 px-5 text-xs text-muted-foreground italic">No outstanding liabilities.</div>
+                  <div className="py-4 px-5 text-xs text-muted-foreground italic">{L("কোনো দেনা নেই।", "No outstanding liabilities.")}</div>
                 )}
               </div>
             </div>
-            <Row label="TOTAL LIABILITIES" value={bs.totalLiabilities} bold border highlight />
+            <Row label={L("মোট দায়", "TOTAL LIABILITIES")} value={bs.totalLiabilities} bold border highlight />
           </div>
 
           {/* Equity */}
           <div className="rounded-2xl bg-card border border-border/80 shadow-sm overflow-hidden flex flex-col justify-between">
             <div>
-              <SectionHeader icon={Wallet} badge="3000">Equity</SectionHeader>
+              <SectionHeader icon={Wallet} badge="3000">{L("মূলধন", "Equity")}</SectionHeader>
               <div className="divide-y divide-border/30">
-                <Row label="Partner Contributed Capital" value={bs.partnerCapital} indent />
-                <Row label="Retained Earnings / (Losses)" value={bs.retainedEarnings} indent />
+                <Row label={L("অংশীদারদের দেওয়া টাকা", "Partner Contributed Capital")} value={bs.partnerCapital} indent />
+                <Row label={L("জমা লাভ / (ক্ষতি)", "Retained Earnings / (Losses)")} value={bs.retainedEarnings} indent />
               </div>
             </div>
-            <Row label="TOTAL EQUITY" value={bs.totalEquity} bold border highlight />
+            <Row label={L("মোট মূলধন", "TOTAL EQUITY")} value={bs.totalEquity} bold border highlight />
           </div>
         </div>
 
         {/* Total Liabilities + Equity Bar */}
         <div className="rounded-2xl bg-card border border-emerald-500/30 p-4 shadow-sm flex items-center justify-between">
-          <span className="text-base font-bold text-foreground">TOTAL LIABILITIES &amp; EQUITY</span>
+          <span className="text-base font-bold text-foreground">{L("মোট দায় ও মূলধন", "TOTAL LIABILITIES & EQUITY")}</span>
           <span className="text-xl font-bold font-mono tabular-nums text-foreground">{fmt(bs.totalLiabilitiesAndEquity)}</span>
         </div>
       </div>
@@ -239,9 +237,9 @@ export default async function BalanceSheetPage() {
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-bold text-emerald-950 dark:text-emerald-200">Accounting Equation Balanced: Assets = Liabilities + Equity</p>
+            <p className="text-sm font-bold text-emerald-950 dark:text-emerald-200">{L("হিসাব মিলেছে: সম্পদ = দায় + মূলধন", "Accounting Equation Balanced: Assets = Liabilities + Equity")}</p>
             <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
-              Verified double-entry integrity. Total Assets ({fmt(bs.totalAssets)}) equals Total Liabilities + Equity ({fmt(bs.totalLiabilitiesAndEquity)}).
+              {L(`মোট সম্পদ (${fmt(bs.totalAssets)}) = মোট দায় + মূলধন (${fmt(bs.totalLiabilitiesAndEquity)})।`, `Total assets (${fmt(bs.totalAssets)}) equal total liabilities + equity (${fmt(bs.totalLiabilitiesAndEquity)}).`)}
             </p>
           </div>
         </div>
@@ -251,9 +249,9 @@ export default async function BalanceSheetPage() {
             <AlertTriangle className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-bold text-amber-950 dark:text-amber-200">Audit Discrepancy Detected</p>
+            <p className="text-sm font-bold text-amber-950 dark:text-amber-200">{L("হিসাবে গরমিল আছে", "Audit Discrepancy Detected")}</p>
             <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
-              Total Debits ({fmt(tb.totalDebit)}) do not match Total Credits ({fmt(tb.totalCredit)}). Discrepancy: {fmt(bs.discrepancy)}.
+              {L(`মোট ডেবিট (${fmt(tb.totalDebit)}) আর মোট ক্রেডিট (${fmt(tb.totalCredit)}) মিলছে না। পার্থক্য: ${fmt(bs.discrepancy)}।`, `Total debits (${fmt(tb.totalDebit)}) do not match total credits (${fmt(tb.totalCredit)}). Difference: ${fmt(bs.discrepancy)}.`)}
             </p>
           </div>
         </div>

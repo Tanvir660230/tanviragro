@@ -2,8 +2,15 @@
 
 import type { AnimalWizardState } from "@/lib/validation/cattle-wizard";
 import { calculateAnimalAge } from "@/lib/validation/cattle-wizard";
-import { CheckCircle2, AlertTriangle, ShieldCheck, DollarSign, Beef, Building2 } from "lucide-react";
+import {
+  CheckCircle2,
+  AlertTriangle,
+  DollarSign,
+  Beef,
+  Building2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useL } from "@/i18n/text";
 
 interface Props {
   state: AnimalWizardState;
@@ -11,6 +18,7 @@ interface Props {
 }
 
 export function Step8ReviewConfirm({ state, errors }: Props) {
+  const L = useL();
   const age = calculateAnimalAge(state.identification.dob);
   const totalFinancial =
     (state.origin.purchasePrice || 0) +
@@ -24,12 +32,12 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
       {hasErrors ? (
         <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>Please correct the required fields in previous steps before saving.</span>
+          <span>{L("সেভ করার আগে আগের ধাপের দরকারি ঘরগুলো ঠিক করুন।", "Please correct the required fields in previous steps before saving.")}</span>
         </div>
       ) : (
         <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>All required livestock specifications and financial details are validated.</span>
+          <span>{L("সব দরকারি তথ্য ঠিক আছে।", "All required livestock specifications and financial details are validated.")}</span>
         </div>
       )}
 
@@ -40,18 +48,18 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
           <div className="flex items-center justify-between border-b pb-1.5 font-semibold text-foreground">
             <span className="flex items-center gap-1.5">
               <Beef className="h-3.5 w-3.5 text-primary" />
-              Identification
+              {L("পরিচয়", "Identification")}
             </span>
             <Badge variant="outline" className="text-[10px]">
               {state.identification.species.toUpperCase()}
             </Badge>
           </div>
           <div className="space-y-1 text-muted-foreground">
-            <p><strong className="text-foreground">Tag ID:</strong> {state.identification.tagId || "—"}</p>
-            <p><strong className="text-foreground">Name:</strong> {state.identification.name || "—"}</p>
-            <p><strong className="text-foreground">Breed:</strong> {state.identification.breed}</p>
-            <p><strong className="text-foreground">Gender:</strong> {state.identification.gender}</p>
-            <p><strong className="text-foreground">Age:</strong> {age.display}</p>
+            <p><strong className="text-foreground">{L("ট্যাগ:", "Tag ID:")}</strong> {state.identification.tagId || "—"}</p>
+            <p><strong className="text-foreground">{L("নাম:", "Name:")}</strong> {state.identification.name || "—"}</p>
+            <p><strong className="text-foreground">{L("জাত:", "Breed:")}</strong> {state.identification.breed}</p>
+            <p><strong className="text-foreground">{L("লিঙ্গ:", "Gender:")}</strong> {state.identification.gender}</p>
+            <p><strong className="text-foreground">{L("বয়স:", "Age:")}</strong> {age.display}</p>
           </div>
         </div>
 
@@ -60,18 +68,18 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
           <div className="flex items-center justify-between border-b pb-1.5 font-semibold text-foreground">
             <span className="flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5 text-blue-500" />
-              Location & Purpose
+              {L("জায়গা ও উদ্দেশ্য", "Location & Purpose")}
             </span>
             <Badge variant="secondary" className="text-[10px]">
               {state.categoryStage.category}
             </Badge>
           </div>
           <div className="space-y-1 text-muted-foreground">
-            <p><strong className="text-foreground">Farm:</strong> {state.farmLocation.farmId || "Default Farm"}</p>
-            <p><strong className="text-foreground">Pen / Shed:</strong> {state.farmLocation.penId || "Unassigned"}</p>
-            <p><strong className="text-foreground">Target Weight:</strong> {state.categoryStage.targetWeightKg ? `${state.categoryStage.targetWeightKg} kg` : "—"}</p>
-            <p><strong className="text-foreground">Expected ADG:</strong> {state.categoryStage.expectedDailyGainKg ? `${state.categoryStage.expectedDailyGainKg} kg/d` : "—"}</p>
-            <p><strong className="text-foreground">Health Status:</strong> {state.health.status} {state.health.isQuarantined ? "(Quarantined)" : ""}</p>
+            <p><strong className="text-foreground">{L("খামার:", "Farm:")}</strong> {state.farmLocation.farmId || L("মূল খামার", "Default farm")}</p>
+            <p><strong className="text-foreground">{L("শেড:", "Pen / Shed:")}</strong> {state.farmLocation.penId || L("দেওয়া নেই", "Unassigned")}</p>
+            <p><strong className="text-foreground">{L("লক্ষ্য ওজন:", "Target Weight:")}</strong> {state.categoryStage.targetWeightKg ? `${state.categoryStage.targetWeightKg} kg` : "—"}</p>
+            <p><strong className="text-foreground">{L("দৈনিক বৃদ্ধি:", "Expected ADG:")}</strong> {state.categoryStage.expectedDailyGainKg ? `${state.categoryStage.expectedDailyGainKg} kg/d` : "—"}</p>
+            <p><strong className="text-foreground">{L("স্বাস্থ্য:", "Health Status:")}</strong> {state.health.status} {state.health.isQuarantined ? L("(আলাদা রাখা)", "(Quarantined)") : ""}</p>
           </div>
         </div>
 
@@ -80,25 +88,25 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
           <div className="flex items-center justify-between border-b pb-1.5 font-semibold text-foreground">
             <span className="flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-              Acquisition & Financial Footprint
+              {L("কেনা ও খরচ", "Acquisition & Financial Footprint")}
             </span>
             <span className="font-bold text-foreground text-sm">৳ {totalFinancial.toLocaleString()}</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-muted-foreground">
             <div>
-              <span className="block text-[10px] uppercase font-semibold">Origin</span>
+              <span className="block text-[10px] uppercase font-semibold">{L("কোথা থেকে", "Origin")}</span>
               <span className="text-foreground font-medium">{state.origin.originType}</span>
             </div>
             <div>
-              <span className="block text-[10px] uppercase font-semibold">Base Price</span>
+              <span className="block text-[10px] uppercase font-semibold">{L("কেনা দাম", "Base Price")}</span>
               <span className="text-foreground font-medium">৳ {state.origin.purchasePrice.toLocaleString()}</span>
             </div>
             <div>
-              <span className="block text-[10px] uppercase font-semibold">Live Weight</span>
+              <span className="block text-[10px] uppercase font-semibold">{L("ওজন", "Live Weight")}</span>
               <span className="text-foreground font-medium">{state.origin.initialWeightKg} kg</span>
             </div>
             <div>
-              <span className="block text-[10px] uppercase font-semibold">Incidental Fees</span>
+              <span className="block text-[10px] uppercase font-semibold">{L("বাড়তি খরচ", "Incidental Fees")}</span>
               <span className="text-foreground font-medium">৳ {((state.financial.transportCost || 0) + (state.financial.haatHasil || 0)).toLocaleString()}</span>
             </div>
           </div>

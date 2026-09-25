@@ -6,11 +6,19 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, Upload, User, Mail, Phone, Briefcase, CheckCircle2 } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  User,
+  Phone,
+  Briefcase,
+  CheckCircle2,
+} from "lucide-react";
 import {
   updateProfile,
   type SettingsFormState,
 } from "@/app/dashboard/(app)/settings/actions";
+import { useL } from "@/i18n/text";
 
 interface ProfileFormProps {
   initialData: {
@@ -22,6 +30,7 @@ interface ProfileFormProps {
 }
 
 export function ProfileForm({ initialData }: ProfileFormProps) {
+  const L = useL();
   const [state, formAction, isPending] = useActionState<
     SettingsFormState,
     FormData
@@ -31,13 +40,13 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Profile updated successfully");
+      toast.success(L("প্রোফাইল আপডেট হলো", "Profile updated successfully"));
       router.refresh();
     }
     if (state?.error) {
       toast.error(state.error);
     }
-  }, [state?.success, state?.error, router]);
+  }, [state?.success, state?.error, router, L]);
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(initialData.avatar_url || null);
   const [compressedFile, setCompressedFile] = useState<File | null>(null);
@@ -57,7 +66,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
         setCompressedFile(compressed);
       } catch (error) {
         console.error("Compression failed", error);
-        toast.error("Image compression failed. Please try a smaller file.");
+        toast.error(L("ছবি ছোট করা যায়নি। আরও ছোট ফাইল দিন।", "Image compression failed. Please try a smaller file."));
         setPreviewUrl(null);
       } finally {
         setIsCompressing(false);
@@ -87,7 +96,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
         <div 
           role="button"
           tabIndex={0}
-          aria-label="Upload profile avatar"
+          aria-label={L("ছবি দিন", "Upload profile avatar")}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
@@ -105,7 +114,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
           )}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-medium">
             <Upload className="h-4 w-4 mb-0.5" />
-            <span>Upload</span>
+            <span>{L("আপলোড", "Upload")}</span>
           </div>
           {isCompressing && (
             <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
@@ -114,9 +123,9 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
           )}
         </div>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">User Profile Avatar</p>
+          <p className="text-sm font-semibold text-foreground">{L("প্রোফাইলের ছবি", "User Profile Avatar")}</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Your personal picture shown in the top navigation, activity feed, and team list.
+            {L("উপরের মেনু, কার্যকলাপ ও টিম তালিকায় দেখায়।", "Your personal picture shown in the top navigation, activity feed, and team list.")}
           </p>
           <Button
             type="button"
@@ -127,7 +136,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
             disabled={isCompressing}
           >
             <Upload className="h-3 w-3" />
-            Choose photo
+            {L("ছবি বাছুন", "Choose photo")}
           </Button>
         </div>
         <input
@@ -144,7 +153,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="full_name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Full Name
+            {L("পুরো নাম", "Full Name")}
           </Label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -160,7 +169,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="title" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Job Title / Position
+            {L("পদ", "Job Title / Position")}
           </Label>
           <div className="relative">
             <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -168,7 +177,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
               id="title"
               name="title"
               defaultValue={initialData.title || ""}
-              placeholder="e.g. Managing Director / Owner"
+              placeholder={L("যেমন মালিক / ম্যানেজার", "e.g. Managing Director / Owner")}
               className="pl-9 h-10"
             />
           </div>
@@ -176,7 +185,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Direct Phone Number
+            {L("ফোন নম্বর", "Direct Phone Number")}
           </Label>
           <div className="relative">
             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -193,18 +202,18 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
 
       <div className="flex items-center justify-between pt-2 border-t border-border/40">
         <p className="text-xs text-muted-foreground">
-          Your personal details are used for activity auditing and team communication.
+          {L("কার্যকলাপের তালিকা ও টিমের যোগাযোগে ব্যবহার হয়।", "Your personal details are used for activity auditing and team communication.")}
         </p>
         <Button type="submit" disabled={isPending || isCompressing} className="gap-1.5 shadow-sm">
           {isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Saving...
+              {L("সেভ হচ্ছে…", "Saving...")}
             </>
           ) : (
             <>
               <CheckCircle2 className="h-4 w-4" />
-              Save Profile
+              {L("প্রোফাইল সেভ", "Save Profile")}
             </>
           )}
         </Button>

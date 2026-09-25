@@ -10,6 +10,7 @@ import { DataGridAdvancedFilters } from "./DataGridAdvancedFilters";
 import { DataGridSavedViews } from "./DataGridSavedViews";
 import { DataGridColumnCustomizer } from "./DataGridColumnCustomizer";
 import { DataGridExportModal } from "./DataGridExportModal";
+import { useL } from "@/i18n/text";
 import type { GridColumn, FilterConfig, SavedView, GridDensity } from "./types";
 
 export interface DataGridToolbarProps<T extends Record<string, any>> {
@@ -51,10 +52,11 @@ export interface DataGridToolbarProps<T extends Record<string, any>> {
 }
 
 export function DataGridToolbar<T extends Record<string, any>>(props: DataGridToolbarProps<T>) {
+  const L = useL();
   const {
     searchQuery,
     onSearchChange,
-    searchPlaceholder = "Search records...",
+    searchPlaceholder,
     enableGlobalSearch = true,
     enableAdvancedFilter = true,
     columns,
@@ -101,7 +103,7 @@ export function DataGridToolbar<T extends Record<string, any>>(props: DataGridTo
               <Input
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                placeholder={searchPlaceholder}
+                placeholder={searchPlaceholder ?? L("খুঁজুন…", "Search records…")}
                 className="pl-9 pr-8 h-9 text-sm bg-background/50 focus:bg-background"
               />
               {searchQuery && (
@@ -142,7 +144,7 @@ export function DataGridToolbar<T extends Record<string, any>>(props: DataGridTo
             <DropdownMenu>
               <DropdownMenuTrigger
                 className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9 w-9 p-0 cursor-pointer")}
-                title="Density"
+                title={L("ঘনত্ব", "Density")}
               >
                 <LayoutList className="h-4 w-4 text-muted-foreground" />
               </DropdownMenuTrigger>
@@ -173,7 +175,7 @@ export function DataGridToolbar<T extends Record<string, any>>(props: DataGridTo
           {enableExport && (
             <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => setExportOpen(true)}>
               <Download className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Export</span>
+              <span>{L("নামান", "Export")}</span>
             </Button>
           )}
 

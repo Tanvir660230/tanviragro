@@ -2,12 +2,19 @@
 
 import { useState, useOptimistic, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Package } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Package,
+} from "lucide-react";
 import { ItemActions, type CattleOption } from "./ItemActions";
 import { ArchiveItemButton } from "./ArchiveItemButton";
 import { DaysRemainingBadge } from "./DaysRemainingBadge";
 import { EditItemDialog } from "./EditItemDialog";
 import { CategoryBadge } from "./inventory-ui";
+import { useL } from "@/i18n/text";
 
 export interface InventoryRow {
   id: string;
@@ -38,6 +45,7 @@ export function InventoryTable({
   items: InventoryRow[];
   cattle: CattleOption[];
 }) {
+  const L = useL();
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
@@ -100,7 +108,7 @@ export function InventoryTable({
                   onClick={() => handleSort("name")}
                   className="group flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
                 >
-                  <span>Item Name</span>
+                  <span>{L("জিনিস", "Item")}</span>
                   {sortField === "name" ? (
                     sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
                   ) : (
@@ -114,7 +122,7 @@ export function InventoryTable({
                   onClick={() => handleSort("category")}
                   className="group flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
                 >
-                  <span>Category</span>
+                  <span>{L("ধরন", "Category")}</span>
                   {sortField === "category" ? (
                     sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
                   ) : (
@@ -128,7 +136,7 @@ export function InventoryTable({
                   onClick={() => handleSort("stock")}
                   className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
                 >
-                  <span>Available Stock</span>
+                  <span>{L("স্টক", "Stock")}</span>
                   {sortField === "stock" ? (
                     sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
                   ) : (
@@ -142,7 +150,7 @@ export function InventoryTable({
                   onClick={() => handleSort("cost")}
                   className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
                 >
-                  <span>Avg Unit Cost</span>
+                  <span>{L("গড় দাম", "Avg unit cost")}</span>
                   {sortField === "cost" ? (
                     sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
                   ) : (
@@ -156,7 +164,7 @@ export function InventoryTable({
                   onClick={() => handleSort("alert")}
                   className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
                 >
-                  <span>Alert Level</span>
+                  <span>{L("সতর্কতার সীমা", "Alert level")}</span>
                   {sortField === "alert" ? (
                     sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
                   ) : (
@@ -170,7 +178,7 @@ export function InventoryTable({
                   onClick={() => handleSort("days")}
                   className="group ml-auto flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider hover:text-foreground transition-colors"
                 >
-                  <span>Runway</span>
+                  <span>{L("কদিন চলবে", "Runway")}</span>
                   {sortField === "days" ? (
                     sortOrder === "asc" ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
                   ) : (
@@ -179,7 +187,7 @@ export function InventoryTable({
                 </button>
               </th>
               <th scope="col" className="px-4 py-3.5 text-right font-semibold text-xs uppercase tracking-wider">
-                Quick Actions
+                {L("কাজ", "Quick Actions")}
               </th>
               <th scope="col" className="py-3.5 pr-4 pl-1 w-16 text-right" />
             </tr>
@@ -257,7 +265,7 @@ export function InventoryTable({
                       </span>
                       {item.stock < 0 && (
                         <span className="mt-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-                          Negative stock — a purchase or count is missing
+                          {L("স্টক ঋণাত্মক — কোনো কেনা বা গোনা লেখা হয়নি", "Negative stock — a purchase or count is missing")}
                         </span>
                       )}
                       {item.low_stock_threshold !== null && item.low_stock_threshold > 0 && (
@@ -290,7 +298,7 @@ export function InventoryTable({
                         {fmtCost(item.currentCost, item.unit)}
                       </span>
                     ) : (
-                      <span className="text-xs text-amber-700 dark:text-amber-400">Cost unknown</span>
+                      <span className="text-xs text-amber-700 dark:text-amber-400">{L("দাম জানা নেই", "Cost unknown")}</span>
                     )}
                   </td>
 

@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Poppins, Fira_Code, Hind_Siliguri } from "next/font/google";
 import { Providers } from "@/components/shared/Providers";

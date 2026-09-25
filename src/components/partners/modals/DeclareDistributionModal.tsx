@@ -11,6 +11,7 @@ import type { Partner } from "@/types/database";
 import type { Dictionary } from "@/i18n/getDictionary";
 import { bdt, type PartnerAccountSummary } from "@/lib/partners/calculations";
 import { cn } from "@/lib/utils";
+import { useL } from "@/i18n/text";
 
 export interface AccountEntry {
   partner: Partner;
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function DeclareDistributionModal({ partnerAccounts, netPL, today, t, onClose }: Props) {
+  const L = useL();
   const isLoss = netPL < 0;
   const pendingEntries = partnerAccounts
     .map(({ partner: p, acc }) => ({
@@ -115,7 +117,7 @@ export function DeclareDistributionModal({ partnerAccounts, netPL, today, t, onC
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{p.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      <span className={isLoss ? "text-orange-600" : "text-emerald-600"}>Pending {bdt(pending)}</span>
+                      <span className={isLoss ? "text-orange-600" : "text-emerald-600"}>{L("বাকি", "Pending")} {bdt(pending)}</span>
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -133,7 +135,7 @@ export function DeclareDistributionModal({ partnerAccounts, netPL, today, t, onC
               ))}
             </div>
             <div className={cn("flex justify-between items-center px-3 py-2.5 border-t text-sm font-semibold", isLoss ? "text-orange-600" : "text-emerald-600")}>
-              <span>Total</span>
+              <span>{L("মোট", "Total")}</span>
               <span>{bdt(totalAmount)}</span>
             </div>
           </div>

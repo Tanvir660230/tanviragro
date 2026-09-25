@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { startFeedUsage, endFeedUsage, cancelFeedUsage, setFeedUsageRule, type UsageFormState } from "@/app/dashboard/(app)/inventory/usage/actions";
 import type { LineResult, Period } from "@/lib/feed/usage-engine";
 import type { FeedItemStatus } from "@/lib/feed/feed-data";
+import { useL } from "@/i18n/text";
 
 export type UsagePageData = {
   asOf: string;
@@ -36,16 +37,18 @@ const taka = (n: number | null | undefined) => (n == null ? "—" : `৳${Math.r
 const qty = (n: number | null | undefined, unit: string) => (n == null ? "—" : `${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })} ${unit}`);
 
 function Badge({ kind }: { kind: "actual" | "estimated" | "unreconciled" }) {
+  const L = useL();
   const cls = {
     actual: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
     estimated: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
     unreconciled: "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300",
   }[kind];
-  const label = { actual: "Actual", estimated: "Estimated · running", unreconciled: "Needs attention" }[kind];
+  const label = { actual: L("আসল", "Actual"), estimated: L("আনুমানিক · চলছে", "Estimated · running"), unreconciled: L("দেখতে হবে", "Needs attention") }[kind];
   return <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide", cls)}>{label}</span>;
 }
 
 export function FeedUsageClient({ data }: { data: UsagePageData }) {
+  const L = useL();
   const [start, setStart] = useState<string | null>(null);      // preselected target or "" for a free choice
   const [ending, setEnding] = useState<Period | null>(null);
   const [checking, setChecking] = useState<Period | null>(null);
@@ -60,22 +63,22 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
     <div className="space-y-5">
       {/* Summary: never one mixed number */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Feed cost this month" value={taka(data.totals.actualThisMonth)} tag="actual" sub="deducted daily, settled at each count" />
-        <Stat label="Running this month" value={taka(data.totals.estimatedThisMonth)} tag="estimated" sub="today, not deducted yet" />
-        <Stat label="Feed stock value" value={taka(data.totals.stockValue)} sub="ledger, weighted average cost" />
-        <Stat label="Needs attention" value={String(attention.length + (data.totals.recordedMissingCost > 0 ? 1 : 0))} tag={attention.length ? "unreconciled" : undefined} sub="gaps or missing prices" />
+        <Stat label={L("এই মাসের খাবার খরচ", "Feed cost this month")} value={taka(data.totals.actualThisMonth)} tag="actual" sub={L("প্রতিদিন কাটা, গোনার সময় মেলানো", "deducted daily, settled at each count")} />
+        <Stat label={L("আজকের চলতি", "Running this month")} value={taka(data.totals.estimatedThisMonth)} tag="estimated" sub={L("আজকের, এখনো কাটা হয়নি", "today, not deducted yet")} />
+        <Stat label={L("খাবারের স্টকের মূল্য", "Feed stock value")} value={taka(data.totals.stockValue)} sub={L("খাতা অনুযায়ী, গড় দামে", "ledger, weighted average cost")} />
+        <Stat label={L("দেখতে হবে", "Needs attention")} value={String(attention.length + (data.totals.recordedMissingCost > 0 ? 1 : 0))} tag={attention.length ? "unreconciled" : undefined} sub={L("গরমিল বা দাম নেই", "gaps or missing prices")} />
       </div>
 
       {attention.length > 0 && (
         <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-sm dark:border-rose-900/60 dark:bg-rose-950/20">
-          <p className="flex items-center gap-2 font-semibold text-rose-800 dark:text-rose-300"><AlertTriangle className="h-4 w-4" /> Reconciliation gap</p>
+          <p className="flex items-center gap-2 font-semibold text-rose-800 dark:text-rose-300"><AlertTriangle className="h-4 w-4" /> {L("হিসাবে গরমিল", "Reconciliation gap")}</p>
           <ul className="mt-1 space-y-0.5 text-xs text-rose-800/90 dark:text-rose-300/90">
             {attention.flatMap((p) => p.lines.filter((l) => (l.gapQty ?? 0) > 0 || l.costMissing).map((l) => (
               <li key={p.id + l.itemId}>
                 {l.itemName} ({p.startDate} → {p.endDate}):{" "}
                 {(l.gapQty ?? 0) > 0
-                  ? `you counted ${qty(l.gapQty, l.unit)} more than the recorded stock — a purchase in this period is probably not entered yet. Enter it with its real purchase date; this period then reconciles automatically.`
-                  : "no priced stock-in yet, so the cost is unknown. Enter the purchase price."}
+                  ? L(`খাতার স্টকের চেয়ে ${qty(l.gapQty, l.unit)} বেশি গুনেছেন — এই সময়ের কোনো কেনা সম্ভবত লেখা হয়নি। আসল কেনার তারিখে কেনাটা লিখলে এটা নিজে মিলে যাবে।`, `you counted ${qty(l.gapQty, l.unit)} more than the recorded stock — a purchase in this period is probably not entered yet. Enter it with its real purchase date; this period then reconciles automatically.`)
+                  : L("এখনো দামসহ কোনো কেনা নেই, তাই খরচ জানা নেই। কেনার দাম লিখুন।", "no priced stock-in yet, so the cost is unknown. Enter the purchase price.")}
               </li>
             )))}
           </ul>
@@ -86,13 +89,13 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
       <section className="rounded-xl border border-border bg-card">
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold">Feeds in use now</h2>
-            <p className="text-xs text-muted-foreground">Each day&apos;s use comes off the stock automatically. Count any time (it keeps running), or end it when the feed finishes — the difference is adjusted.</p>
+            <h2 className="text-sm font-semibold">{L("এখন যে খাবার চলছে", "Feeds in use now")}</h2>
+            <p className="text-xs text-muted-foreground">{L("প্রতিদিনের খাবার নিজে থেকে স্টক থেকে কাটা হয়। যেকোনো সময় গুনে মেলাতে পারেন (চালু থাকবে), বা শেষ হলে \"শেষ\" চাপুন — পার্থক্য মিলিয়ে নেওয়া হবে।", "Each day's use comes off the stock automatically. Count any time (it keeps running), or end it when the feed finishes — the difference is adjusted.")}</p>
           </div>
-          {data.canEdit && <Button size="sm" onClick={() => setStart("")}><Play className="mr-1 h-4 w-4" />Start using a feed</Button>}
+          {data.canEdit && <Button size="sm" onClick={() => setStart("")}><Play className="mr-1 h-4 w-4" />{L("খাবার চালু করুন", "Start using a feed")}</Button>}
         </header>
         {openPeriods.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">No feed is in use. Start one to get automatic daily usage and cost.</p>
+          <p className="px-4 py-6 text-sm text-muted-foreground">{L("কোনো খাবার চালু নেই। চালু করলে প্রতিদিনের খরচ নিজে হিসাব হবে।", "No feed is in use. Start one to get automatic daily usage and cost.")}</p>
         ) : (
           <ul className="divide-y divide-border">
             {openPeriods.map((p) => (
@@ -100,12 +103,12 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{p.targetName}</span>
                   <Badge kind="estimated" />
-                  <span className="text-xs text-muted-foreground">since {p.startDate} · {ruleText(p)}</span>
+                  <span className="text-xs text-muted-foreground">{L("শুরু", "since")} {p.startDate} · {ruleText(p, L)}</span>
                   {data.canEdit && (
                     <div className="ml-auto flex gap-1.5">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setRuleOf(p)}><SlidersHorizontal className="mr-1 h-3.5 w-3.5" />Rule</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setChecking(p)}><ClipboardCheck className="mr-1 h-3.5 w-3.5" />Count check</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEnding(p)}><Square className="mr-1 h-3.5 w-3.5" />Finished / end</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setRuleOf(p)}><SlidersHorizontal className="mr-1 h-3.5 w-3.5" />{L("নিয়ম", "Rule")}</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setChecking(p)}><ClipboardCheck className="mr-1 h-3.5 w-3.5" />{L("গুনে মেলান", "Count check")}</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEnding(p)}><Square className="mr-1 h-3.5 w-3.5" />{L("শেষ হয়েছে", "Finished / end")}</Button>
                       <CancelButton periodId={p.id} />
                     </div>
                   )}
@@ -118,17 +121,17 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
                       <div key={l.itemId} className="rounded-lg bg-muted/40 p-2.5 text-xs">
                         <p className="font-medium text-sm">{l.itemName}{p.targetType === "recipe" && <span className="ml-1 text-muted-foreground">({Math.round(l.share * 100)}%)</span>}</p>
                         {!r ? null : r.estimateBasis === "none" ? (
-                          <p className="text-muted-foreground">Nothing can be deducted daily yet — set a feeding chart or rule, or it is learned when this period ends.</p>
+                          <p className="text-muted-foreground">{L("এখনো প্রতিদিন কাটা যাচ্ছে না — খাবারের চার্ট বা নিয়ম দিন, নয়তো এই পর্ব শেষ হলে শিখে নেবে।", "Nothing can be deducted daily yet — set a feeding chart or rule, or it is learned when this period ends.")}</p>
                         ) : (
                           <>
-                            <p>Deducted so far <strong>{qty(r?.postedQty ?? 0, l.unit)}</strong> ({taka(r?.postedValue ?? 0)}){r?.lastPosted ? <span className="text-muted-foreground"> · last {r.lastPosted}</span> : null}</p>
-                            <p className="text-muted-foreground">{qty(r?.dailyQty, l.unit)}/day — {r?.estimateBasis === "rule" ? (p.ruleType === "chart" ? "by feeding chart" : "by feeding rule") : "learned from earlier periods"}{(r?.pendingQty ?? 0) > 0 ? ` · today ≈ ${qty(r?.pendingQty, l.unit)} (not deducted yet)` : ""}</p>
+                            <p>{L("এ পর্যন্ত কাটা", "Deducted so far")} <strong>{qty(r?.postedQty ?? 0, l.unit)}</strong> ({taka(r?.postedValue ?? 0)}){r?.lastPosted ? <span className="text-muted-foreground"> · {L("শেষ", "last")} {r.lastPosted}</span> : null}</p>
+                            <p className="text-muted-foreground">{qty(r?.dailyQty, l.unit)}/{L("দিন", "day")} — {r?.estimateBasis === "rule" ? (p.ruleType === "chart" ? L("খাবারের চার্ট অনুযায়ী", "by feeding chart") : L("নিয়ম অনুযায়ী", "by feeding rule")) : L("আগের খরচ থেকে শেখা", "learned from earlier periods")}{(r?.pendingQty ?? 0) > 0 ? L(` · আজ ≈ ${qty(r?.pendingQty, l.unit)} (এখনো কাটা হয়নি)`, ` · today ≈ ${qty(r?.pendingQty, l.unit)} (not deducted yet)`) : ""}</p>
                           </>
                         )}
                         {item && (
                           <p className="text-muted-foreground">
-                            Recorded stock {qty(item.stockQty, l.unit)}
-                            {item.daysLeft != null && <> · expected to finish in ≈ <strong className="text-foreground">{Math.max(0, Math.floor(item.daysLeft))} days</strong> ({item.depletionDate})</>}
+                            {L("খাতায় স্টক", "Recorded stock")} {qty(item.stockQty, l.unit)}
+                            {item.daysLeft != null && <> · {L("শেষ হবে প্রায়", "expected to finish in ≈")} <strong className="text-foreground">{L(`${Math.max(0, Math.floor(item.daysLeft))} দিনে`, `${Math.max(0, Math.floor(item.daysLeft))} days`)}</strong> ({item.depletionDate})</>}
                           </p>
                         )}
                       </div>
@@ -141,7 +144,7 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
         )}
         {idleWithStock.length > 0 && data.canEdit && (
           <div className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-            In stock but not in use:{" "}
+            {L("স্টকে আছে কিন্তু চালু নেই", "In stock but not in use")}:{" "}
             {idleWithStock.map((i, k) => (
               <span key={i.id}>
                 {k > 0 && ", "}
@@ -155,14 +158,14 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
       {/* History */}
       <section className="rounded-xl border border-border bg-card overflow-hidden">
         <header className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Usage period history</h2>
-          <p className="text-xs text-muted-foreground">Actual use = stock at the start + purchases − what was left at the end. Expected comes from the feeding rule or earlier periods.</p>
+          <h2 className="text-sm font-semibold">{L("আগের খাওয়ানোর হিসাব", "Usage period history")}</h2>
+          <p className="text-xs text-muted-foreground">{L("আসল খরচ = শুরুর স্টক + কেনা − শেষে যা ছিল। প্রত্যাশিত খরচ আসে নিয়ম বা আগের হিসাব থেকে।", "Actual use = stock at the start + purchases − what was left at the end. Expected comes from the feeding rule or earlier periods.")}</p>
         </header>
-        {closedPeriods.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">No data</p> : (
+        {closedPeriods.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">{L("কোনো তথ্য নেই", "No data")}</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/40 text-muted-foreground">
-                <tr>{["Feed", "Period", "Days", "Used", "Per day", "Expected", "Variance", "Cost", "Status", ""].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
+                <tr>{[L("খাবার", "Feed"), L("সময়", "Period"), L("দিন", "Days"), L("খরচ হয়েছে", "Used"), L("প্রতিদিন", "Per day"), L("প্রত্যাশিত", "Expected"), L("পার্থক্য", "Variance"), L("টাকা", "Cost"), L("অবস্থা", "Status"), ""].map((h, hi) => <th key={hi} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {closedPeriods.flatMap((p) => p.lines.map((l) => {
@@ -178,9 +181,9 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
                       <td className={cn("px-3 py-2 whitespace-nowrap", (r?.varianceQty ?? 0) > 0 ? "text-rose-600" : "text-emerald-700")}>
                         {r?.varianceQty == null ? "—" : `${r.varianceQty > 0 ? "+" : ""}${qty(r.varianceQty, l.unit)} (${r.variancePct?.toFixed(0)}%)`}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">{l.costMissing ? "unknown" : taka(l.consumedValue)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{l.costMissing ? L("জানা নেই", "unknown") : taka(l.consumedValue)}</td>
                       <td className="px-3 py-2"><Badge kind={r?.status === "unreconciled" ? "unreconciled" : "actual"} /></td>
-                      <td className="px-3 py-2">{data.canEdit && l === p.lines[0] && <button className="text-primary" title="Correct end date or count" onClick={() => setEnding(p)}><Pencil className="h-3.5 w-3.5" /></button>}</td>
+                      <td className="px-3 py-2">{data.canEdit && l === p.lines[0] && <button className="text-primary" title={L("শেষের তারিখ বা গোনা ঠিক করুন", "Correct end date or count")} onClick={() => setEnding(p)}><Pencil className="h-3.5 w-3.5" /></button>}</td>
                     </tr>
                   );
                 }))}
@@ -188,46 +191,46 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
             </table>
           </div>
         )}
-        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">Variance is shown, not explained: it can be wastage, a counting difference or a change in feeding — check before drawing conclusions.</p>
+        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">{L("পার্থক্য শুধু দেখানো হয়, কারণ নয়: নষ্ট হওয়া, গোনার ভুল বা খাওয়ানো বদলানো — যেকোনোটা হতে পারে, আগে যাচাই করুন।", "Variance is shown, not explained: it can be wastage, a counting difference or a change in feeding — check before drawing conclusions.")}</p>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Per cattle */}
         <section className="rounded-xl border border-border bg-card overflow-hidden">
           <header className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold">Feed cost per animal</h2>
-            <p className="text-xs text-muted-foreground">Split by live weight, only for the days each animal was on the farm.</p>
+            <h2 className="text-sm font-semibold">{L("প্রতি গরুর খাবার খরচ", "Feed cost per animal")}</h2>
+            <p className="text-xs text-muted-foreground">{L("ওজন অনুযায়ী ভাগ, শুধু যে কদিন গরুটি খামারে ছিল।", "Split by live weight, only for the days each animal was on the farm.")}</p>
           </header>
           <table className="w-full text-xs">
-            <thead className="bg-muted/40 text-muted-foreground"><tr>{["Animal", "Actual", "Running (est.)", "Measured gain", "Actual cost / kg gain"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+            <thead className="bg-muted/40 text-muted-foreground"><tr>{[L("গরু", "Animal"), L("আসল", "Actual"), L("চলতি (আনুমানিক)", "Running (est.)"), L("মাপা ওজন বৃদ্ধি", "Measured gain"), L("প্রতি কেজি বৃদ্ধিতে খরচ", "Actual cost / kg gain")].map((h, hi) => <th key={hi} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-border">
-              {data.cattle.length === 0 ? <tr><td className="px-3 py-3 text-muted-foreground" colSpan={5}>No data</td></tr> : data.cattle.map((c) => (
+              {data.cattle.length === 0 ? <tr><td className="px-3 py-3 text-muted-foreground" colSpan={5}>{L("কোনো তথ্য নেই", "No data")}</td></tr> : data.cattle.map((c) => (
                 <tr key={c.id}>
                   <td className="px-3 py-2 font-medium">{c.tag}</td>
                   <td className="px-3 py-2">{taka(c.actual)}</td>
                   <td className="px-3 py-2 text-amber-700 dark:text-amber-400">{c.estimated ? taka(c.estimated) : "—"}</td>
-                  <td className="px-3 py-2">{c.gainKg == null ? "needs 2 weighings" : `${c.gainKg.toFixed(1)} kg`}</td>
+                  <td className="px-3 py-2">{c.gainKg == null ? L("২ বার ওজন লাগবে", "needs 2 weighings") : `${c.gainKg.toFixed(1)} kg`}</td>
                   <td className="px-3 py-2">{c.costPerKgGain == null ? "—" : `৳${c.costPerKgGain.toFixed(0)}`}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {data.totals.unallocated > 0.5 && <p className="px-4 py-2 text-[11px] text-muted-foreground">{taka(data.totals.unallocated)} was used on days with no animal recorded on the farm (not assigned to any animal).</p>}
+          {data.totals.unallocated > 0.5 && <p className="px-4 py-2 text-[11px] text-muted-foreground">{L(`${taka(data.totals.unallocated)} এমন দিনে খরচ হয়েছে যখন খামারে কোনো গরু লেখা ছিল না (কোনো গরুর ভাগে ধরা হয়নি)।`, `${taka(data.totals.unallocated)} was used on days with no animal recorded on the farm (not assigned to any animal).`)}</p>}
         </section>
 
         {/* By month and by feed */}
         <section className="rounded-xl border border-border bg-card overflow-hidden">
-          <header className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">Feed cost by month and by feed</h2></header>
+          <header className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">{L("মাস ও খাবার অনুযায়ী খরচ", "Feed cost by month and by feed")}</h2></header>
           <table className="w-full text-xs">
-            <thead className="bg-muted/40 text-muted-foreground"><tr>{["Month", "Actual", "Running (est.)"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+            <thead className="bg-muted/40 text-muted-foreground"><tr>{[L("মাস", "Month"), L("আসল", "Actual"), L("চলতি (আনুমানিক)", "Running (est.)")].map((h, hi) => <th key={hi} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-border">
-              {data.byMonth.length === 0 ? <tr><td className="px-3 py-3 text-muted-foreground" colSpan={3}>No data</td></tr> : data.byMonth.map(([m, v]) => (
+              {data.byMonth.length === 0 ? <tr><td className="px-3 py-3 text-muted-foreground" colSpan={3}>{L("কোনো তথ্য নেই", "No data")}</td></tr> : data.byMonth.map(([m, v]) => (
                 <tr key={m}><td className="px-3 py-2">{m}</td><td className="px-3 py-2">{taka(v.actual)}</td><td className="px-3 py-2 text-amber-700 dark:text-amber-400">{v.estimated ? taka(v.estimated) : "—"}</td></tr>
               ))}
             </tbody>
           </table>
           <table className="w-full text-xs border-t border-border">
-            <thead className="bg-muted/40 text-muted-foreground"><tr>{["Feed", "Actual used", "Actual cost", "Running (est.)"].map((h) => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+            <thead className="bg-muted/40 text-muted-foreground"><tr>{[L("খাবার", "Feed"), L("আসল পরিমাণ", "Actual used"), L("আসল খরচ", "Actual cost"), L("চলতি (আনুমানিক)", "Running (est.)")].map((h, hi) => <th key={hi} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-border">
               {data.byItem.map((i) => (
                 <tr key={i.id}><td className="px-3 py-2">{i.name}</td><td className="px-3 py-2">{qty(i.actualQty, i.unit)}</td><td className="px-3 py-2">{taka(i.actualValue)}</td><td className="px-3 py-2 text-amber-700 dark:text-amber-400">{i.estimatedValue ? taka(i.estimatedValue) : "—"}</td></tr>
@@ -245,11 +248,11 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
   );
 }
 
-function ruleText(p: Period): string {
-  if (p.ruleType === "pct_live_weight") return `${p.ruleValue}% of live weight per day`;
-  if (p.ruleType === "per_head") return `${p.ruleValue} per head per day`;
-  if (p.ruleType === "chart") return "by feeding chart";
-  return "learned from what gets used";
+function ruleText(p: Period, L: (bn: string, en: string) => string): string {
+  if (p.ruleType === "pct_live_weight") return L(`প্রতিদিন ওজনের ${p.ruleValue}%`, `${p.ruleValue}% of live weight per day`);
+  if (p.ruleType === "per_head") return L(`প্রতি গরু প্রতিদিন ${p.ruleValue}`, `${p.ruleValue} per head per day`);
+  if (p.ruleType === "chart") return L("খাবারের চার্ট অনুযায়ী", "by feeding chart");
+  return L("যা খরচ হয় তা থেকে শেখা", "learned from what gets used");
 }
 
 function Stat({ label, value, sub, tag }: { label: string; value: string; sub: string; tag?: "actual" | "estimated" | "unreconciled" }) {
@@ -263,17 +266,18 @@ function Stat({ label, value, sub, tag }: { label: string; value: string; sub: s
 }
 
 function CancelButton({ periodId }: { periodId: string }) {
+  const L = useL();
   const router = useRouter();
   const [pending, start] = useTransition();
   return (
     <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" disabled={pending} onClick={() => {
-      const reason = prompt("Why cancel this period? (kept in the history)");
+      const reason = prompt(L("কেন বাতিল করছেন? (ইতিহাসে থাকবে)", "Why cancel this period? (kept in the history)"));
       if (!reason) return;
       start(async () => {
         const r = await cancelFeedUsage(periodId, reason);
-        if (r.error) toast.error(r.error); else { toast.success("Period cancelled"); router.refresh(); }
+        if (r.error) toast.error(r.error); else { toast.success(L("বাতিল হলো", "Period cancelled")); router.refresh(); }
       });
-    }}>Cancel</Button>
+    }}>{L("বাতিল", "Cancel")}</Button>
   );
 }
 

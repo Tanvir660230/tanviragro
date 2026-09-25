@@ -20,8 +20,8 @@ export function LanguageSwitcher() {
       onClick={toggleLanguage}
       disabled={isPending}
       className="flex h-9 items-center justify-center rounded-lg px-2.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 gap-1"
-      aria-label={locale === "en" ? "Switch to Bengali" : "Switch to English"}
-      title={locale === "en" ? "Switch to Bengali" : "Switch to English"}
+      aria-label={locale === "en" ? "বাংলায় দেখুন" : "Switch to English"}
+      title={locale === "en" ? "বাংলায় দেখুন" : "Switch to English"}
     >
       {locale === "en" ? (
         <><span className="text-xs opacity-60">বাং</span><span className="hidden sm:inline">বাংলা</span></>

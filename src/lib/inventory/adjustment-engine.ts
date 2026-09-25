@@ -1,5 +1,4 @@
 import type { StockAdjustmentInput, StockMovementDirection } from "./types";
-import { CostingEngine } from "./costing-engine";
 
 export interface AdjustmentResult {
   direction: StockMovementDirection;

@@ -21,6 +21,7 @@ import {
 import { updatePartner } from "@/app/dashboard/(app)/partners/actions";
 import type { Partner, PartnerType } from "@/types/database";
 import { toast } from "sonner";
+import { useL } from "@/i18n/text";
 
 interface Props {
   partner: Partner;
@@ -33,6 +34,7 @@ export function EditPartnerProfileModal({
   totalInvested,
   onClose,
 }: Props) {
+  const L = useL();
   const [partnerTypeField, setPartnerTypeField] = useState<PartnerType>(
     p.partner_type ?? "capital"
   );
@@ -44,16 +46,16 @@ export function EditPartnerProfileModal({
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Partner updated");
+      toast.success(L("অংশীদার আপডেট হলো", "Partner updated"));
       onClose();
     }
-  }, [state, onClose]);
+  }, [state, onClose, L]);
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Partner — {p.name}</DialogTitle>
+          <DialogTitle>{L("অংশীদার বদলান", "Edit partner")} — {p.name}</DialogTitle>
         </DialogHeader>
         <form
           action={(fd) => {
@@ -65,12 +67,12 @@ export function EditPartnerProfileModal({
           className="space-y-4"
         >
           <div className="space-y-1.5">
-            <Label>Name *</Label>
+            <Label>{L("নাম *", "Name *")}</Label>
             <Input name="name" required defaultValue={p.name} />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Partner Type</Label>
+            <Label>{L("অংশীদারের ধরন", "Partner Type")}</Label>
             <Select
               value={partnerTypeField}
               onValueChange={(v) => {
@@ -84,16 +86,16 @@ export function EditPartnerProfileModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="capital">Capital Partner</SelectItem>
-                <SelectItem value="labor">Labor Partner</SelectItem>
-                <SelectItem value="hybrid">Capital + Labor</SelectItem>
+                <SelectItem value="capital">{L("মূলধন অংশীদার", "Capital Partner")}</SelectItem>
+                <SelectItem value="labor">{L("শ্রম অংশীদার", "Labor Partner")}</SelectItem>
+                <SelectItem value="hybrid">{L("মূলধন + শ্রম", "Capital + Labor")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {partnerTypeField !== "labor" && (
             <div className="space-y-1.5">
-              <Label>Total Capital Invested (৳)</Label>
+              <Label>{L("মোট জমা (৳)", "Total Capital Invested (৳)")}</Label>
               <Input
                 name="investment_amount"
                 type="number"
@@ -110,7 +112,7 @@ export function EditPartnerProfileModal({
           {partnerTypeField !== "capital" && (
             <>
               <div className="space-y-1.5">
-                <Label>Monthly Labor Value (৳/mo)</Label>
+                <Label>{L("মাসিক শ্রমের মূল্য (৳/মাস)", "Monthly Labor Value (৳/mo)")}</Label>
                 <Input
                   name="labor_value_monthly"
                   type="number"
@@ -120,7 +122,7 @@ export function EditPartnerProfileModal({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Cliff Period (months)</Label>
+                <Label>{L("অপেক্ষার সময় (মাস)", "Cliff Period (months)")}</Label>
                 <Input
                   name="cliff_months"
                   type="number"
@@ -133,7 +135,7 @@ export function EditPartnerProfileModal({
           )}
 
           <div className="space-y-1.5">
-            <Label>Profit Share Calculation Mode</Label>
+            <Label>{L("লাভের ভাগ কীভাবে", "Profit Share Calculation Mode")}</Label>
             <Select
               value={shareModeField}
               onValueChange={(v) =>
@@ -145,16 +147,16 @@ export function EditPartnerProfileModal({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">
-                  Auto — Proportional to investment / labor
+                  {L("নিজে — জমা / শ্রম অনুপাতে", "Auto — Proportional to investment / labor")}
                 </SelectItem>
-                <SelectItem value="manual">Manual — Fixed %</SelectItem>
+                <SelectItem value="manual">{L("নিজে দেওয়া — নির্দিষ্ট %", "Manual — Fixed %")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {shareModeField === "manual" && (
             <div className="space-y-1.5">
-              <Label>Manual Profit Share % (0–100)</Label>
+              <Label>{L("লাভের ভাগ % (0–100)", "Manual Profit Share % (0–100)")}</Label>
               <Input
                 name="profit_share_pct"
                 type="number"
@@ -169,9 +171,9 @@ export function EditPartnerProfileModal({
           {partnerTypeField !== "labor" && (
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
-                <p className="text-sm font-medium">Bears Capital Loss</p>
+                <p className="text-sm font-medium">{L("ক্ষতির ভাগ নেবেন", "Bears Capital Loss")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Participates in business losses
+                  {L("ব্যবসার ক্ষতিতেও ভাগ নেবেন", "Participates in business losses")}
                 </p>
               </div>
               <input
@@ -186,12 +188,12 @@ export function EditPartnerProfileModal({
           )}
 
           <div className="space-y-1.5">
-            <Label>Join Date</Label>
+            <Label>{L("যোগদানের তারিখ", "Join Date")}</Label>
             <Input name="joined_at" type="date" defaultValue={p.joined_at} />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Notes</Label>
+            <Label>{L("নোট", "Notes")}</Label>
             <Textarea
               name="notes"
               rows={2}
@@ -205,10 +207,10 @@ export function EditPartnerProfileModal({
           )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {L("বাতিল", "Cancel")}
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Saving..." : "Save Changes"}
+              {pending ? L("সেভ হচ্ছে…", "Saving…") : L("সেভ করুন", "Save changes")}
             </Button>
           </div>
         </form>

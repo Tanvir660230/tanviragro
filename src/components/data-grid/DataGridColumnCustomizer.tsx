@@ -3,9 +3,17 @@
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { SlidersHorizontal, Eye, EyeOff, Pin, PinOff, ArrowUp, ArrowDown, RotateCcw } from "lucide-react";
+import {
+  SlidersHorizontal,
+  Eye,
+  EyeOff,
+  Pin,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GridColumn } from "./types";
+import { useL } from "@/i18n/text";
 
 export interface DataGridColumnCustomizerProps<T> {
   columns: GridColumn<T>[];
@@ -28,6 +36,7 @@ export function DataGridColumnCustomizer<T>({
   pinColumn,
   moveColumn,
 }: DataGridColumnCustomizerProps<T>) {
+  const L = useL();
   const columnMap = React.useMemo(() => {
     const map = new Map<string, GridColumn<T>>();
     columns.forEach((c) => map.set(c.id, c));
@@ -40,12 +49,12 @@ export function DataGridColumnCustomizer<T>({
         className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 text-xs cursor-pointer")}
       >
         <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>Columns</span>
+        <span>{L("কলাম", "Columns")}</span>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-3 space-y-3 bg-card border-border shadow-xl">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-            Customize Columns
+            {L("কলাম সাজান", "Customize Columns")}
           </span>
           <div className="flex gap-1">
             <Button
@@ -54,7 +63,7 @@ export function DataGridColumnCustomizer<T>({
               className="h-6 px-1.5 text-[11px] text-muted-foreground"
               onClick={() => setAllColumnsVisibility(true)}
             >
-              Show All
+              {L("সব দেখান", "Show All")}
             </Button>
             <Button
               variant="ghost"
@@ -62,7 +71,7 @@ export function DataGridColumnCustomizer<T>({
               className="h-6 px-1.5 text-[11px] text-muted-foreground"
               onClick={() => setAllColumnsVisibility(false)}
             >
-              Hide All
+              {L("সব লুকান", "Hide All")}
             </Button>
           </div>
         </div>
@@ -86,7 +95,7 @@ export function DataGridColumnCustomizer<T>({
                     type="button"
                     onClick={() => toggleColumnVisibility(colId)}
                     className="text-muted-foreground hover:text-foreground"
-                    title={isVisible ? "Hide column" : "Show column"}
+                    title={isVisible ? L("কলাম লুকান", "Hide column") : L("কলাম দেখান", "Show column")}
                   >
                     {isVisible ? <Eye className="h-3.5 w-3.5 text-primary" /> : <EyeOff className="h-3.5 w-3.5 opacity-40" />}
                   </button>
@@ -101,7 +110,7 @@ export function DataGridColumnCustomizer<T>({
                     type="button"
                     onClick={() => pinColumn(colId, pinned === "left" ? false : "left")}
                     className={`p-1 rounded hover:bg-muted ${pinned === "left" ? "text-primary font-bold" : "text-muted-foreground/60"}`}
-                    title="Pin to Left"
+                    title={L("বামে আটকান", "Pin to Left")}
                   >
                     <Pin className="h-3 w-3 rotate-45" />
                   </button>
@@ -111,7 +120,7 @@ export function DataGridColumnCustomizer<T>({
                     disabled={idx === 0}
                     onClick={() => moveColumn(colId, "left")}
                     className="p-1 rounded hover:bg-muted disabled:opacity-30"
-                    title="Move Up"
+                    title={L("উপরে", "Move Up")}
                   >
                     <ArrowUp className="h-3 w-3" />
                   </button>
@@ -120,7 +129,7 @@ export function DataGridColumnCustomizer<T>({
                     disabled={idx === columnOrder.length - 1}
                     onClick={() => moveColumn(colId, "right")}
                     className="p-1 rounded hover:bg-muted disabled:opacity-30"
-                    title="Move Down"
+                    title={L("নিচে", "Move Down")}
                   >
                     <ArrowDown className="h-3 w-3" />
                   </button>

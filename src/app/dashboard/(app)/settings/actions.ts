@@ -249,29 +249,6 @@ export async function deleteManagementFeeRate(id: string): Promise<{ error?: str
   return {};
 }
 
-export async function saveUnitPrice(
-  _prevState: SettingsFormState,
-  formData: FormData
-): Promise<SettingsFormState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  const price = parseInt(formData.get("unit_price_bdt") as string, 10);
-  if (isNaN(price) || price < 100) return { error: "Unit price must be at least ৳100" };
-
-  const { error } = await supabase
-    .from("businesses")
-    .update({ unit_price_bdt: price })
-    .eq("owner_id", user.id);
-
-  if (error) return { error: "Failed to save unit price" };
-  revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard/partners");
-  revalidateTag("accounting", { expire: 0 });
-  return { success: "Unit price updated" };
-}
-
 export async function saveDailyGain(
   _prevState: SettingsFormState,
   formData: FormData
@@ -293,31 +270,6 @@ export async function saveDailyGain(
     revalidatePath("/dashboard/partners");
   revalidateTag("accounting", { expire: 0 });
   return { success: "Daily weight gain updated" };
-}
-
-export async function updateTaxSettings(
-  _prevState: SettingsFormState,
-  formData: FormData
-): Promise<SettingsFormState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  const taxRate = parseFloat(formData.get("tax_rate") as string);
-  if (isNaN(taxRate) || taxRate < 0 || taxRate > 100)
-    return { error: "Tax rate must be between 0 and 100" };
-
-  const { error } = await supabase
-    .from("businesses")
-    .update({ default_tax_rate: taxRate })
-    .eq("owner_id", user.id);
-
-  if (error) return { error: "Failed to save tax settings" };
-
-  revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard/accounting");
-  revalidateTag("accounting", { expire: 0 });
-  return { success: "Tax settings updated" };
 }
 
 export async function updateFiscalYear(

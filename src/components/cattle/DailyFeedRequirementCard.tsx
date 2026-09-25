@@ -6,6 +6,7 @@ import { calculateDailyFeedRequirement, ROUGHAGE_TYPES, type RoughageTypeId } fr
 import { updateRoughageOverride, logManualFeed } from "@/app/dashboard/(app)/cattle/[id]/actions";
 import { toast } from "sonner";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { useL } from "@/i18n/text";
 
 export function DailyFeedRequirementCard({
   cattleId,
@@ -26,6 +27,7 @@ export function DailyFeedRequirementCard({
   roughageOverrideKg?: number | null;
   activeRoughage?: { id: string; name: string; unit: string } | null;
 }) {
+  const L = useL();
   const { t } = useTranslation();
   const [roughageTypeId, setRoughageTypeId] = useState<RoughageTypeId>("straw");
   const selectedRoughageType = ROUGHAGE_TYPES.find((r) => r.id === roughageTypeId) ?? ROUGHAGE_TYPES[0];
@@ -65,11 +67,11 @@ export function DailyFeedRequirementCard({
   function logFeed() {
     if (!activeRoughage) return;
     const val = parseFloat(draft);
-    if (isNaN(val) || val <= 0) { toast.error("Invalid amount"); return; }
+    if (isNaN(val) || val <= 0) { toast.error(L("পরিমাণ ঠিক নয়", "Invalid amount")); return; }
     startTransition(async () => {
       const res = await logManualFeed(cattleId, activeRoughage.id, val);
       if (res?.error) toast.error(res.error);
-      else toast.success(`Logged ${val} ${activeRoughage.unit} of ${activeRoughage.name}`);
+      else toast.success(L(`${activeRoughage.name} ${val} ${activeRoughage.unit} লেখা হলো`, `Logged ${val} ${activeRoughage.unit} of ${activeRoughage.name}`));
     });
   }
 
@@ -133,8 +135,8 @@ export function DailyFeedRequirementCard({
               <button
                 onClick={startEdit}
                 className="rounded-md p-1 text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="Edit roughage amount"
-                title="Edit roughage amount"
+                aria-label={L("খড়/ঘাসের পরিমাণ বদলান", "Edit roughage amount")}
+                title={L("খড়/ঘাসের পরিমাণ বদলান", "Edit roughage amount")}
               >
                 <Pencil className="h-3 w-3" />
               </button>
@@ -162,7 +164,7 @@ export function DailyFeedRequirementCard({
                   disabled={pending}
                   className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                 >
-                  <Check className="h-3 w-3" /> Save
+                  <Check className="h-3 w-3" /> {L("সেভ", "Save")}
                 </button>
                 {activeRoughage && (
                   <button
@@ -178,7 +180,7 @@ export function DailyFeedRequirementCard({
                 </button>
                 {roughageOverrideKg !== null && (
                   <button onClick={clearOverride} disabled={pending} className="text-xs text-red-500 hover:text-red-600 px-1">
-                    Reset
+                    {L("আগের মতো", "Reset")}
                   </button>
                 )}
               </div>

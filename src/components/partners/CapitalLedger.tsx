@@ -8,6 +8,9 @@ import { CapitalSummaryCards } from "./CapitalSummaryCards";
 import { CapitalLedgerTable } from "./CapitalLedgerTable";
 import { AddCapitalTxnDialog } from "./AddCapitalTxnDialog";
 import type { CapitalTxn } from "./capital-types";
+import { useL } from "@/i18n/text";
+import { partnerTxnLabel } from "@/lib/partners/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 export type { CapitalTxn };
 
@@ -18,6 +21,8 @@ interface Props {
 }
 
 export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
+  const L = useL();
+  const { locale } = useTranslation();
   const hasPartners = partners.length > 0;
   const [open, setOpen] = useState(false);
 
@@ -46,14 +51,14 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
 
   function exportToCsv() {
     if (displayed.length === 0) {
-      toast.error("No capital transactions to export");
+      toast.error(L("নামানোর মতো কোনো লেনদেন নেই", "No capital transactions to export"));
       return;
     }
     const headers = ["Date", "Partner", "Type", "Amount (BDT)", "Running Balance (BDT)", "Notes"];
     const rows = displayed.map((t) => [
       `"${t.recorded_at}"`,
       `"${t.partner_name.replace(/"/g, '""')}"`,
-      `"${t.type === "investment" ? "Capital In" : "Withdrawal"}"`,
+      `"${partnerTxnLabel(t.type, locale)}"`,
       t.type === "investment" ? t.amount : -t.amount,
       t.balance,
       `"${(t.notes ?? "").replace(/"/g, '""')}"`,
@@ -72,7 +77,7 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success("Capital ledger exported to CSV");
+    toast.success(L("CSV নামানো হলো", "Capital ledger exported to CSV"));
   }
 
   return (
@@ -80,9 +85,9 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
       {/* Header + Add button */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Total Capital Ledger</h2>
+          <h2 className="text-base font-semibold">{L("সব মূলধনের খাতা", "Total Capital Ledger")}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Running audit of all partner equity transactions
+            {L("সব অংশীদারের জমা-তোলার হিসাব", "Running audit of all partner equity transactions")}
           </p>
         </div>
 
@@ -95,7 +100,7 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
               className="gap-1.5 text-xs h-9"
             >
               <Download className="h-3.5 w-3.5 text-muted-foreground" />
-              Export CSV
+              {L("CSV নামান", "Export CSV")}
             </Button>
           )}
 

@@ -2,6 +2,7 @@
 
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, CalendarDays, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useL } from "@/i18n/text";
 
 const DEFAULT_PAGE_SIZES = [10, 25, 50, 100];
 
@@ -25,6 +26,7 @@ export function DataPagination({
   onPageSizeChange,
   className,
 }: PaginationProps) {
+  const L = useL();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : page * pageSize + 1;
   const to   = Math.min((page + 1) * pageSize, total);
@@ -46,7 +48,7 @@ export function DataPagination({
     <div className={cn("flex flex-wrap items-center justify-between gap-3 pt-2", className)}>
       {/* Per-page selector */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="hidden sm:inline text-xs">Show</span>
+        <span className="hidden sm:inline text-xs">{L("দেখান", "Show")}</span>
         <div className="flex items-center gap-0.5 rounded-lg bg-muted p-1">
           {pageSizeOptions.map((size) => (
             <button
@@ -100,6 +102,7 @@ export function DateRangeFilter({
   from, to, onFromChange, onToChange, onClear,
   filteredCount, totalCount, className,
 }: DateRangeProps) {
+  const L = useL();
   const isActive = !!(from || to);
 
   return (
@@ -111,7 +114,7 @@ export function DateRangeFilter({
         max={to || undefined}
         onChange={(e) => onFromChange(e.target.value)}
         className="h-7 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-        placeholder="From"
+        placeholder={L("থেকে", "From")}
       />
       <span className="text-xs text-muted-foreground shrink-0">–</span>
       <input
@@ -120,7 +123,7 @@ export function DateRangeFilter({
         min={from || undefined}
         onChange={(e) => onToChange(e.target.value)}
         className="h-7 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-        placeholder="To"
+        placeholder={L("পর্যন্ত", "To")}
       />
       {isActive && (
         <button

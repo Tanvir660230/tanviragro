@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import type { HealthEventType } from "@/types/database";
 import { buildProtocolEvents } from "@/lib/healthProtocol";
-import { createCattleSchema, validateDate, validatePositiveNumber, validateText } from "@/lib/validate";
+import { createCattleSchema } from "@/lib/validate";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { CattleDomainService } from "@/lib/services/cattle.service";
 import { LivestockEventBus } from "@/lib/livestock/events";

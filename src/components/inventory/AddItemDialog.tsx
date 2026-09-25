@@ -28,6 +28,9 @@ import {
 import { toast } from "sonner";
 import { KgPerUnitField, ZeroPriceConfirm } from "./ledger-fields";
 import { todayDhaka } from "@/lib/dates";
+import { useL } from "@/i18n/text";
+import { costCategoryLabel } from "@/lib/expenses/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 const CATEGORIES = [
   { value: "feed", label: "Feed" },
@@ -61,6 +64,8 @@ function AddItemForm({
   formKey: number;
   onSuccess: () => void;
 }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const router = useRouter();
   const [category, setCategory] = useState("");
   const [name, setName] = useState("");
@@ -80,12 +85,12 @@ function AddItemForm({
   useEffect(() => {
     if (state?.success) {
       if (state.warning) toast.warning(state.warning);
-      else toast.success("Item and initial stock added!");
+      else toast.success(L("জিনিস ও শুরুর স্টক যোগ হলো!", "Item and initial stock added!"));
       onSuccess();
       router.refresh();
     }
     if (state?.error) toast.error(state.error);
-  }, [state?.success, state?.error, state?.warning, onSuccess, router]);
+  }, [state?.success, state?.error, state?.warning, onSuccess, router, L]);
 
   // Handlers for Smart Calculator
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,18 +136,18 @@ function AddItemForm({
       
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="inv_category">Category *</Label>
+          <Label htmlFor="inv_category">{L("ধরন *", "Category *")}</Label>
           <Select
             value={category}
             onValueChange={(v) => { setCategory(v ?? ""); setUnit(""); setName(""); }}
           >
             <SelectTrigger id="inv_category">
-              <SelectValue placeholder="Select…" />
+              <SelectValue placeholder={L("বাছুন…", "Select…")} />
             </SelectTrigger>
             <SelectContent>
               {CATEGORIES.map((c) => (
                 <SelectItem key={c.value} value={c.value}>
-                  {c.label}
+                  {costCategoryLabel(c.value, locale)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -150,14 +155,14 @@ function AddItemForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="inv_unit">Unit *</Label>
+          <Label htmlFor="inv_unit">{L("একক *", "Unit *")}</Label>
           <Input
             id="inv_unit"
             name="unit"
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
             list="unit-suggestions"
-            placeholder="kg, litre, piece…"
+            placeholder={L("kg, লিটার, পিস…", "kg, litre, piece…")}
             required
           />
           <datalist id="unit-suggestions">
@@ -171,13 +176,13 @@ function AddItemForm({
       <KgPerUnitField unit={unit} idPrefix="add" />
 
       <div className="space-y-1.5">
-        <Label htmlFor="inv_name">Item Name *</Label>
+        <Label htmlFor="inv_name">{L("নাম *", "Item Name *")}</Label>
         <Input
           id="inv_name"
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Bulls Protein 55%, Hay"
+          placeholder={L("যেমন বুলস প্রোটিন ৫৫%, খড়", "e.g. Bulls Protein 55%, Hay")}
           required
         />
         
@@ -199,58 +204,58 @@ function AddItemForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="inv_threshold">Low Stock Alert Threshold</Label>
+        <Label htmlFor="inv_threshold">{L("কত কমলে সতর্ক করবে", "Low Stock Alert Threshold")}</Label>
         <Input
           id="inv_threshold"
           name="low_stock_threshold"
           type="number"
           min="0"
           step="0.1"
-          placeholder={`e.g. 50 ${unit ? unit : ''} (optional)`}
+          placeholder={L(`যেমন 50 ${unit ? unit : ""} (ঐচ্ছিক)`, `e.g. 50 ${unit ? unit : ""} (optional)`)}
         />
       </div>
 
       {/* ── Initial Stock Section ── */}
       <div className="mt-6 pt-4 border-t border-border space-y-4">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">Initial Stock (Optional)</h3>
-          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">Smart Calc</span>
+          <h3 className="text-sm font-semibold">{L("শুরুর স্টক (ঐচ্ছিক)", "Initial Stock (Optional)")}</h3>
+          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">{L("হিসাব", "Smart Calc")}</span>
         </div>
 
         <input type="hidden" name="stock_source" value={stockSource} />
         <div className="space-y-1.5">
-          <Label>This stock is</Label>
+          <Label>{L("এই স্টক", "This stock is")}</Label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => setStockSource("opening_balance")}
               className={`rounded-lg border px-3 py-2 text-left text-xs ${stockSource === "opening_balance" ? "border-primary bg-primary/5" : "border-border"}`}
             >
-              <span className="block font-semibold">Already on the farm</span>
-              <span className="text-muted-foreground">Opening balance — not a cash payment now</span>
+              <span className="block font-semibold">{L("আগে থেকেই খামারে আছে", "Already on the farm")}</span>
+              <span className="text-muted-foreground">{L("শুরুর স্টক — এখন টাকা দেওয়া হয়নি", "Opening balance — not a cash payment now")}</span>
             </button>
             <button
               type="button"
               onClick={() => setStockSource("purchase")}
               className={`rounded-lg border px-3 py-2 text-left text-xs ${stockSource === "purchase" ? "border-primary bg-primary/5" : "border-border"}`}
             >
-              <span className="block font-semibold">Bought now</span>
-              <span className="text-muted-foreground">Purchase — reduces cash</span>
+              <span className="block font-semibold">{L("এখন কেনা", "Bought now")}</span>
+              <span className="text-muted-foreground">{L("কেনা — নগদ কমে", "Purchase — reduces cash")}</span>
             </button>
             <button
               type="button"
               onClick={() => setStockSource("own_production")}
               className={`rounded-lg border px-3 py-2 text-left text-xs ${stockSource === "own_production" ? "border-primary bg-primary/5" : "border-border"}`}
             >
-              <span className="block font-semibold">Harvested from own land</span>
-              <span className="text-muted-foreground">e.g. grass — ৳0; land rent is an expense</span>
+              <span className="block font-semibold">{L("নিজের জমি থেকে", "Harvested from own land")}</span>
+              <span className="text-muted-foreground">{L("যেমন ঘাস — ৳0; জমির ভাড়া আলাদা খরচ", "e.g. grass — ৳0; land rent is an expense")}</span>
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="initial_qty">Quantity Added</Label>
+            <Label htmlFor="initial_qty">{L("পরিমাণ", "Quantity Added")}</Label>
             <Input
               id="initial_qty"
               name="initial_qty"
@@ -264,7 +269,7 @@ function AddItemForm({
           </div>
           
           <div className="space-y-1.5">
-            <Label htmlFor="purchase_date">Purchase Date</Label>
+            <Label htmlFor="purchase_date">{L("কেনার তারিখ", "Purchase Date")}</Label>
             <Input
               id="purchase_date"
               name="purchase_date"
@@ -277,13 +282,13 @@ function AddItemForm({
 
         <div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3 border border-border/60 border-l-2 border-l-primary">
           <div className="space-y-1.5">
-            <Label htmlFor="total_price" className="text-xs text-muted-foreground font-medium">Total Price (৳)</Label>
+            <Label htmlFor="total_price" className="text-xs text-muted-foreground font-medium">{L("মোট দাম (৳)", "Total Price (৳)")}</Label>
             <Input
               id="total_price"
               type="number"
               min="0"
               step="0.01"
-              placeholder="Total amount"
+              placeholder={L("মোট টাকা", "Total amount")}
               value={totalPrice}
               onChange={handleTotalPriceChange}
               className="bg-background"
@@ -297,7 +302,7 @@ function AddItemForm({
               type="number"
               min="0"
               step="0.01"
-              placeholder="Auto-calculated"
+              placeholder={L("নিজে হিসাব হবে", "Auto-calculated")}
               value={unitCost}
               onChange={handleUnitCostChange}
               className="bg-background"
@@ -318,10 +323,10 @@ function AddItemForm({
           {isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving…
+              {L("সেভ হচ্ছে…", "Saving…")}
             </>
           ) : (
-            "Add Item & Stock"
+            L("জিনিস ও স্টক যোগ করুন", "Add item & stock")
           )}
         </Button>
       </DialogFooter>
@@ -330,6 +335,7 @@ function AddItemForm({
 }
 
 export function AddItemDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  const L = useL();
   const [open, setOpen] = useState(defaultOpen);
   const [formKey, setFormKey] = useState(0);
 
@@ -342,15 +348,15 @@ export function AddItemDialog({ defaultOpen = false }: { defaultOpen?: boolean }
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         className={buttonVariants({ size: "sm" })}
-        aria-label="Add inventory item"
+        aria-label={L("জিনিস যোগ", "Add inventory item")}
       >
         <Plus className="mr-1.5 h-4 w-4" />
-        Add Item
+        {L("জিনিস যোগ", "Add item")}
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-md p-6">
         <DialogHeader>
-          <DialogTitle>New Inventory Item</DialogTitle>
+          <DialogTitle>{L("নতুন জিনিস", "New Inventory Item")}</DialogTitle>
         </DialogHeader>
         <AddItemForm formKey={formKey} onSuccess={() => setOpen(false)} />
       </DialogContent>

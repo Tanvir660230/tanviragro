@@ -1,10 +1,8 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { SitePageTitle } from "@/components/navigation/SitePageTitle";
+import { SitePageTitle, SiteBackLink } from "@/components/navigation/SitePageTitle";
 
 interface PageHeaderProps {
   title: string;
@@ -35,15 +33,7 @@ export function PageHeader({
     <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 mb-6 animate-fade-in-up", className)}>
       <div className="flex items-center gap-3 min-w-0">
         {/* Back button */}
-        {back && (
-          <Link
-            href={back}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground shadow-xs hover:bg-muted hover:text-foreground hover:border-border transition-all active:scale-95 cursor-pointer"
-            aria-label="Go back"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Link>
-        )}
+        {back && <SiteBackLink href={back} />}
 
         {/* Icon badge */}
         {Icon && (

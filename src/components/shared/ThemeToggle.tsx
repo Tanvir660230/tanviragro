@@ -4,14 +4,16 @@ import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Sun, Moon, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useL } from "@/i18n/text";
 
 const OPTIONS = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "system", label: "Auto", icon: Monitor },
-  { value: "dark", label: "Dark", icon: Moon },
+  { value: "light", label: "Light", bn: "লাইট", icon: Sun },
+  { value: "system", label: "Auto", bn: "অটো", icon: Monitor },
+  { value: "dark", label: "Dark", bn: "ডার্ক", icon: Moon },
 ] as const;
 
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {
+  const L = useL();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -38,8 +40,8 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       <button
         onClick={() => setTheme(next.value)}
         className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-        title={`Switch to ${next.label} mode`}
-        aria-label="Toggle theme"
+        title={L(`${next.bn} মোডে যান`, `Switch to ${next.label} mode`)}
+        aria-label={L("রং বদলান", "Toggle theme")}
       >
         <Icon className="h-[18px] w-[18px] transition-transform duration-300" />
       </button>
@@ -48,7 +50,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-      {OPTIONS.map(({ value, label, icon: Icon }) => (
+      {OPTIONS.map(({ value, label, bn, icon: Icon }) => (
         <button
           key={value}
           onClick={() => setTheme(value)}
@@ -60,7 +62,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
           )}
         >
           <Icon className="h-3.5 w-3.5" />
-          {label}
+          {L(bn, label)}
         </button>
       ))}
     </div>

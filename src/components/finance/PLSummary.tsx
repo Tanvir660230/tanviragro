@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
+import { useL } from "@/i18n/text";
 export interface SaleRecord {
   id: string;
   cattle_id: string;
@@ -106,6 +107,7 @@ export function PLSummary({
   deadCattlePurchaseCost = 0,
   overheadPerHead = 0,
 }: Props) {
+  const L = useL();
   const [showAllSales, setShowAllSales] = useState(false);
   const [showBalanceSheet, setShowBalanceSheet] = useState(false);
 
@@ -230,16 +232,10 @@ export function PLSummary({
     <div className="space-y-6 pl-print-root">
       {/* Print-only header */}
       <div className="hidden print:block mb-6 border-b pb-4">
-        <h1 className="text-2xl font-bold">{bizName} — P&amp;L Report</h1>
+        <h1 className="text-2xl font-bold">{bizName} — {L("লাভ-ক্ষতির রিপোর্ট", "P&L report")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Generated:{" "}
-          <span suppressHydrationWarning>
-            {new Date().toLocaleDateString("en-US", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </span>
+          {L("তৈরি", "Generated")}:{" "}
+          <span suppressHydrationWarning>{new Date().toISOString().slice(0, 10)}</span>
         </p>
       </div>
 
@@ -247,20 +243,20 @@ export function PLSummary({
       {enrichedSales.length > 0 && (
         <div className="rounded-xl bg-card shadow-card ring-1 ring-black/5 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border/60">
-            <SectionLabel icon={Target}>Smart Insights</SectionLabel>
+            <SectionLabel icon={Target}>{L("বিক্রির সারসংক্ষেপ", "Smart Insights")}</SectionLabel>
           </div>
           <div className="grid grid-cols-2 divide-x divide-y divide-border/60 md:grid-cols-4 md:divide-y-0">
             {/* জয়ের হার */}
             <div className="p-5 space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Target className="h-3.5 w-3.5" />
-                Win Rate
+                {L("লাভে বিক্রি", "Win Rate")}
               </div>
               <p className="text-2xl font-bold tracking-tight tabular-nums">
                 {winRate !== null ? `${winRate.toFixed(0)}%` : "—"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {profitable.length}/{enrichedSales.length} sales profitable
+                {L(`${enrichedSales.length}টির মধ্যে ${profitable.length}টি লাভে`, `${profitable.length}/${enrichedSales.length} sales profitable`)}
               </p>
             </div>
 
@@ -268,7 +264,7 @@ export function PLSummary({
             <div className="p-5 space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Percent className="h-3.5 w-3.5" />
-                Avg ROI / Head
+                {L("গড় লাভ % (প্রতি গরু)", "Avg ROI / Head")}
               </div>
               <p className={cn(
                 "text-2xl font-bold tracking-tight tabular-nums",
@@ -278,26 +274,26 @@ export function PLSummary({
               )}>
                 {avgROI !== null ? `${avgROI >= 0 ? "+" : ""}${avgROI.toFixed(1)}%` : "—"}
               </p>
-              <p className="text-xs text-muted-foreground">based on cost per head</p>
+              <p className="text-xs text-muted-foreground">{L("প্রতি গরুর মোট খরচের উপর", "based on cost per head")}</p>
             </div>
 
             {/* গড় ধারণকাল */}
             <div className="p-5 space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
-                Avg Hold Time
+                {L("গড়ে কত দিন রাখা", "Avg Hold Time")}
               </div>
               <p className="text-2xl font-bold tracking-tight tabular-nums">
-                {avgHoldDays !== null ? `${avgHoldDays}d` : "—"}
+                {avgHoldDays !== null ? L(`${avgHoldDays} দিন`, `${avgHoldDays}d`) : "—"}
               </p>
-              <p className="text-xs text-muted-foreground">purchase → sale</p>
+              <p className="text-xs text-muted-foreground">{L("কেনা → বিক্রি", "purchase → sale")}</p>
             </div>
 
             {/* সেরা বিক্রয় */}
             <div className="p-5 space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Trophy className="h-3.5 w-3.5 text-amber-500" />
-                Best Sale
+                {L("সেরা বিক্রি", "Best Sale")}
               </div>
               {bestSale && bestSale.profit > 0 ? (
                 <>
@@ -305,12 +301,12 @@ export function PLSummary({
                     +{fmt(bestSale.profit)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Cattle #{bestSale.cattle_tag ?? bestSale.cattle_id.slice(0, 6)}
+                    {L("গরু", "Cattle")} #{bestSale.cattle_tag ?? bestSale.cattle_id.slice(0, 6)}
                     {bestSale.roi !== null ? ` · ${bestSale.roi.toFixed(1)}% ROI` : ""}
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">No profitable sales yet</p>
+                <p className="text-sm text-muted-foreground">{L("এখনো কোনো লাভের বিক্রি নেই", "No profitable sales yet")}</p>
               )}
             </div>
           </div>
@@ -320,11 +316,11 @@ export function PLSummary({
       {/* ── Cost breakdown — compact stacked bar + chip legend ── */}
       {(() => {
         const segments = [
-          { label: "Cattle Purchases", value: totalPurchaseCost + deadCattlePurchaseCost, bar: "bg-orange-500", dot: "bg-orange-500", note: unrealizedInvestment > 0 ? `+${fmt(unrealizedInvestment)} in active pen` : null },
-          { label: "Feed (sold cattle)", value: realizedFeedCost, bar: "bg-emerald-500", dot: "bg-emerald-500", note: unrealizedFeedCost > 0 ? `+${fmt(unrealizedFeedCost)} in active pen` : null },
-          ...(realizedDirectCost > 0 || unrealizedDirectCost > 0 ? [{ label: "Medicine & Direct", value: realizedDirectCost, bar: "bg-pink-500", dot: "bg-pink-500", note: unrealizedDirectCost > 0 ? `+${fmt(unrealizedDirectCost)} in active pen` : null }] : []),
-          { label: "Fixed Ops Costs", value: totalFixedCosts, bar: "bg-blue-500", dot: "bg-blue-500", note: null },
-          { label: "Variable Ops Costs", value: totalVariableCosts, bar: "bg-purple-500", dot: "bg-purple-500", note: null },
+          { label: L("গরু কেনা", "Cattle purchases"), value: totalPurchaseCost + deadCattlePurchaseCost, bar: "bg-orange-500", dot: "bg-orange-500", note: unrealizedInvestment > 0 ? L(`+${fmt(unrealizedInvestment)} খামারে থাকা গরুতে`, `+${fmt(unrealizedInvestment)} in active pen`) : null },
+          { label: L("খাবার (বিক্রি করা গরু)", "Feed (sold cattle)"), value: realizedFeedCost, bar: "bg-emerald-500", dot: "bg-emerald-500", note: unrealizedFeedCost > 0 ? L(`+${fmt(unrealizedFeedCost)} খামারে থাকা গরুতে`, `+${fmt(unrealizedFeedCost)} in active pen`) : null },
+          ...(realizedDirectCost > 0 || unrealizedDirectCost > 0 ? [{ label: L("ওষুধ ও সরাসরি খরচ", "Medicine & direct"), value: realizedDirectCost, bar: "bg-pink-500", dot: "bg-pink-500", note: unrealizedDirectCost > 0 ? L(`+${fmt(unrealizedDirectCost)} খামারে থাকা গরুতে`, `+${fmt(unrealizedDirectCost)} in active pen`) : null }] : []),
+          { label: L("নির্দিষ্ট খরচ", "Fixed costs"), value: totalFixedCosts, bar: "bg-blue-500", dot: "bg-blue-500", note: null },
+          { label: L("অন্যান্য খরচ", "Variable costs"), value: totalVariableCosts, bar: "bg-purple-500", dot: "bg-purple-500", note: null },
         ].filter((s) => s.value > 0);
         const segTotal = segments.reduce((s, x) => s + x.value, 0);
 
@@ -333,11 +329,11 @@ export function PLSummary({
         return (
           <div className="rounded-xl bg-card shadow-card ring-1 ring-black/5 p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <SectionLabel icon={Wallet}>Cost Breakdown</SectionLabel>
+              <SectionLabel icon={Wallet}>{L("খরচের ভাগ", "Cost Breakdown")}</SectionLabel>
               <div className="flex items-center gap-3">
                 {costPerKg && (
                   <span className="text-xs text-muted-foreground tabular-nums">
-                    ৳{costPerKg.toFixed(0)}/kg cost
+                    {L(`প্রতি কেজি ওজন বাড়াতে ৳${costPerKg.toFixed(0)}`, `৳${costPerKg.toFixed(0)}/kg cost`)}
                   </span>
                 )}
                 <p className="text-sm font-bold tabular-nums">{fmt(segTotal)}</p>
@@ -380,10 +376,10 @@ export function PLSummary({
                 <Warehouse className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
               </div>
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                Balance Sheet Snapshot
+                {L("খামারে আটকে থাকা টাকা", "Balance Sheet Snapshot")}
               </p>
               <span className="text-xs text-amber-700/80 dark:text-amber-400/80 hidden sm:inline">
-                — active herd &amp; capital assets not in P&amp;L
+                {L("— খামারে থাকা গরু ও স্থায়ী সম্পদ (লাভ-ক্ষতিতে ধরা হয়নি)", "— active herd & capital assets not in P&L")}
               </span>
             </div>
             {showBalanceSheet
@@ -395,27 +391,27 @@ export function PLSummary({
             <div className="border-t border-amber-500/15 px-5 py-5 space-y-5">
               {activeCattleCount > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-3">Active Herd Investment</p>
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-3">{L("খামারে থাকা গরুতে বিনিয়োগ", "Active Herd Investment")}</p>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                     <div>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">Cattle in Pen</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">{L("খামারে গরু", "Cattle in Pen")}</p>
                       <p className="text-xl font-bold tracking-tight text-amber-900 dark:text-amber-200 tabular-nums">
-                        {activeCattleCount} head
+                        {L(`${activeCattleCount}টি`, `${activeCattleCount} head`)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">Capital at Risk</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">{L("গরু কেনায় আটকে আছে", "Capital at Risk")}</p>
                       <p className="text-xl font-bold tracking-tight text-amber-900 dark:text-amber-200 tabular-nums">
                         {fmt(unrealizedInvestment)}
                       </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">purchase cost only</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">{L("শুধু কেনা দাম", "purchase cost only")}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">Total Deployed</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">{L("মোট খাটানো টাকা", "Total Deployed")}</p>
                       <p className="text-xl font-bold tracking-tight text-amber-900 dark:text-amber-200 tabular-nums">
                         {fmt(totalCosts + unrealizedInvestment + unrealizedFeedCost + unrealizedDirectCost)}
                       </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">all capital to date</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">{L("এ পর্যন্ত সব খরচ", "all capital to date")}</p>
                     </div>
                   </div>
                 </div>
@@ -430,10 +426,10 @@ export function PLSummary({
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                          Capital Assets
+                          {L("স্থায়ী সম্পদ", "Capital Assets")}
                         </p>
                         <p className="text-xs text-amber-700 dark:text-amber-400">
-                          Equipment, infrastructure &amp; vehicles
+                          {L("যন্ত্রপাতি, শেড ও গাড়ি", "Equipment, infrastructure & vehicles")}
                         </p>
                       </div>
                     </div>
@@ -452,7 +448,7 @@ export function PLSummary({
       {enrichedSales.length > 0 ? (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-semibold tracking-tight">Sales Records</h3>
+            <h3 className="text-base font-semibold tracking-tight">{L("বিক্রির তালিকা", "Sales Records")}</h3>
             <Button
               variant="outline"
               size="sm"
@@ -464,7 +460,7 @@ export function PLSummary({
               className="print:hidden"
             >
               <Printer className="mr-1.5 h-3.5 w-3.5" />
-              Print Report
+              {L("প্রিন্ট করুন", "Print Report")}
             </Button>
           </div>
 
@@ -473,7 +469,7 @@ export function PLSummary({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/30">
-                  {["Date", "Cattle", "Buyer", "Sale Weight", "Sale Price", "Total Cost", "Net Margin"].map((h) => (
+                  {[L("তারিখ", "Date"), L("গরু", "Cattle"), L("ক্রেতা", "Buyer"), L("বিক্রির ওজন", "Sale weight"), L("বিক্রি দাম", "Sale price"), L("মোট খরচ", "Total cost"), L("নিট লাভ", "Net margin")].map((h) => (
                     <th
                       key={h}
                       className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground last:text-right"
@@ -503,7 +499,7 @@ export function PLSummary({
                       <span>{fmt(s.totalCostPerHead)}</span>
                       {(s.feedCost > 0 || s.directCost > 0 || overheadPerHead > 0) && (
                         <p className="text-xs text-muted-foreground/70">
-                          pur{s.feedCost > 0 ? "+feed" : ""}{s.directCost > 0 ? "+med" : ""}{overheadPerHead > 0 ? "+overhead" : ""} {fmt(s.purchase_price ?? 0)}{s.feedCost > 0 ? `+${fmt(s.feedCost)}` : ""}{s.directCost > 0 ? `+${fmt(s.directCost)}` : ""}{overheadPerHead > 0 ? `+${fmt(overheadPerHead)}` : ""}
+                          {L("কেনা", "pur")}{s.feedCost > 0 ? L("+খাবার", "+feed") : ""}{s.directCost > 0 ? L("+ওষুধ", "+med") : ""}{overheadPerHead > 0 ? L("+অন্যান্য", "+overhead") : ""} {fmt(s.purchase_price ?? 0)}{s.feedCost > 0 ? `+${fmt(s.feedCost)}` : ""}{s.directCost > 0 ? `+${fmt(s.directCost)}` : ""}{overheadPerHead > 0 ? `+${fmt(overheadPerHead)}` : ""}
                         </p>
                       )}
                     </td>
@@ -518,7 +514,7 @@ export function PLSummary({
                       {s.profit >= 0 ? "+" : "−"}{fmt(s.profit)}
                       {s.roi !== null && (
                         <p className="text-xs font-normal opacity-70">
-                          {s.roi >= 0 ? "+" : ""}{s.roi.toFixed(1)}% ROI
+                          {s.roi >= 0 ? "+" : ""}{s.roi.toFixed(1)}% {L("লাভ", "ROI")}
                         </p>
                       )}
                     </td>
@@ -535,20 +531,20 @@ export function PLSummary({
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
                     <p className="font-semibold text-sm">
-                      Cattle #{s.cattle_tag ?? s.cattle_id.slice(0, 6)}
+                      {L("গরু", "Cattle")} #{s.cattle_tag ?? s.cattle_id.slice(0, 6)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {fmtDate(s.sold_at)}
                       {s.buyer_name ? ` · ${s.buyer_name}` : ""}
-                      {s.holdDays !== null ? ` · ${s.holdDays}d held` : ""}
+                      {s.holdDays !== null ? L(` · ${s.holdDays} দিন রাখা`, ` · ${s.holdDays}d held`) : ""}
                     </p>
                   </div>
                   <p className="text-lg font-bold tracking-tight tabular-nums">{fmt(s.sale_price_total)}</p>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-xs text-muted-foreground">
-                    Cost {fmt(s.totalCostPerHead)}
-                    {(s.feedCost > 0 || s.directCost > 0 || overheadPerHead > 0) && ` (pur ${fmt(s.purchase_price ?? 0)}${s.feedCost > 0 ? `, feed ${fmt(s.feedCost)}` : ""}${s.directCost > 0 ? `, med ${fmt(s.directCost)}` : ""}${overheadPerHead > 0 ? `, oh ${fmt(overheadPerHead)}` : ""})`}
+                    {L("খরচ", "Cost")} {fmt(s.totalCostPerHead)}
+                    {(s.feedCost > 0 || s.directCost > 0 || overheadPerHead > 0) && ` (${L("কেনা", "pur")} ${fmt(s.purchase_price ?? 0)}${s.feedCost > 0 ? `, ${L("খাবার", "feed")} ${fmt(s.feedCost)}` : ""}${s.directCost > 0 ? `, ${L("ওষুধ", "med")} ${fmt(s.directCost)}` : ""}${overheadPerHead > 0 ? `, ${L("অন্যান্য", "oh")} ${fmt(overheadPerHead)}` : ""})`}
                   </span>
                   <span
                     className={cn(
@@ -572,9 +568,9 @@ export function PLSummary({
               className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
             >
               {showAllSales ? (
-                <><ChevronUp className="h-4 w-4" /> Show less</>
+                <><ChevronUp className="h-4 w-4" /> {L("কম দেখান", "Show less")}</>
               ) : (
-                <><ChevronDown className="h-4 w-4" /> Show all {enrichedSales.length} sales</>
+                <><ChevronDown className="h-4 w-4" /> {L(`সব ${enrichedSales.length}টি বিক্রি দেখান`, `Show all ${enrichedSales.length} sales`)}</>
               )}
             </button>
           )}
@@ -585,7 +581,7 @@ export function PLSummary({
             <ShoppingCart className="h-5 w-5 text-muted-foreground/60" />
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            No sales recorded yet. Use <strong>Record Sale</strong> on a cattle profile to log a sale.
+            {L("এখনো কোনো বিক্রি নেই। গরুর পাতা থেকে \"বিক্রি\" চেপে বিক্রি লিখুন।", "No sales yet. Use Record Sale on an animal's page to log one.")}
           </p>
         </div>
       )}

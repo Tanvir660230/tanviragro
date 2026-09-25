@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { AnimalWizardHealth } from "@/lib/validation/cattle-wizard";
 import { ShieldAlert, Activity, Syringe, Pill } from "lucide-react";
+import { useL } from "@/i18n/text";
 
 interface Props {
   data: AnimalWizardHealth;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function Step4Health({ data, onChange, errors }: Props) {
+  const L = useL();
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -20,7 +22,7 @@ export function Step4Health({ data, onChange, errors }: Props) {
         <div className="space-y-1.5">
           <Label htmlFor="healthStatus" className="text-xs font-semibold flex items-center gap-1.5">
             <Activity className="h-3.5 w-3.5 text-emerald-500" />
-            Current Health Status
+            {L("এখনকার স্বাস্থ্য", "Current Health Status")}
           </Label>
           <select
             id="healthStatus"
@@ -28,10 +30,10 @@ export function Step4Health({ data, onChange, errors }: Props) {
             onChange={(e) => onChange({ status: e.target.value as any })}
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
           >
-            <option value="active">Active & Healthy</option>
-            <option value="quarantined">Quarantined / Incoming Protocol</option>
-            <option value="treatment">In Treatment</option>
-            <option value="observation">Observation / Recovery</option>
+            <option value="active">{L("সুস্থ", "Active & Healthy")}</option>
+            <option value="quarantined">{L("আলাদা রাখা (নতুন এসেছে)", "Quarantined / Incoming Protocol")}</option>
+            <option value="treatment">{L("চিকিৎসা চলছে", "In Treatment")}</option>
+            <option value="observation">{L("পর্যবেক্ষণে", "Observation / Recovery")}</option>
           </select>
         </div>
 
@@ -51,7 +53,7 @@ export function Step4Health({ data, onChange, errors }: Props) {
             />
             <div className="flex items-center gap-1.5 text-xs font-medium">
               <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
-              <span>Enforce Biosecurity Quarantine (14 Days)</span>
+              <span>{L("১৪ দিন আলাদা রাখুন", "Enforce Biosecurity Quarantine (14 Days)")}</span>
             </div>
           </label>
         </div>
@@ -60,7 +62,7 @@ export function Step4Health({ data, onChange, errors }: Props) {
         <div className="space-y-1.5">
           <Label htmlFor="lastVaccinationDate" className="text-xs font-semibold flex items-center gap-1.5">
             <Syringe className="h-3.5 w-3.5 text-muted-foreground" />
-            Last Vaccination Date (Optional)
+            {L("শেষ টিকার তারিখ (ঐচ্ছিক)", "Last Vaccination Date (Optional)")}
           </Label>
           <Input
             id="lastVaccinationDate"
@@ -74,7 +76,7 @@ export function Step4Health({ data, onChange, errors }: Props) {
         <div className="space-y-1.5">
           <Label htmlFor="dewormingDate" className="text-xs font-semibold flex items-center gap-1.5">
             <Pill className="h-3.5 w-3.5 text-muted-foreground" />
-            Last Deworming Date (Optional)
+            {L("শেষ কৃমিনাশকের তারিখ (ঐচ্ছিক)", "Last Deworming Date (Optional)")}
           </Label>
           <Input
             id="dewormingDate"
@@ -87,7 +89,7 @@ export function Step4Health({ data, onChange, errors }: Props) {
         {/* Health Notes */}
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="healthNotes" className="text-xs font-semibold">
-            Health Observation & Medical History Notes
+            {L("স্বাস্থ্য সম্পর্কে নোট", "Health Observation & Medical History Notes")}
           </Label>
           <Textarea
             id="healthNotes"

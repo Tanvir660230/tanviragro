@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import type { CapitalTxn } from "./capital-types";
+import { useL } from "@/i18n/text";
+import { partnerTxnLabel } from "@/lib/partners/labels";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 function fmt(n: number) {
   return `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
@@ -21,13 +24,15 @@ export function CapitalLedgerTable({
 }: {
   displayed: (CapitalTxn & { balance: number })[];
 }) {
+  const L = useL();
+  const { locale } = useTranslation();
   const SHOW_LIMIT = 5;
   const [showAllTxns, setShowAllTxns] = useState(false);
 
   if (displayed.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground bg-card">
-        No capital transactions recorded yet.
+        {L("এখনো কোনো মূলধনের লেনদেন নেই।", "No capital transactions recorded yet.")}
       </div>
     );
   }
@@ -41,22 +46,22 @@ export function CapitalLedgerTable({
           <thead>
             <tr className="bg-muted/40 border-b border-border/60">
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Date
+                {L("তারিখ", "Date")}
               </th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Partner
+                {L("অংশীদার", "Partner")}
               </th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Type
+                {L("ধরন", "Type")}
               </th>
               <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Amount
+                {L("টাকা", "Amount")}
               </th>
               <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Running Balance
+                {L("ব্যালেন্স", "Running Balance")}
               </th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
-                Notes
+                {L("নোট", "Notes")}
               </th>
             </tr>
           </thead>
@@ -81,7 +86,7 @@ export function CapitalLedgerTable({
                           : "text-red-700 dark:text-red-400"
                       }`}
                     >
-                      {txn.type === "investment" ? "Capital In" : "Withdrawal"}
+                      {partnerTxnLabel(txn.type, locale)}
                     </span>
                   </div>
                 </td>
@@ -115,8 +120,7 @@ export function CapitalLedgerTable({
             onClick={() => setShowAllTxns(true)}
             className="text-sm text-primary hover:underline font-medium"
           >
-            Show {displayed.length - SHOW_LIMIT} more transaction
-            {displayed.length - SHOW_LIMIT !== 1 ? "s" : ""}
+            {L(`আরও ${displayed.length - SHOW_LIMIT}টি লেনদেন দেখান`, `Show ${displayed.length - SHOW_LIMIT} more transaction${displayed.length - SHOW_LIMIT !== 1 ? "s" : ""}`)}
           </button>
         </div>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { SidebarExpanded } from "@/components/navigation/SidebarExpanded";
 import { SidebarCollapsed } from "@/components/navigation/SidebarCollapsed";
 import { MobileSidebarDrawer } from "@/components/navigation/MobileSidebarDrawer";

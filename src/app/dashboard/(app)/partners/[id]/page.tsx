@@ -12,14 +12,11 @@ import type {
 import { PartnerEngine } from "@/lib/partners/partner-engine";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
-import {
-  effectiveShare,
-  computeAccount,
-  type PartnerAccountSummary,
-} from "@/lib/partners/calculations";
+import { type PartnerAccountSummary } from "@/lib/partners/calculations";
 import { getCachedBusinessId } from "@/lib/supabase/cached";
+import { getL } from "@/i18n/server-text";
 
-export const metadata: Metadata = { title: "Partner Profile" };
+export const metadata: Metadata = { title: "অংশীদার" };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -28,6 +25,7 @@ export default async function PartnerProfilePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const L = await getL();
   await requirePagePermission(PERMISSIONS.PARTNERS_VIEW);
   const { id } = await params;
   const supabase = await createClient();
@@ -255,7 +253,7 @@ export default async function PartnerProfilePage({
     <div className="space-y-5">
       <PageHeader
         title={partner.name}
-        subtitle="Partner Profile"
+        subtitle={L("অংশীদারের প্রোফাইল", "Partner profile")}
         back="/dashboard/partners"
         icon={User}
       />

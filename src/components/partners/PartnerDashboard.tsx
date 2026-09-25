@@ -14,13 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Partner, PartnerTransaction } from "@/types/database";
 import { useTranslation } from "@/i18n/I18nProvider";
-import {
-  bdt,
-  totalCapitalOf,
-  computeNetInvestment,
-  effectiveShare,
-  computeAccount,
-} from "@/lib/partners/calculations";
+import { bdt, computeNetInvestment } from "@/lib/partners/calculations";
 import { PartnerDomainService } from "@/lib/services/partner.service";
 
 import {
@@ -39,6 +33,7 @@ import { PartnerCard } from "./PartnerCard";
 import { AddPartnerDialog } from "./modals/AddPartnerDialog";
 import { AddTransactionDialog } from "./modals/AddTransactionDialog";
 import { DeclareDistributionModal } from "./modals/DeclareDistributionModal";
+import { useL } from "@/i18n/text";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,6 +77,7 @@ export function PartnerDashboard({
   cattleValuation,
   totalAssetValue = 0,
 }: Props) {
+  const L = useL();
   const { t } = useTranslation();
 
   const [distOpen, setDistOpen] = useState(false);
@@ -133,7 +129,7 @@ export function PartnerDashboard({
   const nameById = Object.fromEntries(partners.map((p) => [p.id, p.name]));
   const allRecentTxns = Object.entries(txnsByPartner)
     .flatMap(([pid, txns]) =>
-      txns.map((t) => ({ ...t, partnerName: nameById[pid] ?? "Unknown" }))
+      txns.map((t) => ({ ...t, partnerName: nameById[pid] ?? L("অজানা", "Unknown") }))
     )
     .sort(
       (a, b) =>
@@ -153,7 +149,7 @@ export function PartnerDashboard({
         />
         <SummaryCard
           icon={Banknote}
-          label="Capital Deployed"
+          label={L("মোট খাটানো মূলধন", "Capital Deployed")}
           value={bdt(totalCapital)}
           iconCls="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
         />
@@ -182,8 +178,8 @@ export function PartnerDashboard({
         <div className="flex items-center justify-between rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-3 text-sm">
           <div className="flex items-center gap-2">
             <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span className="font-medium">Management Fee ({mgmtFeeRate}%)</span>
-            <span className="text-muted-foreground hidden sm:inline">— deducted before partner profit split</span>
+            <span className="font-medium">{L("ম্যানেজমেন্ট ফি", "Management fee")} ({mgmtFeeRate}%)</span>
+            <span className="text-muted-foreground hidden sm:inline">{L("— অংশীদারদের ভাগের আগে কাটা হয়", "— deducted before partner profit split")}</span>
           </div>
           <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
             {bdt(mgmtFeeAmount)}
@@ -196,7 +192,7 @@ export function PartnerDashboard({
         <div className="rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-destructive">
           {farmEquity.manualOwnershipAllocated > 100
             ? t.partners.share_warning.replace("{{pct}}", farmEquity.manualOwnershipAllocated.toFixed(1))
-            : `⚠️ Manual shares = 100% — auto partners will receive 0% profit share.`}
+            : L("⚠️ নিজে দেওয়া ভাগ = ১০০% — বাকি অংশীদাররা লাভের ০% পাবেন।", "⚠️ Manual shares = 100% — auto partners will receive 0% profit share.")}
         </div>
       )}
 
@@ -268,13 +264,13 @@ export function PartnerDashboard({
         <div className="rounded-xl bg-card border border-border shadow-card p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold">Equity Distribution</h3>
+              <h3 className="text-sm font-semibold">{L("মূলধনের ভাগ", "Equity Distribution")}</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Capital accounts &amp; profit share allocation
+                {L("প্রত্যেকের মূলধন ও লাভের ভাগ", "Capital accounts & profit share allocation")}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground">Business Value</p>
+              <p className="text-xs text-muted-foreground">{L("খামারের মূল্য", "Business Value")}</p>
               <p className="text-sm font-bold tabular-nums">
                 {totalBusinessValue >= 0 ? "" : "−"}৳
                 {Math.round(Math.abs(totalBusinessValue)).toLocaleString("en-IN")}
@@ -324,9 +320,9 @@ export function PartnerDashboard({
       {allRecentTxns.length > 0 && (
         <div className="rounded-xl bg-card border border-border shadow-card overflow-hidden">
           <div className="px-5 py-4 border-b border-border/60">
-            <h3 className="text-sm font-semibold">Recent Activity</h3>
+            <h3 className="text-sm font-semibold">{L("সাম্প্রতিক লেনদেন", "Recent Activity")}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Latest transactions across all partners
+              {L("সব অংশীদারের সর্বশেষ লেনদেন", "Latest transactions across all partners")}
             </p>
           </div>
           <div className="divide-y divide-border/30">

@@ -45,16 +45,17 @@ import {
   RotateCcw,
   Sparkles,
 } from "lucide-react";
+import { useL } from "@/i18n/text";
 
 const STEPS = [
-  { id: 1, title: "Identity", icon: Tag },
-  { id: 2, title: "Farm & Pen", icon: Building2 },
-  { id: 3, title: "Purpose", icon: Target },
-  { id: 4, title: "Health", icon: HeartPulse },
-  { id: 5, title: "Origin", icon: Truck },
-  { id: 6, title: "Finance", icon: DollarSign },
-  { id: 7, title: "Docs", icon: FileText },
-  { id: 8, title: "Review", icon: CheckCircle2 },
+  { id: 1, title: "Identity", bn: "পরিচয়", icon: Tag },
+  { id: 2, title: "Farm & Pen", bn: "জায়গা", icon: Building2 },
+  { id: 3, title: "Purpose", bn: "উদ্দেশ্য", icon: Target },
+  { id: 4, title: "Health", bn: "স্বাস্থ্য", icon: HeartPulse },
+  { id: 5, title: "Origin", bn: "কোথা থেকে", icon: Truck },
+  { id: 6, title: "Finance", bn: "টাকা", icon: DollarSign },
+  { id: 7, title: "Docs", bn: "কাগজ", icon: FileText },
+  { id: 8, title: "Review", bn: "দেখে নিন", icon: CheckCircle2 },
 ];
 const DRAFT_STORAGE_KEY = "tanvir_agro_animal_wizard_draft";
 
@@ -77,6 +78,7 @@ export function EnterpriseAnimalWizard({
   editAnimalId,
   onSuccess,
 }: EnterpriseWizardProps) {
+  const L = useL();
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -126,9 +128,9 @@ export function EnterpriseAnimalWizard({
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setState(parsed);
             setHasRestoredDraft(true);
-            toast.info("Restored uncommitted animal draft", {
+            toast.info(L("আগের না-সেভ করা তথ্য ফিরিয়ে আনা হলো", "Restored unsaved draft"), {
               action: {
-                label: "Clear Draft",
+                label: L("মুছুন", "Clear draft"),
                 onClick: () => {
                   localStorage.removeItem(DRAFT_STORAGE_KEY);
                   setState(DEFAULT_WIZARD_STATE);
@@ -139,7 +141,7 @@ export function EnterpriseAnimalWizard({
         } catch {}
       }
     }
-  }, [open, editAnimalId, hasRestoredDraft]);
+  }, [open, editAnimalId, hasRestoredDraft, L]);
 
   useEffect(() => {
     if (!editAnimalId && typeof window !== "undefined" && open) {
@@ -159,7 +161,7 @@ export function EnterpriseAnimalWizard({
   const goNext = () => {
     if (!stepValidation.isValid) {
       const firstErr = Object.values(stepValidation.errors)[0];
-      toast.error(firstErr || "Please fix validation errors to continue");
+      toast.error(firstErr || L("ভুলগুলো ঠিক করে এগোন", "Please fix the errors to continue"));
       return;
     }
     if (currentStep < 8) setCurrentStep((prev) => prev + 1);
@@ -171,14 +173,14 @@ export function EnterpriseAnimalWizard({
 
   const applyTemplate = (tmpl: WizardTemplate) => {
     setState((prev) => tmpl.apply(prev));
-    toast.success(`Applied template: ${tmpl.name}`);
+    toast.success(L(`টেমপ্লেট বসানো হলো: ${tmpl.name}`, `Applied template: ${tmpl.name}`));
   };
 
   const handleFinalSubmit = async () => {
     const step1Check = validateWizardStep(1, state, existingTagIds);
     const step5Check = validateWizardStep(5, state, existingTagIds);
     if (!step1Check.isValid || !step5Check.isValid) {
-      toast.error("Please complete all required fields in Identity and Origin");
+      toast.error(L("পরিচয় ও কোথা থেকে — অংশের দরকারি ঘরগুলো পূরণ করুন", "Please complete all required fields in Identity and Origin"));
       return;
     }
 
@@ -192,7 +194,7 @@ export function EnterpriseAnimalWizard({
       }
 
       toast.success(
-        editAnimalId ? `Animal ${state.identification.tagId} updated!` : `Animal ${state.identification.tagId} registered successfully!`
+        editAnimalId ? L(`গরু ${state.identification.tagId} আপডেট হলো!`, `Animal ${state.identification.tagId} updated!`) : L(`গরু ${state.identification.tagId} যোগ হলো!`, `Animal ${state.identification.tagId} added!`)
       );
       if (typeof window !== "undefined") {
         localStorage.removeItem(DRAFT_STORAGE_KEY);
@@ -201,7 +203,7 @@ export function EnterpriseAnimalWizard({
       onSuccess?.();
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message || "Failed to save animal profile");
+      toast.error(err.message || L("সেভ করা যায়নি", "Failed to save"));
     } finally {
       setIsSubmitting(false);
     }
@@ -214,10 +216,10 @@ export function EnterpriseAnimalWizard({
           <div className="flex items-center justify-between">
             <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <span>{editAnimalId ? `Edit Livestock Profile (${state.identification.tagId || "Animal"})` : "New animal"}</span>
+              <span>{editAnimalId ? L(`গরুর তথ্য বদলান (${state.identification.tagId || "গরু"})`, `Edit animal (${state.identification.tagId || "Animal"})`) : L("নতুন গরু", "New animal")}</span>
             </DialogTitle>
             <Badge variant="outline" className="text-xs">
-              Step {currentStep} of 8
+              {L(`ধাপ ${currentStep} / ৮`, `Step ${currentStep} of 8`)}
             </Badge>
           </div>
 
@@ -240,7 +242,7 @@ export function EnterpriseAnimalWizard({
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{s.title}</span>
+                  <span className="hidden sm:inline">{L(s.bn, s.title)}</span>
                 </button>
               );
             })}
@@ -331,7 +333,7 @@ export function EnterpriseAnimalWizard({
             {currentStep > 1 && (
               <Button type="button" variant="outline" size="sm" onClick={goPrev}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
+                {L("আগের ধাপ", "Previous")}
               </Button>
             )}
             {!editAnimalId && (
@@ -343,11 +345,11 @@ export function EnterpriseAnimalWizard({
                 onClick={() => {
                   if (typeof window !== "undefined") localStorage.removeItem(DRAFT_STORAGE_KEY);
                   setState(DEFAULT_WIZARD_STATE);
-                  toast.info("Form reset");
+                  toast.info(L("ফর্ম খালি করা হলো", "Form reset"));
                 }}
               >
                 <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                Reset
+                {L("খালি করুন", "Reset")}
               </Button>
             )}
           </div>
@@ -355,7 +357,7 @@ export function EnterpriseAnimalWizard({
           <div className="flex items-center gap-2">
             {currentStep < 8 ? (
               <Button type="button" size="sm" onClick={goNext}>
-                Next Step
+                {L("পরের ধাপ", "Next Step")}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
@@ -369,12 +371,12 @@ export function EnterpriseAnimalWizard({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                    Saving...
+                    {L("সেভ হচ্ছে…", "Saving...")}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                    {editAnimalId ? "Update Profile" : "Register Animal"}
+                    {editAnimalId ? L("আপডেট করুন", "Update") : L("গরু যোগ করুন", "Add animal")}
                   </>
                 )}
               </Button>

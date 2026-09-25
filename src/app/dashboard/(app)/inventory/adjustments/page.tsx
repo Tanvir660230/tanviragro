@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AdjustmentsClient } from "@/components/inventory/AdjustmentsClient";
+import { getL } from "@/i18n/server-text";
 
-export const metadata: Metadata = { title: "Adjustments | Inventory" };
+export const metadata: Metadata = { title: "গণনা সমন্বয়" };
 
 export default async function AdjustmentsPage() {
+  const L = await getL();
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) redirect("/login");
@@ -32,7 +34,7 @@ export default async function AdjustmentsPage() {
     <div className="space-y-4 pb-12">
       <PageHeader
         title="Stock Adjustments"
-        subtitle="Physical counts, spoilage, damage and corrections — fully traceable."
+        subtitle={L("গুনে মেলানো, নষ্ট, ক্ষতি ও সংশোধন — সবকিছুর তালিকা।", "Physical counts, spoilage, damage and corrections — fully traceable.")}
         icon={ClipboardList}
         back="/dashboard/inventory"
       />
