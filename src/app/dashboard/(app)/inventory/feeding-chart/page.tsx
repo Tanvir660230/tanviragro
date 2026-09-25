@@ -27,8 +27,10 @@ export default async function FeedingChartPage() {
 
   const itemById = new Map(feed.items.map((i) => [i.id, i]));
   const openSince = new Map(feed.periods.filter((p) => p.status === "open").map((p) => [`${p.targetType}:${p.targetId}`, p.startDate]));
+  // recipes stay only if a chart was already made for one (the dated mix item is fed instead)
+  const chartedRecipes = new Set(feed.charts.filter((c) => c.targetType === "recipe").map((c) => c.targetId));
   const targets: ChartTarget[] = [
-    ...((recipes ?? []) as RecipeRow[]).map((r): ChartTarget => {
+    ...((recipes ?? []) as RecipeRow[]).filter((r) => chartedRecipes.has(r.id)).map((r): ChartTarget => {
       const ing = r.recipe_ingredients ?? [];
       const sum = ing.reduce((s, x) => s + Number(x.qty_per_batch), 0);
       return {
@@ -41,7 +43,8 @@ export default async function FeedingChartPage() {
         }),
       };
     }),
-    ...feed.items.map((i): ChartTarget => ({
+    // the mix first, then feeds given as they are; ingredients (mixed, not fed directly) last
+    ...[...feed.items].sort((x, y) => ({ mix: 0, direct: 1, ingredient: 2 })[x.role] - ({ mix: 0, direct: 1, ingredient: 2 })[y.role]).map((i): ChartTarget => ({
       key: `item:${i.id}`, type: "item", id: i.id, name: i.name, unit: i.unit, kgPerUnit: i.kgPerUnit, category: i.category,
       inUse: openSince.has(`item:${i.id}`), inUseSince: openSince.get(`item:${i.id}`) ?? null, stockQty: i.stockQty,
     })),

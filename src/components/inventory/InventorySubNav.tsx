@@ -16,20 +16,23 @@ import {
   CalendarRange,
   ChevronDown,
   Scale,
+  Blend,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 // The everyday sections; the rest sit under "More" (all ten destinations stay reachable).
+// the everyday flow: buy → mix → feed (usage + chart); the rest sits under "More"
 const MAIN_ITEMS = [
   { href: "/dashboard/inventory", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/inventory/purchase", label: "Purchase", icon: ReceiptText },
+  { href: "/dashboard/inventory/mix", label: "Mix", icon: Blend },
   { href: "/dashboard/inventory/usage", label: "Feed Usage", icon: CalendarRange },
   { href: "/dashboard/inventory/feeding-chart", label: "Feeding chart", icon: Scale },
-  { href: "/dashboard/inventory/purchase", label: "Purchase", icon: ReceiptText },
-  { href: "/dashboard/inventory/movements", label: "Movements", icon: ArrowRightLeft },
   { href: "/dashboard/inventory/reports", label: "Reports", icon: FileBarChart },
 ] as const;
 
 const MORE_ITEMS = [
+  { href: "/dashboard/inventory/movements", label: "Movements", icon: ArrowRightLeft },
   { href: "/dashboard/inventory/purchase/history", label: "Purchase history", icon: History },
   { href: "/dashboard/inventory/products", label: "Products", icon: Package },
   { href: "/dashboard/inventory/adjustments", label: "Adjustments", icon: ClipboardList },

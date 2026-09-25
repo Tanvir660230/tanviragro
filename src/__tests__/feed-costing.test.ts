@@ -223,11 +223,12 @@ describe("source guards", () => {
 
   test("configuration changes never create consumption", () => {
     const actions = read("app/dashboard/(app)/inventory/actions.ts");
-    const recipes = read("app/dashboard/(app)/inventory/recipe-actions.ts");
     expect(actions).not.toMatch(/export async function runAutoFeedDeductions/);
-    expect(actions + recipes).not.toMatch(/runAutoFeedDeductions\(/);
-    // setActiveRoughage / setActiveRecipe / updateRecipeActiveFrom only update configuration
-    for (const [src, fn] of [[actions, "setActiveRoughage"], [recipes, "setActiveRecipe"], [recipes, "updateRecipeActiveFrom"]] as const) {
+    expect(actions).not.toMatch(/runAutoFeedDeductions\(/);
+    // recipe activation (plan only) was retired: dated mixes replace it (docs/FEED_MIX_PLAN.md)
+    expect(fs.existsSync(path.join(SRC, "app/dashboard/(app)/inventory/recipe-actions.ts"))).toBe(false);
+    // setActiveRoughage only updates configuration
+    for (const [src, fn] of [[actions, "setActiveRoughage"]] as const) {
       const body = src.slice(src.indexOf(`export async function ${fn}`), src.indexOf("\nexport ", src.indexOf(`export async function ${fn}`) + 10));
       expect(body).not.toMatch(/inventory_transactions/);
     }

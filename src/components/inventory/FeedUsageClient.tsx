@@ -281,7 +281,7 @@ function CancelButton({ periodId }: { periodId: string }) {
 const DLG = {
   en: {
     start_title: "Start using a feed", target: "Feed or recipe *", choose: "Choose…", nothing_new: "— nothing new —",
-    feeds: "Feeds", recipes: "Recipes (ingredients fed together)", started_on: "Started feeding on *", past_ok: "Past dates are fine.",
+    feeds: "Feeds", ingredients: "Ingredients (usually mixed)", recipes: "Recipes (ingredients fed together)", started_on: "Started feeding on *", past_ok: "Past dates are fine.",
     rule_label: "How much is fed each day?", r_chart: "By the feeding chart (each animal's weight)", r_chart_none: "Feeding chart — not set for this feed yet",
     r_learn: "I don't know exactly — learn it from what gets used", r_pct: "A % of each animal's live weight per day", r_head: "A fixed amount per animal per day",
     pct_ph: "e.g. 1.5 (%)", head_ph: "e.g. 2 (kg or pieces per animal)",
@@ -303,7 +303,7 @@ const DLG = {
   },
   bn: {
     start_title: "খাবার চালু করুন", target: "খাবার বা রেসিপি *", choose: "বাছাই করুন…", nothing_new: "— নতুন কিছু না —",
-    feeds: "খাবার", recipes: "রেসিপি (একসাথে মেশানো)", started_on: "কবে থেকে খাওয়ানো শুরু *", past_ok: "আগের তারিখ দিলেও চলবে।",
+    feeds: "খাবার", ingredients: "উপকরণ (সাধারণত মিক্সে যায়)", recipes: "রেসিপি (একসাথে মেশানো)", started_on: "কবে থেকে খাওয়ানো শুরু *", past_ok: "আগের তারিখ দিলেও চলবে।",
     rule_label: "প্রতিদিন কতটা খাওয়ানো হয়?", r_chart: "খাবারের চার্ট অনুযায়ী (প্রতিটি গরুর ওজন দেখে)", r_chart_none: "খাবারের চার্ট — এই খাবারের চার্ট এখনো নেই",
     r_learn: "ঠিক জানি না — যা খরচ হয় তা থেকে শিখে নিক", r_pct: "প্রতিদিন ওজনের কত %", r_head: "প্রতি গরু প্রতিদিন নির্দিষ্ট পরিমাণ",
     pct_ph: "যেমন 1.5 (%)", head_ph: "যেমন 2 (প্রতি গরু kg বা পিস)",
@@ -369,8 +369,13 @@ function TargetSelect({ data, name, value, onChange, allowEmpty, lang = "en" }: 
     <select name={name} value={value} onChange={(e) => onChange(e.target.value)} required={!allowEmpty} className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm">
       <option value="">{allowEmpty ? t.nothing_new : t.choose}</option>
       <optgroup label={t.feeds}>
-        {data.items.filter((i) => !i.openPeriodId).map((i) => <option key={i.id} value={`item:${i.id}`}>{i.name} ({i.unit})</option>)}
+        {data.items.filter((i) => !i.openPeriodId && !i.discontinued && i.role !== "ingredient").map((i) => <option key={i.id} value={`item:${i.id}`}>{i.name} ({i.unit})</option>)}
       </optgroup>
+      {data.items.some((i) => !i.openPeriodId && !i.discontinued && i.role === "ingredient") && (
+        <optgroup label={t.ingredients}>
+          {data.items.filter((i) => !i.openPeriodId && !i.discontinued && i.role === "ingredient").map((i) => <option key={i.id} value={`item:${i.id}`}>{i.name} ({i.unit})</option>)}
+        </optgroup>
+      )}
       {data.recipes.length > 0 && (
         <optgroup label={t.recipes}>
           {data.recipes.map((r) => <option key={r.id} value={`recipe:${r.id}`}>{r.name}</option>)}

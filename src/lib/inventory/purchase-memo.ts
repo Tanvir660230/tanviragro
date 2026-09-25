@@ -27,6 +27,8 @@ export type PurchaseContext = {
   suppliers: SupplierInfo[];
   lastMemoBySupplier: Record<string, { date: string; lines: MemoLine[] }>;
   recentMemos: RecentMemo[];
+  /** lines of every memo, by RecentMemo.key */
+  memoLines: Record<string, MemoLine[]>;
   frequentItemIds: string[];
 };
 
@@ -93,7 +95,11 @@ export function buildPurchaseContext(input: {
     .slice(0, input.recentLimit ?? Infinity)          // newest first; all by default (duplicate check)
     .map(({ lines: _lines, ...m }) => ({ ...m, total: Math.round(m.total * 100) / 100 }));
 
+  const memoLines: Record<string, MemoLine[]> = {};
+  for (const m of memos.values()) memoLines[m.key] = m.lines;
+
   return {
+    memoLines,
     lastBuy,
     suppliers: [...bySupplier.values()].sort((a, b) => b.lastDate.localeCompare(a.lastDate) || b.memoCount - a.memoCount),
     lastMemoBySupplier,

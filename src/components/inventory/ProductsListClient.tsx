@@ -57,7 +57,6 @@ export function ProductsListClient({ items }: { items: ProductRow[] }) {
           </div>
           <div className="min-w-0">
             <p className="font-medium text-sm text-foreground truncate">{row.name}</p>
-            {row.is_active_roughage && <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">★ Active Roughage</span>}
           </div>
         </div>
       ),

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectAll } from "@/lib/supabase/select-all";
 
 /**
  * Consumption figures from the ledger's MEANING (movement_type), not its direction.
@@ -62,11 +63,12 @@ export function inventoryStatsRows(rows: LedgerRow[], since: string): InventoryS
 }
 
 async function loadRows(supabase: SupabaseClient<any>, businessId: string) {
-  const { data } = await supabase
+  // every row: a total over the first 1000 rows only would be silently wrong
+  const rows = (await selectAll(() => supabase
     .from("inventory_transactions")
-    .select("item_id, movement_type, qty, unit_cost, recorded_at, inventory_items!inner(business_id, category)")
-    .eq("inventory_items.business_id", businessId);
-  const rows = (data ?? []) as unknown as (LedgerRow & { inventory_items: { category: string } | null })[];
+    .select("id, item_id, movement_type, qty, unit_cost, recorded_at, inventory_items!inner(business_id, category)")
+    .eq("inventory_items.business_id", businessId)
+    .order("id"))) as unknown as (LedgerRow & { inventory_items: { category: string } | null })[];
   const categoryByItem: Record<string, string> = {};
   for (const r of rows) if (r.inventory_items?.category) categoryByItem[r.item_id] = r.inventory_items.category;
   return { rows, categoryByItem };

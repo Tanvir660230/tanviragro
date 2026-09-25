@@ -1128,7 +1128,10 @@
     "estimate_badge": "estimate",
     "health_overdue_count": "{count} health tasks overdue",
     "health_due_count": "{count} health tasks due in the next 3 days",
-    "eid_too_far": "The expected weight, value and profit appear {days} days before Eid — further out, a projection is not reliable."
+    "eid_too_far": "The expected weight, value and profit appear {days} days before Eid — further out, a projection is not reliable.",
+    "feed_to_mix": "{count} ingredients waiting to be mixed",
+    "feed_to_mix_sub": "Make a mix; the mix is fed and deducted every day: {names}",
+    "to_mix": "to mix"
   },
   "cattle_board": {
     "title": "Cattle",
@@ -1227,7 +1230,7 @@
   },
   "inventory_home": {
     "title": "Stock & feed",
-    "subtitle": "Buy → start using → it comes off the stock every day by the feeding chart → count any time to adjust.",
+    "subtitle": "Buy → mix → the mix comes off the stock every day by the feeding chart → count any time to adjust.",
     "buy_feed": "Buy feed",
     "s_value": "Stock value",
     "s_value_sub": "quantity × current average cost",
@@ -1261,7 +1264,7 @@
     "mv_other": "Movement",
     "tools": "Tools",
     "feed_mixer": "Feed mixer",
-    "record_feeding_note": "Optional: record extra feed by hand (feed in use is already deducted every day)",
+    "record_feeding_note": "Extra feed for one animal? Use \"Log use\" on that item under All stock. Feed in use is deducted every day by itself.",
     "setup": "Setup",
     "setup_sub": "Recipes and ration plan (plan only — nothing is deducted from stock)",
     "more": "More",
@@ -1281,6 +1284,9 @@
     "stock_out": "By the chart the stock has run out — count it, or enter the purchase",
     "feeding_chart": "Feeding chart",
     "auto_note": "Comes off the stock every day automatically; a count adjusts any difference.",
-    "starts_on": "starts {date}"
+    "starts_on": "starts {date}",
+    "make_mix": "Make a mix",
+    "waiting_title": "Waiting to be mixed ({count})",
+    "waiting_sub": "These are bought to be mixed. Make a mix: the mix is what gets fed and deducted every day."
   }
 }

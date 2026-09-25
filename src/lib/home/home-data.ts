@@ -71,7 +71,7 @@ export async function loadHomeInputs(supabase: SupabaseClient<any>, businessId: 
       logs: logsBy.get(c.id) ?? [],
     })),
     feed: feed.snapshot,
-    feedItems: feed.items.map((i) => ({ id: i.id, name: i.name, unit: i.unit, stockQty: i.stockQty, daysLeft: i.daysLeft, inUse: !!i.openPeriodId })),
+    feedItems: feed.items.filter((i) => !i.discontinued || i.openPeriodId).map((i) => ({ id: i.id, name: i.name, unit: i.unit, stockQty: i.stockQty, daysLeft: i.daysLeft, inUse: !!i.openPeriodId, role: i.role })),
     directCostByCattle: direct,
     marketPricePerKg: price != null && Number(price) > 0 ? Number(price) : null,
     cash,

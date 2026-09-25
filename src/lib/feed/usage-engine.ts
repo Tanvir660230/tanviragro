@@ -250,11 +250,14 @@ export function autoRowsDue(input: { asOf: string; periods: Period[]; animals: A
     periodIds.push(p.id);
     for (const day of dayList(from, through)) {
       for (const l of p.lines) {
-        if (!l.lineId || l.posted?.[day]) continue;
+        if (!l.lineId) continue;
         const plan = dayPlan(p, l, day, input.animals, input.charts);
         const anyone = plan.weights.size > 0;
         const qty = plan.ruleQty ?? (anyone ? learned[l.itemId] ?? null : null);
-        if (qty != null && qty > 0.00005) rows.push({ lineId: l.lineId, date: day, qty: Math.round(qty * 10000) / 10000 });
+        // the planned amount for the day: the database posts only what is still missing
+        // (a day short of stock is completed once stock arrives)
+        if (qty == null || qty <= 0.00005 || (l.posted?.[day]?.qty ?? 0) >= qty - 0.0001) continue;
+        rows.push({ lineId: l.lineId, date: day, qty: Math.round(qty * 10000) / 10000 });
       }
     }
   }

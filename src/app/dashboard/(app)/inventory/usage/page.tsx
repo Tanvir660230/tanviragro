@@ -16,10 +16,7 @@ export const metadata: Metadata = { title: "Feed Usage" };
 export default async function FeedUsagePage() {
   const ctx = await requirePagePermission(PERMISSIONS.INVENTORY_VIEW);
   const supabase = await createClient();
-  const [data, { data: recipes }] = await Promise.all([
-    loadFeedData(supabase, ctx.businessId),
-    supabase.from("feed_recipes").select("id, name").eq("business_id", ctx.businessId).is("deleted_at", null).order("name"),
-  ]);
+  const data = await loadFeedData(supabase, ctx.businessId);
   const { snapshot, periods, animals, items, asOf } = data;
 
   const thisMonth = asOf.slice(0, 7);
@@ -46,7 +43,8 @@ export default async function FeedUsagePage() {
     periods: periods.map((p) => ({ ...p, lines: p.lines.map(({ posted: _posted, ...l }) => ({ ...l })) })).reverse(),
     lines: snapshot.lines,
     items,
-    recipes: (recipes ?? []) as { id: string; name: string }[],
+    // recipes are no longer a feeding target: the dated mix item is fed instead (old recipe periods still show)
+    recipes: [] as { id: string; name: string }[],
     chartTargets: [...new Set(data.charts.map((c) => `${c.targetType}:${c.targetId}`))],
     totals: {
       actualThisMonth: snapshot.byMonth[thisMonth]?.actual ?? 0,

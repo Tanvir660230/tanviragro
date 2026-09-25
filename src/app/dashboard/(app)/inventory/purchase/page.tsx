@@ -10,6 +10,7 @@ import { PURCHASE_TEXT } from "@/components/inventory/purchase-text";
 import { undonePurchaseIds } from "@/lib/inventory/purchase-rows";
 import { buildPurchaseContext, type PurchaseRow } from "@/lib/inventory/purchase-memo";
 import { todayDhaka } from "@/lib/dates";
+import { selectAll } from "@/lib/supabase/select-all";
 
 export const metadata = {
   title: "Add Purchase Invoice | Tanvir Agro",
@@ -29,12 +30,12 @@ export default async function BulkPurchasePage() {
       .is("deleted_at", null)
       .order("name", { ascending: true }),
     // this business's purchase rows (landed unit cost), newest last
-    supabase
+    selectAll(() => supabase
       .from("inventory_transactions")
       .select("id, item_id, qty, unit_cost, recorded_at, created_at, notes, inventory_items!inner(business_id)")
       .eq("inventory_items.business_id", businessId)
       .eq("movement_type", "purchase")
-      .order("recorded_at", { ascending: true }),
+      .order("id")).then((data) => ({ data })),
     supabase
       .from("liabilities")
       .select("lender, outstanding")

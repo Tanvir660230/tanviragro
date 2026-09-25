@@ -23,6 +23,7 @@ export type HomeCattleInput = {
 
 export type HomeFeedItem = {
   id: string; name: string; unit: string; stockQty: number; daysLeft: number | null; inUse: boolean;
+  role?: "mix" | "ingredient" | "direct";
 };
 
 export type HomeInput = {
@@ -48,7 +49,7 @@ export type HomeCattle = {
   eid: { weightKg: number; value: number | null; profit: number | null } | null;
 };
 
-export type AttentionKind = "feed_low" | "feed_not_started" | "feed_unreconciled" | "health_overdue" | "health_due" | "weigh" | "price";
+export type AttentionKind = "feed_low" | "feed_not_started" | "feed_to_mix" | "feed_unreconciled" | "health_overdue" | "health_due" | "weigh" | "price";
 export type Attention = { kind: AttentionKind; severity: "urgent" | "soon"; title: string; detail: string; href: string };
 
 export type HomeModel = {
@@ -150,7 +151,12 @@ export function buildHomeModel(input: HomeInput): HomeModel {
       attention.push({ kind: "feed_low", severity: i.daysLeft <= 2 ? "urgent" : "soon", title: i.name, detail: String(i.daysLeft), href: "/dashboard/inventory/purchase" });
     }
   }
-  const notStarted = input.feedItems.filter((i) => !i.inUse && i.stockQty > 0);
+  // ingredients are mixed, not fed as they are: they wait for a mix, not for "start using"
+  const notStarted = input.feedItems.filter((i) => !i.inUse && i.stockQty > 0 && i.role !== "ingredient");
+  const toMix = input.feedItems.filter((i) => !i.inUse && i.stockQty > 0 && i.role === "ingredient");
+  if (toMix.length) {
+    attention.push({ kind: "feed_to_mix", severity: "soon", title: toMix.map((i) => i.name).join(", "), detail: String(toMix.length), href: "/dashboard/inventory/mix" });
+  }
   if (notStarted.length) {
     attention.push({ kind: "feed_not_started", severity: "soon", title: notStarted.map((i) => i.name).join(", "), detail: String(notStarted.length), href: "/dashboard/inventory/usage" });
   }

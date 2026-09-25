@@ -41,6 +41,7 @@ const LABEL_MAP: Record<string, string> = {
   notifications: "Notifications",
   operations: "Operations",
   "mix-feed": "Mix Feed",
+  mix: "Mix",
   "balance-sheet": "Balance Sheet",
   "cash-flow": "Cash Flow",
   "fixed-assets": "Fixed Assets",

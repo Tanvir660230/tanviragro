@@ -22,12 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, PackagePlus, Minus, CalendarDays, CheckCircle2 } from "lucide-react";
+import { Loader2, PackagePlus, Minus, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   addStock,
   logConsumption,
-  setActiveRoughage,
   markInventoryItemEmpty,
   type InventoryFormState,
 } from "@/app/dashboard/(app)/inventory/actions";
@@ -403,32 +402,10 @@ export function ItemActions({
   const { t } = useTranslation();
   const tr = t.inventory.actions;
   const [isPending, startTransition] = React.useTransition();
-  const [showRoughageDate, setShowRoughageDate] = useState(false);
-  const [roughageUntilDate, setRoughageUntilDate] = useState("");
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [finishDate, setFinishDate] = useState(
     new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" })
   );
-
-  function handleSetRoughage() {
-    if (item.is_active_roughage) {
-      startTransition(async () => {
-        await setActiveRoughage(null);
-        router.refresh();
-      });
-    } else {
-      setShowRoughageDate(true);
-      setRoughageUntilDate("");
-    }
-  }
-
-  function confirmSetRoughage() {
-    startTransition(async () => {
-      await setActiveRoughage(item.id, roughageUntilDate || null);
-      setShowRoughageDate(false);
-      router.refresh();
-    });
-  }
 
   function doMarkEmpty() {
     setShowFinishDialog(false);
@@ -464,41 +441,6 @@ export function ItemActions({
     <div className="flex flex-wrap items-center gap-1.5 justify-end">
       {(item.category === "feed" || item.category === "roughage") && (
         <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleSetRoughage}
-            disabled={isPending}
-            className={cn(
-              "h-8 px-2 text-xs",
-              item.is_active_roughage
-                ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-400"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            title={item.is_active_roughage ? tr.active_roughage : tr.set_as_roughage}
-          >
-            {item.is_active_roughage ? tr.active_roughage : tr.set_roughage}
-          </Button>
-          {showRoughageDate && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <CalendarDays className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <input
-                type="date"
-                value={roughageUntilDate}
-                onChange={(e) => setRoughageUntilDate(e.target.value)}
-                min={todayDhaka()}
-                className="text-xs rounded border border-border bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <Button type="button" size="sm" className="h-7 text-xs px-2" onClick={confirmSetRoughage} disabled={isPending}>
-                {tr.activate}
-              </Button>
-              <button type="button" onClick={() => setShowRoughageDate(false)} className="text-xs text-muted-foreground hover:text-foreground">
-                {tr.cancel}
-              </button>
-            </div>
-          )}
-
           <Button
             type="button"
             variant="outline"

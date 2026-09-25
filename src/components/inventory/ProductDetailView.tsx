@@ -56,7 +56,6 @@ export function ProductDetailView({
         <div className="flex items-center gap-3">
           <CategoryBadge category={item.category} />
           {isOut ? <StatusBadge status="out_of_stock" /> : isLow ? <StatusBadge status="low_stock" /> : <StatusBadge status="in_stock" />}
-          {item.is_active_roughage && <span className="text-xs font-semibold text-amber-600">★ Active Roughage</span>}
         </div>
       </div>
 

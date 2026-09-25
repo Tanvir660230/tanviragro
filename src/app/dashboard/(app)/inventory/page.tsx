@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, FlaskConical, History, Package, PlayCircle, Receipt, Wheat } from "lucide-react";
+import { AlertTriangle, Blend, History, Package, PlayCircle, Receipt, Scale, Wheat } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { StockSection } from "@/components/inventory/StockSection";
-import { DailyFeedDeductButton } from "@/components/inventory/DailyFeedDeductButton";
-import { RecipesSection } from "@/components/inventory/RecipesSection";
-import { ActiveFeedingDashboard } from "@/components/inventory/ActiveFeedingDashboard";
-import { SetupSection } from "@/components/inventory/SetupSection";
 import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { InventoryFeedBoard } from "@/components/inventory/InventoryFeedBoard";
 import { loadFeedData, syncFeedAutoUsage } from "@/lib/feed/feed-data";
@@ -15,7 +11,6 @@ import { getBusinessContext } from "@/lib/context/business-context";
 import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
 import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
-import { getFarmDailyFeedRequirement } from "@/app/dashboard/(app)/inventory/actions";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import type { CattleOption } from "@/components/inventory/ItemActions";
 import type { InventoryRow } from "@/components/inventory/InventoryTable";
@@ -23,8 +18,6 @@ import type { ItemStockSummary } from "@/lib/inventory/types";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { todayDhaka } from "@/lib/dates";
-import { scaleRecipe } from "@/lib/inventory/recipe-math";
-import { estimateFeedCost, kgToItemUnits, weightedAverageUnitCost, type ItemCostInfo } from "@/lib/inventory/feed-costing";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 import { loadInventoryStats } from "@/lib/inventory/consumption-stats";
 
@@ -56,16 +49,14 @@ export default async function InventoryPage({
   const [
     { data: itemsData },
     { data: statsData },
-    { data: purchasesData },
     { data: cattleData },
-    { data: recipesData },
     portfolioData,
     movementsData,
   ] = await Promise.all([
     businessId
       ? supabase
           .from("inventory_items")
-          .select("id, name, category, unit, kg_per_unit, low_stock_threshold, is_active_roughage, roughage_active_until, roughage_active_from, is_discontinued")
+          .select("id, name, category, unit, kg_per_unit, low_stock_threshold, is_discontinued")
           .eq("business_id", businessId)
           .is("deleted_at", null)
           .order("is_discontinued", { ascending: true })
@@ -77,28 +68,12 @@ export default async function InventoryPage({
       : Promise.resolve({ data: [] }),
     businessId
       ? supabase
-          .from("inventory_transactions")
-          .select("item_id, qty, unit_cost, recorded_at, inventory_items!inner(business_id)")
-          .eq("inventory_items.business_id", businessId)
-          .eq("type", "purchase").neq("movement_type", "consumption_reversal") // an undo is not a new price
-          .order("recorded_at", { ascending: true })
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? supabase
           .from("cattle")
           .select("id, tag_id")
           .eq("business_id", businessId)
           .eq("status", "active")
           .is("deleted_at", null)
           .order("tag_id", { ascending: true })
-      : Promise.resolve({ data: [] }),
-    businessId
-      ? supabase
-          .from("feed_recipes")
-          .select("id, name, output_qty, output_unit, notes, is_active, active_from, active_until, deleted_at, recipe_ingredients(item_id, qty_per_batch, inventory_items!inner(name, unit))")
-          .eq("business_id", businessId)
-          .order("deleted_at", { ascending: true, nullsFirst: true })
-          .order("name", { ascending: true })
       : Promise.resolve({ data: [] }),
     businessId
       ? CentralInventoryRepository.getInventoryPortfolio(supabase, businessId)
@@ -124,67 +99,17 @@ export default async function InventoryPage({
   type StatRow = { item_id: string; total_stock: number; total_consumed: number; consumed_last_30d: number };
   const stats = (statsData ?? []) as StatRow[];
 
-  type PurchaseRow = { item_id: string; qty: number; unit_cost: number | null; recorded_at: string };
-  const purchasesTxns = (purchasesData ?? []) as PurchaseRow[];
 
   const stockMap: Record<string, number> = {};
-  const consumedTotalMap: Record<string, number> = {};
   const avgDailyMap: Record<string, number> = {};
 
   for (const s of stats) {
     stockMap[s.item_id] = s.total_stock;
-    consumedTotalMap[s.item_id] = s.total_consumed;
     avgDailyMap[s.item_id] = s.consumed_last_30d / 30;
   }
 
-  let activeRecipeName: string | null = null;
-  let activeRecipeFrom: string | null = null;
-  let activeRecipeUntil: string | null = null;
-  let activeRoughageName: string | null = null;
-  let activeRoughageUntil: string | null = null;
-  let todayConcentrateKg = 0;
-  let todayRoughageKg = 0;
-
-  if (businessId) {
-    const activeRecipe = (recipesData ?? []).find((r) => r.is_active);
-    const activeRoughageItem = (itemsData ?? []).find((i) => i.is_active_roughage);
-
-    if (activeRecipe) {
-      activeRecipeName = activeRecipe.name;
-      activeRecipeFrom = (activeRecipe as { active_from?: string | null }).active_from ?? null;
-      activeRecipeUntil = activeRecipe.active_until ?? null;
-    }
-    if (activeRoughageItem) { activeRoughageName = activeRoughageItem.name; activeRoughageUntil = activeRoughageItem.roughage_active_until ?? null; }
-
-    if (activeRecipe || activeRoughageItem) {
-      const todayStr = todayDhaka(); // farm calendar day (Asia/Dhaka), not UTC
-      const reqRes = await getFarmDailyFeedRequirement(todayStr);
-
-      if (reqRes.success && reqRes.data) {
-        const { totalConcentrateKg, totalRoughageKg } = reqRes.data;
-        todayConcentrateKg = totalConcentrateKg;
-        todayRoughageKg = totalRoughageKg;
-
-        if (activeRecipe && totalConcentrateKg > 0) {
-          // REPLACE the historical 30-day average with the forward-looking recipe projection.
-          // Adding on top would double-count (historical avg ≈ same quantity as projection).
-          // Scaled by the ingredient total (mass balance), not by the stored batch size.
-          for (const l of scaleRecipe(activeRecipe.recipe_ingredients ?? [], totalConcentrateKg)) {
-            avgDailyMap[l.item_id] = l.qty;
-          }
-        }
-        if (activeRoughageItem && totalRoughageKg > 0) {
-          // The plan is in kg; the item may be counted in pieces. Convert only when kg per
-          // unit is known — otherwise keep the recorded 30-day average.
-          const inUnits = kgToItemUnits(totalRoughageKg, activeRoughageItem.unit, activeRoughageItem.kg_per_unit);
-          if (inUnits != null) avgDailyMap[activeRoughageItem.id] = inUnits;
-        }
-      }
-    }
-  }
-
   // Days left: the feed engine's daily figure (running period, else usage learned from past
-  // periods) wins; the ration plan / 30-day average above is only the fallback.
+  // periods) wins; the recorded 30-day average above is only the fallback.
   for (const st of feed?.items ?? []) {
     const running = feed!.snapshot.lines.find((l) => l.itemId === st.id && l.status === "estimated");
     const daily = running?.dailyQty ?? st.learnedDaily;
@@ -197,7 +122,7 @@ export default async function InventoryPage({
   for (const itemRow of (itemsData ?? []) as { id: string }[]) wacMap[itemRow.id] = unitCosts[itemRow.id] ?? null;
 
   const items: InventoryRow[] = (itemsData ?? []).map(
-    (item: { id: string; name: string; category: string; unit: string; low_stock_threshold: number | null; is_active_roughage: boolean | null; is_discontinued: boolean }) => ({
+    (item: { id: string; name: string; category: string; unit: string; low_stock_threshold: number | null; is_discontinued: boolean }) => ({
       ...item,
       // Signed: a negative balance means consumption was recorded without matching stock-in.
       stock: parseFloat((stockMap[item.id] ?? 0).toFixed(3)),
@@ -211,65 +136,6 @@ export default async function InventoryPage({
 
   const cattle: CattleOption[] = (cattleData ?? []) as CattleOption[];
 
-  // ESTIMATED daily feed cost of today's ration plan at weighted-average cost.
-  // Roughage priced per piece is converted with kg_per_unit; if that is unknown the
-  // roughage cost is reported as unknown instead of multiplying ৳/piece by kg.
-  const costInfo: Record<string, ItemCostInfo> = {};
-  for (const i of (itemsData ?? []) as { id: string; name: string; unit: string; kg_per_unit: number | null }[]) {
-    costInfo[i.id] = { unit: i.unit, kgPerUnit: i.kg_per_unit, unitCost: wacMap[i.id] ?? null, name: i.name };
-  }
-  const estimateLines: { item_id: string; kg: number }[] = [];
-  const activeRecipeForCost = (recipesData ?? []).find((r) => r.is_active);
-  if (activeRecipeForCost && todayConcentrateKg > 0) {
-    for (const l of scaleRecipe(activeRecipeForCost.recipe_ingredients ?? [], todayConcentrateKg)) {
-      estimateLines.push({ item_id: l.item_id, kg: l.qty });
-    }
-  }
-  const activeRoughageForCost = (itemsData ?? []).find((i: { is_active_roughage: boolean | null }) => i.is_active_roughage) as { id: string } | undefined;
-  if (activeRoughageForCost && todayRoughageKg > 0) {
-    estimateLines.push({ item_id: activeRoughageForCost.id, kg: todayRoughageKg });
-  }
-  const estimate = estimateFeedCost(estimateLines, costInfo);
-  const estimatedDailyCost = estimate.total;
-
-  // Feed items that are low on stock (for Today card warning) — active only
-  const lowStockFeedItems = activeItems
-    .filter((i) =>
-      (i.category === "feed" || i.category === "roughage") &&
-      i.low_stock_threshold !== null &&
-      i.stock <= i.low_stock_threshold
-    )
-    .map((i) => ({
-      name: i.name,
-      daysLeft:
-        i.avgDailyConsumption && i.avgDailyConsumption > 0
-          ? Math.floor(i.stock / i.avgDailyConsumption)
-          : null,
-    }));
-
-  // Build item lookup for recipes
-  const itemsLookup: Record<string, { name: string; unit: string }> = {};
-  for (const item of items) itemsLookup[item.id] = { name: item.name, unit: item.unit };
-
-  type JoinedItem = { name: string; unit: string } | null;
-  const allRecipes = (recipesData ?? []).map((r) => ({
-    ...r,
-    ingredients: (r.recipe_ingredients ?? []).map((ri) => {
-      const inv = ri.inventory_items as unknown as JoinedItem;
-      return {
-        item_id: ri.item_id,
-        qty_per_batch: ri.qty_per_batch,
-        item_name: inv?.name ?? itemsLookup[ri.item_id]?.name ?? ri.item_id,
-        item_unit: inv?.unit ?? itemsLookup[ri.item_id]?.unit ?? "",
-      };
-    }),
-  }));
-  const recipes = allRecipes.filter((r) => !(r as { deleted_at?: string | null }).deleted_at);
-  const deletedRecipes = allRecipes.filter((r) => !!(r as { deleted_at?: string | null }).deleted_at);
-
-  const stockItems = items.map((i) => ({ id: i.id, name: i.name, unit: i.unit, stock: i.stock, category: i.category }));
-
-  const feedItems = items.filter((i) => i.category === "feed" || i.category === "roughage");
 
   // ── new layout: buy → start using → finished (count) ──
   const ti = t.inventory_home;
@@ -277,7 +143,7 @@ export default async function InventoryPage({
   const month = (feed?.asOf ?? todayDhaka()).slice(0, 7);
   const openPeriods = (feed?.periods ?? []).filter((p) => p.status === "open");
   const feedStatus = feed?.items ?? [];
-  const notStartedCount = feedStatus.filter((i) => !i.openPeriodId && i.stockQty > 0).length;
+  const notStartedCount = feedStatus.filter((i) => i.role !== "ingredient" && !i.discontinued && !i.openPeriodId && i.stockQty > 0).length;
   const runningLow = feedStatus.filter((i) => i.openPeriodId && i.daysLeft != null && i.daysLeft <= 7).length;
   const stockValue = portfolio.reduce((s, p) => s + Number(p.totalValuation ?? 0), 0);
   const monthFeed = feed?.snapshot.byMonth[month]?.actual ?? 0;
@@ -308,6 +174,10 @@ export default async function InventoryPage({
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90">
             <Receipt className="h-4 w-4" aria-hidden />{ti.buy_feed}
           </Link>
+          <Link href="/dashboard/inventory/mix"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3.5 text-sm font-semibold text-primary hover:bg-primary/10">
+            <Blend className="h-4 w-4" aria-hidden />{ti.make_mix}
+          </Link>
           <AddItemDialog defaultOpen={open === "add"} />
         </div>
       </header>
@@ -326,7 +196,7 @@ export default async function InventoryPage({
       {/* in use + in stock not started */}
       {feed && (
         <InventoryFeedBoard
-          data={{ asOf: feed.asOf, items: feed.items, recipes: recipes.map((r) => ({ id: r.id, name: r.name })), chartTargets: [...new Set(feed.charts.map((c) => `${c.targetType}:${c.targetId}`))] }}
+          data={{ asOf: feed.asOf, items: feed.items, recipes: [], chartTargets: [...new Set(feed.charts.map((c) => `${c.targetType}:${c.targetId}`))] }}
           open={openPeriods.map((p) => ({ ...p, lines: p.lines.map(({ posted: _posted, ...l }) => l) }))}
           lines={feed.snapshot.lines.filter((l) => l.status === "estimated")}
           canEdit={canEdit}
@@ -388,41 +258,25 @@ export default async function InventoryPage({
 
         {/* tools */}
         <section aria-labelledby="tools-title" className="rounded-xl border border-border bg-card p-4 shadow-card">
-          <h2 id="tools-title" className="mb-3 flex items-center gap-2 text-sm font-semibold"><FlaskConical className="h-4 w-4 text-muted-foreground" aria-hidden />{ti.tools}</h2>
+          <h2 id="tools-title" className="mb-3 flex items-center gap-2 text-sm font-semibold"><Blend className="h-4 w-4 text-muted-foreground" aria-hidden />{ti.tools}</h2>
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/dashboard/inventory/mix-feed"
+            <Link href="/dashboard/inventory/mix"
               className="inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-muted">
-              <FlaskConical className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden />{ti.feed_mixer}
+              <Blend className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden />{ti.make_mix}
+            </Link>
+            <Link href="/dashboard/inventory/feeding-chart"
+              className="inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-muted">
+              <Scale className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden />{ti.feeding_chart}
             </Link>
             <Link href="/dashboard/inventory/purchase/history"
               className="inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-muted">
               <History className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden />{ti.purchase_history}
             </Link>
-            {feedItems.length > 0 && cattle.length > 0 && <DailyFeedDeductButton feedItems={feedItems} cattleCount={cattle.length} />}
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">{ti.record_feeding_note}</p>
         </section>
       </div>
 
-      {/* setup — recipes and ration-plan dates (plan only) */}
-      <SetupSection>
-        <p className="text-xs text-muted-foreground">{ti.setup_sub}</p>
-        <ActiveFeedingDashboard
-          activeRecipeName={activeRecipeName}
-          activeRecipeFrom={activeRecipeFrom}
-          activeRecipeUntil={activeRecipeUntil}
-          activeRoughageName={activeRoughageName}
-          activeRoughageUntil={activeRoughageUntil}
-          dailyConcentrateKg={todayConcentrateKg}
-          dailyRoughageKg={todayRoughageKg}
-          feedItems={feedItems}
-          cattleCount={cattle.length}
-          estimatedDailyCost={estimatedDailyCost}
-          estimatedCostUnknownItems={estimate.unknownItems}
-          lowStockFeedItems={lowStockFeedItems}
-        />
-        <RecipesSection recipes={recipes} deletedRecipes={deletedRecipes} allItems={stockItems} />
-      </SetupSection>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { todayDhaka } from "@/lib/dates";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
+import { selectAll } from "@/lib/supabase/select-all";
 import {
   autoRowsDue, computeFeedSnapshot, dayList, forecastDepletion,
   type Animal, type ChartVersion, type FeedSnapshot, type Period, type RecordedRow, type RuleType,
@@ -22,6 +23,14 @@ export type FeedItemStatus = {
   wac: number | null;
   learnedDaily: number | null;
   openPeriodId: string | null;
+  /**
+   * mix = a mixed feed made on the Mix page (fed and counted in kg);
+   * ingredient = bought to be mixed (not fed directly, so never "not started");
+   * direct = fed as it is (e.g. straw)
+   */
+  role: FeedRole;
+  /** retired by the owner: never offered as a mix or a new feed */
+  discontinued: boolean;
   daysLeft: number | null;
   depletionDate: string | null;
   /** open period: what should be left now by the daily deduction (stock on hand − today's estimate) */
@@ -29,6 +38,22 @@ export type FeedItemStatus = {
   /** open period: today's figure by the rule / chart / learned usage, in the item's unit */
   dailyQty: number | null;
 };
+
+export type FeedRole = "mix" | "ingredient" | "direct";
+
+/** Mix items: made on the Mix page, or named as a mix. Ingredients: in any mix or recipe, and not a mix. */
+export function feedRoles(input: {
+  items: { id: string; name: string; unit: string; category: string; is_discontinued?: boolean | null }[];
+  mixOutputIds: string[];
+  ingredientIds: string[];
+}): Record<string, FeedRole> {
+  const mix = new Set(input.mixOutputIds);
+  for (const i of input.items) {
+    if (!i.is_discontinued && i.category === "feed" && i.unit.trim().toLowerCase() === "kg" && /\bmix\b|মিক্স|মিশ্রণ/i.test(i.name)) mix.add(i.id);
+  }
+  const ing = new Set(input.ingredientIds.filter((id) => !mix.has(id)));
+  return Object.fromEntries(input.items.map((i) => [i.id, mix.has(i.id) ? "mix" : ing.has(i.id) ? "ingredient" : "direct"]));
+}
 
 export type FeedData = {
   asOf: string;
@@ -85,14 +110,17 @@ export async function feedAutoPostingDue(supabase: SupabaseClient<any>, business
 
 /** Reads only; posts nothing. */
 export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId: string, asOf = todayDhaka()): Promise<FeedData> {
-  const [linesRes, recipesRes, cattleRes, salesRes, itemsRes, balanceRes, chartsRes] = await Promise.all([
+  const [linesRes, recipesRes, cattleRes, salesRes, itemsRes, balanceRes, chartsRes, mixRes, recipeIngRes] = await Promise.all([
     supabase.from("v_feed_usage_lines").select("*").eq("business_id", businessId).order("start_date", { ascending: true }),
     supabase.from("feed_recipes").select("id, name").eq("business_id", businessId),
     supabase.from("cattle").select("id, tag_id, purchase_date, status, updated_at, initial_weight_kg, initial_weight_type").eq("business_id", businessId).is("deleted_at", null),
     supabase.from("sales").select("cattle_id, sold_at, cattle!inner(business_id)").eq("cattle.business_id", businessId).is("deleted_at", null),
-    supabase.from("inventory_items").select("id, name, unit, category, kg_per_unit").eq("business_id", businessId).in("category", ["feed", "roughage"]).is("deleted_at", null),
+    supabase.from("inventory_items").select("id, name, unit, category, kg_per_unit, is_discontinued").eq("business_id", businessId).in("category", ["feed", "roughage"]).is("deleted_at", null),
     supabase.from("v_inventory_balance").select("item_id, qty_on_hand, value_on_hand").eq("business_id", businessId),
     supabase.from("feed_charts").select("id, target_type, item_id, recipe_id, effective_from, notes, feed_chart_bands(min_kg, max_kg, amount, basis)").eq("business_id", businessId),
+    supabase.from("feed_mix_batches").select("output_item_id").eq("business_id", businessId).is("undone_at", null),
+    // every recipe ever made (deleted ones too): their items are mix ingredients
+    supabase.from("recipe_ingredients").select("item_id, feed_recipes!inner(business_id)").eq("feed_recipes.business_id", businessId),
   ]);
   type ChartRow = {
     id: string; target_type: "item" | "recipe"; item_id: string | null; recipe_id: string | null; effective_from: string; notes: string | null;
@@ -105,7 +133,7 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
       .sort((a, b) => a.minKg - b.minKg),
   }));
   const openLineIds = ((linesRes.data ?? []) as LineRow[]).filter((r) => r.status === "open").map((r) => r.line_id);
-  const items = (itemsRes.data ?? []) as { id: string; name: string; unit: string; category: string; kg_per_unit: number | null }[];
+  const items = (itemsRes.data ?? []) as { id: string; name: string; unit: string; category: string; kg_per_unit: number | null; is_discontinued: boolean | null }[];
   const itemIds = items.map((i) => i.id);
   const cattle = (cattleRes.data ?? []) as { id: string; tag_id: string; purchase_date: string | null; status: string; updated_at: string | null; initial_weight_kg: number | null; initial_weight_type: Animal["initialWeightType"] | null }[];
   const cattleIds = cattle.map((c) => c.id);
@@ -116,12 +144,12 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
       : Promise.resolve({ data: [] }),
     loadUnitCostMap(supabase, businessId),
     itemIds.length
-      ? supabase.from("inventory_transactions").select("item_id, qty, unit_cost, recorded_at, covers_from, cattle_id, movement_type")
-          .in("item_id", itemIds).in("movement_type", ["consumption", "consumption_reversal"]).is("period_line_id", null)
+      ? selectAll(() => supabase.from("inventory_transactions").select("id, item_id, qty, unit_cost, recorded_at, covers_from, cattle_id, movement_type")
+          .in("item_id", itemIds).in("movement_type", ["consumption", "consumption_reversal"]).is("period_line_id", null).order("id")).then((data) => ({ data }))
       : Promise.resolve({ data: [] }),
     // open periods: their own (automatic) postings, per day
     openLineIds.length
-      ? supabase.from("inventory_transactions").select("period_line_id, qty, unit_cost, recorded_at, type").in("period_line_id", openLineIds)
+      ? selectAll(() => supabase.from("inventory_transactions").select("id, period_line_id, qty, unit_cost, recorded_at, type").in("period_line_id", openLineIds).order("id")).then((data) => ({ data }))
       : Promise.resolve({ data: [] }),
   ]);
   const postedByLine = new Map<string, Record<string, { qty: number; value: number }>>();
@@ -195,6 +223,17 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
   const balance = new Map(((balanceRes.data ?? []) as { item_id: string; qty_on_hand: number; value_on_hand: number }[]).map((b) => [b.item_id, b]));
   const openByItem = new Map<string, string>();
   for (const p of periods) if (p.status === "open") for (const l of p.lines) openByItem.set(l.itemId, p.id);
+  const { data: mixInputRows } = itemIds.length
+    ? await supabase.from("inventory_transactions").select("item_id").in("item_id", itemIds).eq("movement_type", "feed_mix_input")
+    : { data: [] };
+  const roles = feedRoles({
+    items,
+    mixOutputIds: ((mixRes.data ?? []) as { output_item_id: string }[]).map((m) => m.output_item_id),
+    ingredientIds: [
+      ...((recipeIngRes.data ?? []) as { item_id: string }[]).map((r) => r.item_id),
+      ...((mixInputRows ?? []) as { item_id: string }[]).map((r) => r.item_id),
+    ],
+  });
   const itemStatus: FeedItemStatus[] = items.map((i) => {
     const b = balance.get(i.id);
     const stockQty = Number(b?.qty_on_hand ?? 0);
@@ -208,7 +247,7 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
       id: i.id, name: i.name, unit: i.unit, category: i.category, kgPerUnit: i.kg_per_unit,
       stockQty, stockValue: Number(b?.value_on_hand ?? 0), wac: wac[i.id] ?? null, learnedDaily: learned,
       openPeriodId: openByItem.get(i.id) ?? null, daysLeft: f.daysLeft, depletionDate: f.date,
-      expectedLeft, dailyQty: openLine?.dailyQty ?? learned,
+      expectedLeft, dailyQty: openLine?.dailyQty ?? learned, role: roles[i.id] ?? "direct", discontinued: !!i.is_discontinued,
     };
   });
 

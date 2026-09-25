@@ -42,6 +42,7 @@ function SectionTitle({ icon: Icon, children, href, linkLabel }: { icon: React.E
 function attentionText(a: Attention, t: T): { title: string; sub: string; icon: React.ElementType } {
   switch (a.kind) {
     case "feed_low": return { title: fill(t.feed_low, { name: a.title, days: a.detail }), sub: t.feed_low_sub, icon: Wheat };
+    case "feed_to_mix": return { title: fill(t.feed_to_mix, { count: a.detail }), sub: fill(t.feed_to_mix_sub, { names: a.title }), icon: Wheat };
     case "feed_not_started": return { title: fill(t.feed_not_started, { count: a.detail }), sub: fill(t.feed_not_started_sub, { names: a.title }), icon: PlayCircle };
     case "feed_unreconciled": return { title: fill(t.feed_unreconciled, { count: a.detail }), sub: t.feed_unreconciled_sub, icon: AlertTriangle };
     case "weigh": return { title: fill(t.weigh, { count: a.detail }), sub: fill(t.weigh_sub, { days: WEIGH_EVERY_DAYS, tags: a.title }), icon: Scale };
@@ -221,7 +222,7 @@ export function HomeScreen({ model, t, hour, dateLabel }: { model: HomeModel; t:
                         {i.stockQty.toLocaleString("en-IN", { maximumFractionDigits: 1 })} {i.unit}
                         <span className={cn("ml-2 rounded px-1.5 py-px text-[10px] font-semibold",
                           i.inUse ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>
-                          {i.inUse ? t.in_use : t.not_started}
+                          {i.inUse ? t.in_use : i.role === "ingredient" ? t.to_mix : t.not_started}
                         </span>
                       </span>
                     </div>

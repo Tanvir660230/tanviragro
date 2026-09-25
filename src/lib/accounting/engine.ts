@@ -2,6 +2,7 @@ import { calculateDepreciation } from "@/lib/financial/calculations";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
+import { selectAll } from "@/lib/supabase/select-all";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { getBusinessContext } from "@/lib/context/business-context";
@@ -173,7 +174,8 @@ export const getCachedDbData = async (businessId: string) => {
       supabaseAdmin.from("cattle").select("id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("sales").select("id, cattle_id, sale_price_total, sold_at, cattle!inner(business_id)").eq("cattle.business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("cost_entries").select("id, category, amount, type, recorded_at, entry_class, cattle_id, expense_categories(kind)").eq("business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category)").eq("inventory_items.business_id", businessId),
+      // every ledger row (the API returns at most 1000 per request)
+      selectAll(() => supabaseAdmin.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category)").eq("inventory_items.business_id", businessId).order("id")).then((data) => ({ data })),
       supabaseAdmin.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id)").eq("partners.business_id", businessId).is("deleted_at", null),
       supabaseAdmin.from("fixed_assets").select("*").eq("business_id", businessId),
       supabaseAdmin.from("liabilities").select("id, outstanding, settled_at").eq("business_id", businessId).is("deleted_at", null),

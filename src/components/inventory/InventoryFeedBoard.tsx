@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, CircleStop, ClipboardCheck, PlayCircle, Scale, SlidersHorizontal, Wheat } from "lucide-react";
+import { AlertTriangle, Blend, CheckCircle2, CircleStop, ClipboardCheck, PlayCircle, Scale, SlidersHorizontal, Wheat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Dictionary } from "@/i18n/getDictionary";
 import type { LineResult, Period } from "@/lib/feed/usage-engine";
@@ -35,7 +35,9 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
       : p.ruleType === "per_head" ? fill(ti.rule_head, { v: p.ruleValue ?? "" })
       : ti.rule_learn;
   const itemById = new Map<string, FeedItemStatus>(data.items.map((i) => [i.id, i]));
-  const notStarted = data.items.filter((i) => !i.openPeriodId && i.stockQty > 0);
+  // ingredients are mixed, not fed as they are: they wait for a mix instead of "start using"
+  const notStarted = data.items.filter((i) => i.role !== "ingredient" && !i.discontinued && !i.openPeriodId && i.stockQty > 0);
+  const waiting = data.items.filter((i) => i.role === "ingredient" && !i.openPeriodId && i.stockQty > 0.0001);
 
   return (
     <div className="space-y-5">
@@ -175,6 +177,28 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />{ti.start_recipe}
             </button>
           )}
+        </section>
+      )}
+
+      {waiting.length > 0 && (
+        <section aria-labelledby="waiting-title" className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="waiting-title" className="text-sm font-semibold">{fill(ti.waiting_title, { count: waiting.length })}</h2>
+              <p className="text-xs text-muted-foreground">{ti.waiting_sub}</p>
+            </div>
+            <Link href="/dashboard/inventory/mix"
+              className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+              <Blend className="h-4 w-4" aria-hidden />{ti.make_mix}
+            </Link>
+          </div>
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {waiting.map((i) => (
+              <li key={i.id} className="rounded-full border border-border bg-card px-2.5 py-1 text-xs">
+                <span className="font-medium">{i.name}</span> <span className="tabular-nums text-muted-foreground">{qty(i.stockQty, i.unit)}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

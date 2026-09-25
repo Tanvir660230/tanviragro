@@ -984,6 +984,16 @@ export type Database = {
         Update: Partial<Loan>;
         Relationships: [];
       };
+      feed_mix_batches: {
+        Row: {
+          id: string; business_id: string; output_item_id: string; mix_date: string; output_qty: number; input_qty: number;
+          total_cost: number | null; note: string | null; created_at: string; created_by: string | null;
+          undone_at: string | null; undone_by: string | null; undo_reason: string | null;
+        };
+        Insert: never;   // written only by produce_feed_mix / undo_feed_mix
+        Update: never;
+        Relationships: [];
+      };
       loan_payments: {
         Row: LoanPayment;
         Insert: { id?: string; loan_id: string; amount: number; paid_at: string; notes?: string | null; created_at?: string };
@@ -1050,6 +1060,14 @@ export type Database = {
       save_feed_chart: {
         Args: { p_business_id: string; p_target_type: string; p_target_id: string; p_effective_from: string; p_bands: { min_kg: number; max_kg: number | null; amount: number; basis: string }[]; p_notes?: string | null };
         Returns: string;
+      };
+      produce_feed_mix: {
+        Args: { p_business_id: string; p_output_item_id: string; p_date: string; p_lines: { item_id: string; qty: number }[]; p_batch_id: string; p_output_qty?: number | null; p_note?: string | null };
+        Returns: { batch_id: string; output_qty?: number; cost?: number | null; duplicate?: boolean };
+      };
+      undo_feed_mix: {
+        Args: { p_batch_id: string; p_reason: string };
+        Returns: undefined;
       };
       delete_feed_chart: {
         Args: { p_chart_id: string };
