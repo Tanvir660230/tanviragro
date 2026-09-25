@@ -43,10 +43,11 @@ export default async function FeedUsagePage() {
   const pageData: UsagePageData = {
     asOf,
     canEdit: hasPermission(ctx, PERMISSIONS.INVENTORY_EDIT),
-    periods: periods.map((p) => ({ ...p, lines: p.lines.map((l) => ({ ...l })) })).reverse(),
+    periods: periods.map((p) => ({ ...p, lines: p.lines.map(({ posted: _posted, ...l }) => ({ ...l })) })).reverse(),
     lines: snapshot.lines,
     items,
     recipes: (recipes ?? []) as { id: string; name: string }[],
+    chartTargets: [...new Set(data.charts.map((c) => `${c.targetType}:${c.targetId}`))],
     totals: {
       actualThisMonth: snapshot.byMonth[thisMonth]?.actual ?? 0,
       estimatedThisMonth: snapshot.byMonth[thisMonth]?.estimated ?? 0,

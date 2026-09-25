@@ -15,6 +15,7 @@ import {
   ReceiptText,
   CalendarRange,
   ChevronDown,
+  Scale,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -22,6 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 const MAIN_ITEMS = [
   { href: "/dashboard/inventory", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/inventory/usage", label: "Feed Usage", icon: CalendarRange },
+  { href: "/dashboard/inventory/feeding-chart", label: "Feeding chart", icon: Scale },
   { href: "/dashboard/inventory/purchase", label: "Purchase", icon: ReceiptText },
   { href: "/dashboard/inventory/movements", label: "Movements", icon: ArrowRightLeft },
   { href: "/dashboard/inventory/reports", label: "Reports", icon: FileBarChart },

@@ -13,7 +13,7 @@ export type UsageFormState = { error?: string; success?: boolean; status?: strin
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function done() {
-  for (const p of ["/dashboard/inventory/usage", "/dashboard/inventory", "/dashboard", "/dashboard/finance", "/dashboard/cattle"]) revalidatePath(p);
+  for (const p of ["/dashboard/inventory/usage", "/dashboard/inventory", "/dashboard/inventory/feeding-chart", "/dashboard", "/dashboard/finance", "/dashboard/cattle"]) revalidatePath(p);
   revalidateTag("accounting", { expire: 0 });
 }
 
@@ -24,11 +24,13 @@ function dbMessage(error: { code?: string; message?: string }): string {
   return feedLedgerErrorMessage(error);
 }
 
-function parseRule(formData: FormData): { type: "weight_share" | "pct_live_weight" | "per_head"; value: number | null } | { error: string } {
-  const type = (formData.get("rule_type") as string) || "weight_share";
-  if (type === "weight_share") return { type, value: null };
+type RuleChoice = { type: "weight_share" | "pct_live_weight" | "per_head" | "chart"; value: number | null };
+
+function parseRule(formData: FormData, prefix = ""): RuleChoice | { error: string } {
+  const type = (formData.get(`${prefix}rule_type`) as string) || "weight_share";
+  if (type === "weight_share" || type === "chart") return { type, value: null };
   if (type !== "pct_live_weight" && type !== "per_head") return { error: "Unknown feeding rule" };
-  const value = parseFloat(formData.get("rule_value") as string);
+  const value = parseFloat(formData.get(`${prefix}rule_value`) as string);
   if (!(value > 0)) return { error: type === "pct_live_weight" ? "Enter the % of live weight fed per day" : "Enter the quantity per head per day" };
   return { type, value };
 }
@@ -80,6 +82,7 @@ export async function endFeedUsage(_prev: UsageFormState, formData: FormData): P
   if (!periodId) return { error: "Period missing" };
   if (!DATE_RE.test(endDate)) return { error: "Choose the end date" };
 
+  const checkpoint = formData.get("mode") === "checkpoint";
   const closing: { item_id: string; qty: number }[] = [];
   for (const [k, v] of formData.entries()) {
     if (!k.startsWith("closing:")) continue;
@@ -91,6 +94,14 @@ export async function endFeedUsage(_prev: UsageFormState, formData: FormData): P
 
   const lock = await checkFinancialLock(supabase, businessId, endDate);
   if (lock) return { error: lock };
+
+  // count check: the period closes at the count and the same feed continues from the next day
+  if (checkpoint) {
+    const { error } = await supabase.rpc("checkpoint_feed_usage_period", { p_period_id: periodId, p_date: endDate, p_closing: closing });
+    if (error) return { error: dbMessage(error) };
+    done();
+    return { success: true, status: "checkpoint" };
+  }
 
   const { data: status, error } = await supabase.rpc("close_feed_usage_period", {
     p_period_id: periodId, p_end_date: endDate, p_closing: closing, p_reason: reason,
@@ -118,6 +129,55 @@ export async function cancelFeedUsage(periodId: string, reason: string): Promise
   if (denied) return { error: denied };
   const supabase = await createClient();
   const { error } = await supabase.rpc("cancel_feed_usage_period", { p_period_id: periodId, p_reason: reason });
+  if (error) return { error: dbMessage(error) };
+  done();
+  return {};
+}
+
+/** Change how a running period is fed (days already deducted stay as they are). */
+export async function setFeedUsageRule(_prev: UsageFormState, formData: FormData): Promise<UsageFormState> {
+  const denied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (denied) return { error: denied };
+  const supabase = await createClient();
+  const periodId = (formData.get("period_id") as string) || "";
+  if (!periodId) return { error: "Period missing" };
+  const rule = parseRule(formData);
+  if ("error" in rule) return { error: rule.error };
+  const { error } = await supabase.rpc("set_feed_usage_rule", { p_period_id: periodId, p_rule_type: rule.type, p_rule_value: rule.value });
+  if (error) return { error: dbMessage(error) };
+  done();
+  return { success: true };
+}
+
+export type ChartBandInput = { min_kg: number; max_kg: number | null; amount: number; basis: "per_head" | "pct_bw" };
+
+/** Save a feeding chart version (same target + same date replaces that version). */
+export async function saveFeedChart(input: { target: string; effectiveFrom: string; bands: ChartBandInput[]; notes?: string | null }): Promise<{ error?: string }> {
+  const denied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (denied) return { error: denied };
+  const supabase = await createClient();
+  const businessId = await getCurrentBusinessId(supabase);
+  if (!businessId) return { error: "Business not found" };
+  const [type, id] = (input.target || "").split(":");
+  if (!["item", "recipe"].includes(type) || !id) return { error: "Choose the feed or recipe" };
+  if (!DATE_RE.test(input.effectiveFrom)) return { error: "Choose the date the chart starts" };
+  const bands = (input.bands ?? []).map((b) => ({ min_kg: Number(b.min_kg), max_kg: b.max_kg == null ? null : Number(b.max_kg), amount: Number(b.amount), basis: b.basis }));
+  if (bands.some((b) => !Number.isFinite(b.min_kg) || !Number.isFinite(b.amount) || (b.max_kg != null && !Number.isFinite(b.max_kg)))) return { error: "Enter numbers in every row" };
+  const { error } = await supabase.rpc("save_feed_chart", {
+    p_business_id: businessId, p_target_type: type, p_target_id: id, p_effective_from: input.effectiveFrom,
+    p_bands: bands, p_notes: (input.notes ?? "").trim() || null,
+  });
+  if (error) return { error: dbMessage(error) };
+  done();
+  return {};
+}
+
+/** Remove one chart version (the earlier version applies again). */
+export async function deleteFeedChart(chartId: string): Promise<{ error?: string }> {
+  const denied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (denied) return { error: denied };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_feed_chart", { p_chart_id: chartId });
   if (error) return { error: dbMessage(error) };
   done();
   return {};

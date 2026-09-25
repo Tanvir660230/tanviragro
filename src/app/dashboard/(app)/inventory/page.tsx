@@ -10,7 +10,7 @@ import { ActiveFeedingDashboard } from "@/components/inventory/ActiveFeedingDash
 import { SetupSection } from "@/components/inventory/SetupSection";
 import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { InventoryFeedBoard } from "@/components/inventory/InventoryFeedBoard";
-import { loadFeedData } from "@/lib/feed/feed-data";
+import { loadFeedData, syncFeedAutoUsage } from "@/lib/feed/feed-data";
 import { getBusinessContext } from "@/lib/context/business-context";
 import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
@@ -50,6 +50,8 @@ export default async function InventoryPage({
     timeZone: "Asia/Dhaka",
   }).format(thirtyDaysAgo);
   const businessId = await getCurrentBusinessId(supabase);
+  // feed in use is deducted every day — post any due day first so the stock below is current
+  if (businessId) await syncFeedAutoUsage(supabase, businessId);
 
   const [
     { data: itemsData },
@@ -324,12 +326,13 @@ export default async function InventoryPage({
       {/* in use + in stock not started */}
       {feed && (
         <InventoryFeedBoard
-          data={{ asOf: feed.asOf, items: feed.items, recipes: recipes.map((r) => ({ id: r.id, name: r.name })) }}
-          open={openPeriods}
+          data={{ asOf: feed.asOf, items: feed.items, recipes: recipes.map((r) => ({ id: r.id, name: r.name })), chartTargets: [...new Set(feed.charts.map((c) => `${c.targetType}:${c.targetId}`))] }}
+          open={openPeriods.map((p) => ({ ...p, lines: p.lines.map(({ posted: _posted, ...l }) => l) }))}
           lines={feed.snapshot.lines.filter((l) => l.status === "estimated")}
           canEdit={canEdit}
           ti={ti}
           th={th}
+          lang={locale}
         />
       )}
 

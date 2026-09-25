@@ -17,7 +17,12 @@
  */
 
 export type WeightBasis = "measured" | "estimated" | "none";
-export type RuleType = "weight_share" | "pct_live_weight" | "per_head";
+export type RuleType = "weight_share" | "pct_live_weight" | "per_head" | "chart";
+
+/** One weight band of a feeding chart: per_head = target unit per animal per day (recipe = kg of mix); pct_bw = % of live weight (kg). */
+export type ChartBand = { minKg: number; maxKg: number | null; amount: number; basis: "per_head" | "pct_bw" };
+/** A feeding chart version for one feed item or recipe, valid from effectiveFrom until the next version. */
+export type ChartVersion = { id: string; targetType: "item" | "recipe"; targetId: string; effectiveFrom: string; bands: ChartBand[]; notes?: string | null };
 
 export type Animal = {
   id: string;
@@ -40,12 +45,18 @@ export type PeriodLine = {
   gapQty: number | null;
   costMissing: boolean;
   closingQty: number | null;
+  lineId?: string;
+  /** open period: the line's own postings (automatic daily rows), net per day */
+  posted?: Record<string, { qty: number; value: number }>;
 };
 
 export type Period = {
   id: string;
   targetType: "item" | "recipe";
+  targetId?: string;
   targetName: string;
+  /** open period: last day whose automatic consumption has been posted */
+  autoPostedThrough?: string | null;
   status: "open" | "closed" | "unreconciled";
   startDate: string;
   endDate: string | null;
@@ -106,6 +117,12 @@ export type LineResult = {
   variancePct: number | null;
   gapQty: number;
   estimateBasis: "rule" | "learned" | "none" | null;   // for open periods
+  /** open period: already deducted from stock automatically (final at the count) */
+  postedQty?: number;
+  postedValue?: number;
+  /** open period: estimate for the days not deducted yet (today) */
+  pendingQty?: number;
+  lastPosted?: string | null;
 };
 
 export type FeedSnapshot = {
@@ -145,9 +162,49 @@ export function weightOn(a: Animal, day: string): { kg: number; basis: WeightBas
   return { kg: 0, basis: "none" };
 }
 
+// ── feeding chart ───────────────────────────────────────────────────────────
+/** The chart version in force on a day for a target (latest effectiveFrom ≤ day), or null. */
+export function chartOn(charts: ChartVersion[] | undefined, targetType: "item" | "recipe", targetId: string | undefined, day: string): ChartVersion | null {
+  if (!charts?.length || !targetId) return null;
+  let best: ChartVersion | null = null;
+  for (const c of charts) {
+    if (c.targetType !== targetType || c.targetId !== targetId || c.effectiveFrom > day) continue;
+    if (!best || c.effectiveFrom > best.effectiveFrom) best = c;
+  }
+  return best;
+}
+
+/** The band for a live weight; an animal with no known weight takes the first (lightest) band. */
+export function bandFor(chart: ChartVersion, kg: number): ChartBand | null {
+  const bands = [...chart.bands].sort((a, b) => a.minKg - b.minKg);
+  if (!(kg > 0)) return bands[0] ?? null;
+  return bands.find((b) => kg >= b.minKg && (b.maxKg == null || kg < b.maxKg)) ?? bands[bands.length - 1] ?? null;
+}
+
+/** Chart amount for one animal on a day: in the target's unit (per head) or kg (% of weight). */
+export function chartAmount(chart: ChartVersion, kg: number): { amount: number; inKg: boolean } | null {
+  const b = bandFor(chart, kg);
+  if (!b) return null;
+  return b.basis === "pct_bw" ? { amount: (kg * b.amount) / 100, inKg: true } : { amount: b.amount, inKg: false };
+}
+
 /** An animal's need on a day, in the ITEM's unit when the rule allows it, else a weight share. */
-export function need(a: Animal, day: string, rule: RuleType, ruleValue: number | null, line: Pick<PeriodLine, "unit" | "kgPerUnit" | "share">): { qty: number | null; share: number } {
+export function need(
+  a: Animal, day: string, rule: RuleType, ruleValue: number | null,
+  line: Pick<PeriodLine, "unit" | "kgPerUnit" | "share">,
+  chart?: { version: ChartVersion | null; targetType: "item" | "recipe" },
+): { qty: number | null; share: number } {
   const w = weightOn(a, day).kg;
+  if (rule === "chart") {
+    const c = chart?.version ? chartAmount(chart.version, w) : null;
+    if (!c) return { qty: null, share: w };
+    const unitKg = kgFactor(line.unit, line.kgPerUnit);
+    // a recipe chart is in kg of mix; an item chart per head is already in the item's unit
+    const inKg = c.inKg || chart!.targetType === "recipe";
+    const target = c.amount * line.share;
+    const qty = inKg ? (unitKg ? target / unitKg : null) : target;
+    return { qty, share: target };
+  }
   if (rule === "per_head" && ruleValue) return { qty: ruleValue * line.share, share: ruleValue * line.share };
   if (rule === "pct_live_weight" && ruleValue) {
     const kg = (w * ruleValue) / 100 * line.share;
@@ -155,6 +212,53 @@ export function need(a: Animal, day: string, rule: RuleType, ruleValue: number |
     return { qty: unitKg ? kg / unitKg : null, share: kg };
   }
   return { qty: null, share: w };
+}
+
+/**
+ * One line of a period on one day: each present animal's need (allocation weights) and the
+ * herd's quantity by the rule / chart in the item's unit (null when the rule cannot say).
+ */
+export function dayPlan(p: Period, l: PeriodLine, day: string, animals: Animal[], charts?: ChartVersion[]): { weights: Map<string, number>; ruleQty: number | null } {
+  const weights = new Map<string, number>();
+  let ruleQty = 0;
+  let complete = p.ruleType !== "weight_share";
+  const chart = p.ruleType === "chart" ? { version: chartOn(charts, p.targetType, p.targetId, day), targetType: p.targetType } : undefined;
+  for (const a of animals) {
+    if (!isPresent(a, day)) continue;
+    const n = need(a, day, p.ruleType, p.ruleValue, l, chart);
+    weights.set(a.id, n.share);
+    if (n.qty == null) complete = false; else ruleQty += n.qty;
+  }
+  return { weights, ruleQty: complete ? ruleQty : null };
+}
+
+/**
+ * Automatic daily consumption still to post: for every open period line, each completed day
+ * (after autoPostedThrough, up to the day before asOf) by the rule / chart, else by learned usage.
+ * Days nobody can quantify are skipped (the count at the end settles them).
+ */
+export function autoRowsDue(input: { asOf: string; periods: Period[]; animals: Animal[]; charts?: ChartVersion[] }): { rows: { lineId: string; date: string; qty: number }[]; periodIds: string[]; through: string } {
+  const through = new Date(Date.parse(`${input.asOf}T00:00:00Z`) - DAY).toISOString().slice(0, 10);
+  const learned = learnedDailyUsage(input.periods);
+  const rows: { lineId: string; date: string; qty: number }[] = [];
+  const periodIds: string[] = [];
+  for (const p of input.periods) {
+    if (p.status !== "open" || p.startDate > through) continue;
+    const from = p.autoPostedThrough && p.autoPostedThrough >= p.startDate
+      ? new Date(Date.parse(`${p.autoPostedThrough}T00:00:00Z`) + DAY).toISOString().slice(0, 10) : p.startDate;
+    if (from > through) continue;
+    periodIds.push(p.id);
+    for (const day of dayList(from, through)) {
+      for (const l of p.lines) {
+        if (!l.lineId || l.posted?.[day]) continue;
+        const plan = dayPlan(p, l, day, input.animals, input.charts);
+        const anyone = plan.weights.size > 0;
+        const qty = plan.ruleQty ?? (anyone ? learned[l.itemId] ?? null : null);
+        if (qty != null && qty > 0.00005) rows.push({ lineId: l.lineId, date: day, qty: Math.round(qty * 10000) / 10000 });
+      }
+    }
+  }
+  return { rows, periodIds, through };
 }
 
 // ── learned usage (from closed periods only; history is never changed) ───────
@@ -197,8 +301,9 @@ export function computeFeedSnapshot(input: {
   animals: Animal[];
   recorded: RecordedRow[];
   wac: Record<string, number | null>;
+  charts?: ChartVersion[];
 }): FeedSnapshot {
-  const { asOf, periods, animals, recorded, wac } = input;
+  const { asOf, periods, animals, recorded, wac, charts } = input;
   const perAnimal: Record<string, AnimalFeed> = Object.fromEntries(animals.map((a) => [a.id, blankAnimal()]));
   const byMonth: FeedSnapshot["byMonth"] = {};
   const byItem: FeedSnapshot["byItem"] = {};
@@ -236,45 +341,55 @@ export function computeFeedSnapshot(input: {
     const days = dayList(p.startDate, end);
     for (const l of p.lines) {
       // need of each present animal on each day (qty in item unit when the rule gives one)
-      const perDay = days.map((day) => {
-        const m = new Map<string, number>();
-        let ruleQty = 0;
-        let ruleComplete = p.ruleType !== "weight_share";
-        for (const a of animals) {
-          if (!isPresent(a, day)) continue;
-          const n = need(a, day, p.ruleType, p.ruleValue, l);
-          m.set(a.id, n.share);
-          if (n.qty == null) ruleComplete = false; else ruleQty += n.qty;
-        }
-        return { day, weights: m, ruleQty: ruleComplete ? ruleQty : null };
-      });
+      const perDay = days.map((day) => ({ day, ...dayPlan(p, l, day, animals, charts) }));
       const ruleTotal = perDay.every((d) => d.ruleQty != null) ? perDay.reduce((s, d) => s + (d.ruleQty ?? 0), 0) : null;
       const bucket = itemBucket(l);
 
       if (p.status === "open") {
-        // RUNNING ESTIMATE: rule quantity, else learned daily usage, else nothing
+        // Days already deducted automatically are on the books (ACTUAL until the count adjusts them);
+        // the days after the last automatic posting are a RUNNING ESTIMATE: rule / chart, else learned usage.
         const learned = learnedAll[l.itemId];
-        const basis: LineResult["estimateBasis"] = ruleTotal != null ? "rule" : learned ? "learned" : "none";
-        const totalQty = basis === "rule" ? ruleTotal! : basis === "learned" ? learned * days.length : null;
+        const posted = l.posted ?? {};
+        const postedThrough = p.autoPostedThrough ?? null;
         const cost = wac[l.itemId] ?? null;
-        const value = totalQty != null && cost != null ? totalQty * cost : null;
-        if (totalQty != null) {
-          const shareSum = perDay.reduce((s, d) => s + [...d.weights.values()].reduce((x, y) => x + y, 0), 0);
-          for (const d of perDay) {
-            const dayShare = basis === "rule" ? (d.ruleQty ?? 0) / (ruleTotal || 1) : ([...d.weights.values()].reduce((x, y) => x + y, 0) / (shareSum || 1));
-            const q = totalQty * dayShare;
-            const v = (value ?? 0) * dayShare;
-            spreadDay(d.day, q, v, d.weights, "estimated", l.itemId);
-            month(d.day).estimated += v;
+        let postedQty = 0, postedValue = 0, pendingQty = 0, pendingValue = 0, pendingKnown = true, anyPending = false;
+        let lastPosted: string | null = null;
+        let usedRule = false, usedLearned = false;
+        for (const d of perDay) {
+          const pr = posted[d.day];
+          if (pr) {
+            postedQty += pr.qty; postedValue += pr.value;
+            if (!lastPosted || d.day > lastPosted) lastPosted = d.day;
+            spreadDay(d.day, pr.qty, pr.value, d.weights, "actual", l.itemId, kgFactor(l.unit, l.kgPerUnit));
+            month(d.day).actual += pr.value;
+            continue;
           }
-          bucket.estimatedQty += totalQty;
-          bucket.estimatedValue += value ?? 0;
-          totalEstimated += value ?? 0;
+          if (postedThrough && d.day <= postedThrough) continue;     // settled at the count
+          anyPending = true;
+          const q = d.ruleQty ?? (d.weights.size > 0 && learned ? learned : null);
+          if (q == null) { pendingKnown = false; continue; }
+          if (d.ruleQty != null) usedRule = true; else usedLearned = true;
+          const v = cost != null ? q * cost : 0;
+          pendingQty += q; pendingValue += v;
+          spreadDay(d.day, q, v, d.weights, "estimated", l.itemId);
+          month(d.day).estimated += v;
         }
+        if (postedQty) { bucket.actualQty += postedQty; bucket.actualValue += postedValue; totalActual += postedValue; }
+        bucket.estimatedQty += pendingQty;
+        bucket.estimatedValue += pendingValue;
+        totalEstimated += pendingValue;
+        const basis: LineResult["estimateBasis"] = usedRule || (ruleTotal != null && !usedLearned) ? "rule" : usedLearned || learned ? "learned" : "none";
+        const nothing = postedQty === 0 && (!anyPending || !pendingKnown) && pendingQty === 0;
+        const qty = nothing ? null : postedQty + pendingQty;
+        const value = qty == null ? null : postedValue + (cost != null ? pendingValue : 0);
+        // today's daily figure (current herd and chart) is the best forecast of what comes next
+        const todayPlan = perDay[perDay.length - 1];
+        const dailyQty = todayPlan?.ruleQty ?? (learned || (qty != null ? qty / days.length : null));
         lines.push({
           periodId: p.id, itemId: l.itemId, itemName: l.itemName, unit: l.unit, status: "estimated", days: days.length,
-          qty: totalQty, value, dailyQty: totalQty != null ? totalQty / days.length : null,
+          qty, value: cost == null && postedQty === 0 ? null : value, dailyQty,
           expectedQty: null, varianceQty: null, variancePct: null, gapQty: 0, estimateBasis: basis,
+          postedQty, postedValue, pendingQty, lastPosted,
         });
         continue;
       }

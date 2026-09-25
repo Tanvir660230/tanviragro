@@ -1035,6 +1035,26 @@ export type Database = {
         Args: { p_period_id: string; p_reason: string };
         Returns: undefined;
       };
+      checkpoint_feed_usage_period: {
+        Args: { p_period_id: string; p_date: string; p_closing: { item_id: string; qty: number }[] };
+        Returns: string;
+      };
+      set_feed_usage_rule: {
+        Args: { p_period_id: string; p_rule_type: string; p_rule_value?: number | null };
+        Returns: undefined;
+      };
+      post_feed_auto_usage: {
+        Args: { p_business_id: string; p_rows: { line_id: string; date: string; qty: number }[]; p_period_ids: string[]; p_through: string };
+        Returns: number;
+      };
+      save_feed_chart: {
+        Args: { p_business_id: string; p_target_type: string; p_target_id: string; p_effective_from: string; p_bands: { min_kg: number; max_kg: number | null; amount: number; basis: string }[]; p_notes?: string | null };
+        Returns: string;
+      };
+      delete_feed_chart: {
+        Args: { p_chart_id: string };
+        Returns: undefined;
+      };
       record_herd_feeding: {
         Args: { p_business_id: string; p_date: string; p_lines: { item_id: string; qty: number }[]; p_note?: string | null };
         Returns: number;

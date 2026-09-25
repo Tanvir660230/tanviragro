@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/shared/Breadcrumb";
 import { RealtimeRefresher } from "@/components/shared/RealtimeRefresher";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { AppShell } from "@/components/layout/AppShell";
+import { FeedAutoSync } from "@/components/shared/FeedAutoSync";
 
 export const metadata: Metadata = {
   title: {
@@ -69,6 +70,11 @@ export default function DashboardLayout({
         </Suspense>
         {children}
       </div>
+
+      {/* Feed in use: post the automatic daily deduction when a day is due */}
+      <Suspense fallback={null}>
+        <FeedAutoSync />
+      </Suspense>
 
       {/* Realtime auto-refresher when Supabase DB changes */}
       <RealtimeRefresher />
