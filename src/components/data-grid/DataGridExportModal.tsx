@@ -8,6 +8,7 @@ import { Download } from "lucide-react";
 import { useL } from "@/i18n/text";
 import { exportToCsv, exportToExcel, exportToPdf, printDataGrid } from "./export-utils";
 import type { GridColumn } from "./types";
+import { todayDhaka } from "@/lib/dates";
 
 export interface DataGridExportModalProps<T> {
   open: boolean;
@@ -50,7 +51,7 @@ export function DataGridExportModal<T extends Record<string, any>>({
         ? columns.filter((c) => !c.hidden && c.id !== "__selection__" && c.id !== "__actions__")
         : columns.filter((c) => c.id !== "__selection__" && c.id !== "__actions__");
 
-      const ts = new Date().toISOString().slice(0, 10);
+      const ts = todayDhaka();
       const safeTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "-");
       const filename = `${safeTitle}-${ts}`;
 

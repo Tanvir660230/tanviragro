@@ -27,6 +27,7 @@ import { createCostEntry, type CostFormState } from "@/app/dashboard/(app)/finan
 import { useL } from "@/i18n/text";
 import { costCategoryLabel } from "@/lib/expenses/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { todayDhaka } from "@/lib/dates";
 
 // ── Category lists ─────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
   const L = useL();
   const { locale } = useTranslation();
   const router   = useRouter();
-  const today    = new Date().toISOString().split("T")[0];
+  const today    = todayDhaka();
   const [mode, setMode]         = useState<EntryMode | "">("");
   const [category, setCategory] = useState("");
 

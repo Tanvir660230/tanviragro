@@ -1,12 +1,8 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
-import withSerwistInit from "@serwist/next";
-
-const withSerwist = withSerwistInit({
-  swSrc: "src/app/sw.ts",
-  swDest: "public/sw.js",
-  disable: process.env.NODE_ENV === "development",
-});
+// The service worker is public/sw.js (web push only, written by hand). The Serwist wrapper that
+// used to be here never ran under Turbopack (it only printed a warning on every build), and when it
+// did run it would have overwritten that push worker.
 
 const nextConfig: NextConfig = {
   compress: true,
@@ -114,7 +110,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(withSerwist(nextConfig), {
+export default withSentryConfig(nextConfig, {
   // Suppress Sentry CLI output during build
   silent: !process.env.CI,
   // Upload source maps only when SENTRY_AUTH_TOKEN is set

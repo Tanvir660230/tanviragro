@@ -4,6 +4,7 @@ import { revalidatePath , revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { isTreatmentDuplicate, type TreatmentFee } from "@/lib/expenses/treatment-duplicate";
 
 type TypedClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -22,8 +23,16 @@ export async function restoreCostEntry(id: string): Promise<{ error?: string }> 
   const bizId = await getOwnerBizId(supabase, user.id);
   if (!bizId) return { error: "Business not found" };
 
-  const { data: entry } = await supabase.from("cost_entries").select("business_id").eq("id", id).maybeSingle();
+  const { data: entry } = await supabase.from("cost_entries").select("business_id, category, amount, recorded_at, cattle_id, description").eq("id", id).maybeSingle();
   if (!entry || entry.business_id !== bizId) return { error: "Unauthorized" };
+
+  // a vet fee saved twice by the old form: its money is already on the treatment row
+  if (entry.category === "Medical/Vet Fee") {
+    const { data: rows } = await supabase.from("cattle_treatments")
+      .select("cattle_id, vet_fee, additional_medical_cost, treated_at, cattle!inner(business_id, tag_id)").eq("cattle.business_id", bizId);
+    const treatments = ((rows ?? []) as unknown as (TreatmentFee & { cattle: { tag_id: string | null } | null })[]).map((t) => ({ ...t, tag: t.cattle?.tag_id ?? null }));
+    if (isTreatmentDuplicate(entry, treatments)) return { error: "This vet fee is already counted on its treatment record — restoring it would count the money twice." };
+  }
 
   const { error } = await supabase.from("cost_entries").update({ deleted_at: null }).eq("id", id);
   if (error) return { error: "Failed to restore" };

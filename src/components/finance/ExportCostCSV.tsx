@@ -4,6 +4,7 @@ import { Download } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import type { CostEntry } from "./CostList";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 export function ExportCostCSV({ entries }: { entries: CostEntry[] }) {
   const L = useL();
@@ -23,7 +24,7 @@ export function ExportCostCSV({ entries }: { entries: CostEntry[] }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cost-entries-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `cost-entries-${todayDhaka()}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

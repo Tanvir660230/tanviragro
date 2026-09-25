@@ -33,6 +33,7 @@ import {
   type BatchImportSummary,
 } from "@/lib/livestock/bulk-import";
 import { bulkImportLivestockAction } from "@/app/dashboard/(app)/cattle/bulk-actions";
+import { todayDhaka } from "@/lib/dates";
 
 export interface BulkLivestockImportDialogProps {
   open: boolean;
@@ -67,7 +68,7 @@ export function BulkLivestockImportDialog({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `livestock_import_template_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `livestock_import_template_${todayDhaka()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

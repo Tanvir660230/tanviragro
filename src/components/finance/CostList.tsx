@@ -34,6 +34,16 @@ export interface InventoryPurchaseEntry {
   notes: string | null;
 }
 
+/** A vet fee recorded on a treatment (the only record of that money since C14). */
+export interface TreatmentFeeEntry {
+  id: string;
+  date: string;
+  tag: string | null;
+  cattle_id: string;
+  diagnosis: string | null;
+  amount: number;
+}
+
 const INV_CATEGORY_STYLE: Record<string, string> = {
   feed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
   medicine: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
@@ -218,7 +228,50 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
   );
 }
 
-interface Props { entries: CostEntry[]; inventoryPurchases?: InventoryPurchaseEntry[]; }
+interface Props { entries: CostEntry[]; inventoryPurchases?: InventoryPurchaseEntry[]; treatmentFees?: TreatmentFeeEntry[]; }
+
+function TreatmentFeesSection({ fees }: { fees: TreatmentFeeEntry[] }) {
+  const L = useL();
+  const [showAll, setShowAll] = useState(false);
+  if (fees.length === 0) return null;
+  const VISIBLE = 5;
+  const total = fees.reduce((s, f) => s + f.amount, 0);
+  const visible = showAll ? fees : fees.slice(0, VISIBLE);
+  return (
+    <div className="rounded-xl shadow-card border border-rose-500/15 bg-gradient-to-br from-rose-500/[0.05] to-transparent overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">{L("ডাক্তার ও চিকিৎসার খরচ", "Vet & treatment fees")}</p>
+          <p className="text-xs text-muted-foreground">{L("চিকিৎসার রেকর্ড থেকে — নগদ ও খরচে একবারই গোনা হয়", "from the treatment records — counted once in cash and costs")}</p>
+        </div>
+        <span className="text-sm font-bold tabular-nums text-rose-700 dark:text-rose-300">{fmt(total)}</span>
+      </div>
+      <ul className="divide-y divide-rose-100 dark:divide-rose-900/40">
+        {visible.map((f) => (
+          <li key={f.id} className="flex items-start justify-between gap-3 px-5 py-2.5 text-sm">
+            <div className="min-w-0">
+              <Link href={`/dashboard/cattle/${f.cattle_id}`} className="font-medium hover:underline">#{f.tag ?? "?"}</Link>
+              {f.diagnosis && <span className="text-muted-foreground"> · {f.diagnosis}</span>}
+              <p className="text-xs text-muted-foreground">{formatDate(f.date)}</p>
+            </div>
+            <span className="shrink-0 font-semibold tabular-nums">{fmt(f.amount)}</span>
+          </li>
+        ))}
+      </ul>
+      {fees.length > VISIBLE && (
+        <button type="button" onClick={() => setShowAll((v) => !v)}
+          className="flex w-full items-center justify-center gap-1.5 border-t border-rose-200 dark:border-rose-800/60 py-2 text-xs font-medium text-rose-700 dark:text-rose-400 hover:bg-rose-100/40 dark:hover:bg-rose-950/30">
+          {showAll ? <><ChevronUp className="h-3.5 w-3.5" /> {L("কম দেখান", "Show less")}</> : <><ChevronDown className="h-3.5 w-3.5" /> {L(`সব ${fees.length}টি দেখান`, `Show all ${fees.length}`)}</>}
+        </button>
+      )}
+      <div className="border-t border-rose-200 dark:border-rose-800/60 px-4 py-2 text-center">
+        <Link href="/dashboard/health/treatments" className="text-xs font-medium text-rose-700 dark:text-rose-400 hover:underline">
+          {L("চিকিৎসার পাতায় বদলান →", "Edit on the Treatments page →")}
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 // ── Asset Register section ─────────────────────────────────────────
 
@@ -330,7 +383,7 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
 
 // ── Main CostList ──────────────────────────────────────────────────
 
-export function CostList({ entries, inventoryPurchases = [] }: Props) {
+export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] }: Props) {
   const L = useL();
   const { locale } = useTranslation();
   const expenses = useMemo(() => entries.filter((e) => (e.entry_class ?? "expense") === "expense"), [entries]);
@@ -367,13 +420,22 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
     return list;
   }, [inventoryPurchases, dateFrom, dateTo]);
 
+  const filteredTreatmentFees = useMemo(() => {
+    let list = treatmentFees;
+    if (dateFrom) list = list.filter((f) => f.date >= dateFrom);
+    if (dateTo)   list = list.filter((f) => f.date <= dateTo);
+    return list;
+  }, [treatmentFees, dateFrom, dateTo]);
+
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(0); }, [filter, personFilter, dateFrom, dateTo]);
 
   const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   const totalFixed    = expenses.filter((e) => e.type === "fixed").reduce((s, e) => s + e.amount, 0);
-  const totalVariable = expenses.filter((e) => e.type === "variable").reduce((s, e) => s + e.amount, 0);
+  // vet fees are variable costs kept on the treatment row; they belong in the totals shown here
+  const totalVetFees  = filteredTreatmentFees.reduce((s, f) => s + f.amount, 0);
+  const totalVariable = expenses.filter((e) => e.type === "variable").reduce((s, e) => s + e.amount, 0) + totalVetFees;
   const totalAssets   = assets.reduce((s, e) => s + e.amount, 0);
 
   return (
@@ -399,6 +461,9 @@ export function CostList({ entries, inventoryPurchases = [] }: Props) {
 
       {/* Feed & inventory purchases */}
       <InventoryPurchasesSection purchases={filteredInventoryPurchases} />
+
+      {/* Vet fees (treatment records) */}
+      <TreatmentFeesSection fees={filteredTreatmentFees} />
 
       {/* Date range filter */}
       <DateRangeFilter

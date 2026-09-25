@@ -20,6 +20,7 @@ import {
 } from "@/app/dashboard/(app)/cattle/[id]/actions";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
+import { todayDhaka } from "@/lib/dates";
 
 function SaleForm({
   cattleId,
@@ -34,7 +35,7 @@ function SaleForm({
 }) {
   const router = useRouter();
   const { t } = useTranslation();
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
   const [state, formAction, isPending] = useActionState<
     SaleFormState,
     FormData

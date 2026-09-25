@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { startOfMonth, todayDhaka } from "@/lib/dates";
 
 type Preset = "this-month" | "last-month" | "last-3m" | "this-year" | "all";
 
@@ -46,9 +47,9 @@ export function FinanceDateFilter() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
-  const today          = new Date();
-  const todayStr       = today.toISOString().split("T")[0];
-  const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split("T")[0];
+  // Dhaka calendar (the UTC date is yesterday before 06:00; a local month start shifted a day back)
+  const todayStr       = todayDhaka();
+  const thisMonthStart = startOfMonth(todayStr);
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">

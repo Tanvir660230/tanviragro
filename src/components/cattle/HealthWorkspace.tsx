@@ -59,6 +59,7 @@ import type {
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { DataPagination } from "@/components/ui/data-pagination";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 export interface MedicineItem {
   id: string;
@@ -125,7 +126,7 @@ export function HealthWorkspace({
   const L = useL();
   const { t } = useTranslation();
   const [isPending, startTransition] = useTransition();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
 
   const [activeTab, setActiveTab] = useState<"clinical" | "protocols">("clinical");
   const [visitOpen, setVisitOpen] = useState(false);

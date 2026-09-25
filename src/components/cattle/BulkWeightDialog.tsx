@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ClipboardList, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { bulkCreateWeightLogs, type BulkWeightEntry } from "@/app/dashboard/(app)/cattle/actions";
+import { todayDhaka } from "@/lib/dates";
 
 interface CattleOption {
   id: string;
@@ -37,7 +38,7 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
   const open    = externalOpen    ?? internalOpen;
   const setOpen = externalOnChange ?? setInternalOpen;
   const [isPending, startTransition] = useTransition();
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
   const [date, setDate] = useState(today);
   const [weights, setWeights] = useState<Record<string, string>>({});
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -122,7 +123,7 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
             </label>
             <Input
               type="date"
-              max={new Date().toISOString().slice(0, 10)}
+              max={todayDhaka()}
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="w-44"

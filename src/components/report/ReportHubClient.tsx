@@ -19,6 +19,7 @@ import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
 
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 export interface InventoryItemStock {
   name: string;
   category: string;
@@ -113,7 +114,7 @@ export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `farm_report_${bizName.toLowerCase().replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `farm_report_${bizName.toLowerCase().replace(/\s+/g, "_")}_${todayDhaka()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

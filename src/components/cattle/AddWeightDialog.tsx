@@ -23,6 +23,7 @@ import {
 } from "@/app/dashboard/(app)/cattle/[id]/actions";
 import { enqueue } from "@/lib/offlineQueue";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 // Formula: Weight (kg) = Girth² × Length / 10840  (all in cm)
 function girthLengthToKg(girthCm: number, lengthCm: number): number {
@@ -69,7 +70,7 @@ function WeightForm({
     return g > 0 && l > 0 ? girthLengthToKg(g, l) : null;
   }, [girth, length]);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
 
   useEffect(() => {
     if (state?.success) {

@@ -5,6 +5,7 @@ import { Receipt, ShoppingCart, Stethoscope, Tag } from "lucide-react";
 import type { ConsumptionRow } from "@/app/dashboard/(app)/cattle/[id]/page";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 interface TreatmentRow {
   vet_fee: number | null;
@@ -116,7 +117,7 @@ export function CostTimelineCard({
   // If costed logs exist, the allocated cost would double-count the same feed.
   if (allocatedFeedCost > 0 && costedConsumptions.length === 0) {
     feedEvents.push({
-      sortDate: new Date().toISOString().slice(0, 10),
+      sortDate: todayDhaka(),
       displayDate: t.cattle_details.smart.to_date_label,
       label: t.cattle_details.smart.auto_feed_label,
       sublabel: `${allocatedConcentrateKg.toFixed(1)} kg Dry, ${allocatedRoughageKg.toFixed(1)} kg ${t.cattle_details.feed_card.roughage}`,

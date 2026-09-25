@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { cn } from "@/lib/utils";
+import { todayDhaka } from "@/lib/dates";
 
 export type LoanRow = {
   id: string;
@@ -32,7 +33,7 @@ function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return todayDhaka(); }
 
 function daysUntil(dateStr: string, now: number) {
   return Math.ceil((new Date(dateStr + "T00:00:00").getTime() - now) / 86400000);

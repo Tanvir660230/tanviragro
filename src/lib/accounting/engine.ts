@@ -9,10 +9,12 @@ import { getBusinessContext } from "@/lib/context/business-context";
 import { requireAnyPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
 import { summarizeInventoryLedger, unallocatedInventoryCost } from "@/lib/accounting/inventory-ledger";
+import { buildCashLedger, cashNet, type CashRow } from "@/lib/accounting/cash-ledger";
 import { accountForCostEntry } from "@/lib/expenses/categories";
 import type { ExpenseKind } from "@/types/database";
 
  
+import { todayDhaka } from "@/lib/dates";
 type Client = SupabaseClient<any>;
 
 // ── Public types ──────────────────────────────────────────────────
@@ -118,6 +120,10 @@ export interface AccountingData {
   incomeStatement: IncomeStatement;
   cashFlow: CashFlowStatement;
   fixedAssets: FixedAssetRow[];
+  /** every cash movement, dated (lib/accounting/cash-ledger.ts): cashAndBank = openingCash + Σ rows */
+  cashLedger: CashRow[];
+  openingCash: number;
+  businessName: string;
   asOf: string;
 }
 
@@ -171,30 +177,31 @@ export const getCachedDbData = async (businessId: string) => {
       invTxRes, partnerTxRes, fixedAssetRes, liabRes, loansRes, treatmentsRes,
       rpcFeedRes,
     ] = await Promise.all([
-      supabaseAdmin.from("cattle").select("id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("sales").select("id, cattle_id, sale_price_total, sold_at, cattle!inner(business_id)").eq("cattle.business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("cost_entries").select("id, category, amount, type, recorded_at, entry_class, cattle_id, expense_categories(kind)").eq("business_id", businessId).is("deleted_at", null),
+      supabaseAdmin.from("cattle").select("id, tag_id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
+      // money tables are read page by page too: a plain select stops silently at row 1000
+      selectAll(() => supabaseAdmin.from("sales").select("id, cattle_id, sale_price_total, sold_at, buyer_name, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
+      selectAll(() => supabaseAdmin.from("cost_entries").select("id, category, amount, type, recorded_at, description, entry_class, cattle_id, expense_categories(kind)").eq("business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
       // every ledger row (the API returns at most 1000 per request)
-      selectAll(() => supabaseAdmin.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category)").eq("inventory_items.business_id", businessId).order("id")).then((data) => ({ data })),
-      supabaseAdmin.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id)").eq("partners.business_id", businessId).is("deleted_at", null),
+      selectAll(() => supabaseAdmin.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category, name)").eq("inventory_items.business_id", businessId).order("id")).then((data) => ({ data })),
+      selectAll(() => supabaseAdmin.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id, name)").eq("partners.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
       supabaseAdmin.from("fixed_assets").select("*").eq("business_id", businessId),
-      supabaseAdmin.from("liabilities").select("id, outstanding, settled_at").eq("business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("loans").select("id, principal_amount, interest_rate_pct, loan_date, status, loan_payments(amount, paid_at)").eq("business_id", businessId).is("deleted_at", null),
+      supabaseAdmin.from("liabilities").select("id, name, lender, outstanding, recorded_at, settled_at, notes").eq("business_id", businessId).is("deleted_at", null),
+      supabaseAdmin.from("loans").select("id, lender_name, principal_amount, interest_rate_pct, loan_date, status, loan_payments(id, amount, paid_at)").eq("business_id", businessId).is("deleted_at", null),
       // Vet fees from medical treatments — these are capitalized costs per cattle,
       // parallel to cost_entries with type="variable" and cattle_id. Without this,
       // all veterinary fees logged via the treatment system are invisible in the P&L.
-      supabaseAdmin.from("cattle_treatments").select("cattle_id, vet_fee, additional_medical_cost, treated_at, cattle!inner(business_id)").eq("cattle.business_id", businessId),
+      selectAll(() => supabaseAdmin.from("cattle_treatments").select("id, cattle_id, vet_fee, additional_medical_cost, treated_at, diagnosis, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId).order("id")).then((data) => ({ data })),
       supabaseAdmin.rpc("get_cattle_consumptions", { p_business_id: businessId }),
     ]);
 
-    type CattleRow = { id: string; purchase_price: number; status: string; purchase_date: string; updated_at: string | null; initial_weight_kg: number | null };
-    type SaleRow = { id: string; cattle_id: string; sale_price_total: number; sold_at: string };
-    type CostRow = { id: string; category: string; amount: number; type: string; recorded_at: string; entry_class: string | null; cattle_id: string | null; expense_categories?: { kind: ExpenseKind } | null };
-    type InvTxRow = { id: string; type: string; movement_type: string | null; qty: number; unit_cost: number | null; recorded_at: string; cattle_id: string | null; inventory_items?: { category?: string } | null };
-    type PartnerTxRow = { id: string; amount: number; type: string; recorded_at: string };
-    type TreatmentRow = { cattle_id: string; vet_fee: number | null; additional_medical_cost: number | null; treated_at: string };
-    type LiabilityRow = { id: string; outstanding: number; settled_at: string | null };
-    type LoanEngineRow = { id: string; principal_amount: number; interest_rate_pct: number; loan_date: string; status: string; loan_payments: { amount: number; paid_at: string }[] | null };
+    type CattleRow = { id: string; tag_id: string | null; purchase_price: number; status: string; purchase_date: string; updated_at: string | null; initial_weight_kg: number | null };
+    type SaleRow = { id: string; cattle_id: string; sale_price_total: number; sold_at: string; buyer_name: string | null; cattle?: { tag_id?: string | null } | null };
+    type CostRow = { id: string; category: string; amount: number; type: string; recorded_at: string; description: string | null; entry_class: string | null; cattle_id: string | null; expense_categories?: { kind: ExpenseKind } | null };
+    type InvTxRow = { id: string; type: string; movement_type: string | null; qty: number; unit_cost: number | null; recorded_at: string; cattle_id: string | null; inventory_items?: { category?: string; name?: string } | null };
+    type PartnerTxRow = { id: string; amount: number; type: string; recorded_at: string; partners?: { name?: string | null } | null };
+    type TreatmentRow = { id: string; cattle_id: string; vet_fee: number | null; additional_medical_cost: number | null; treated_at: string; diagnosis: string | null; cattle?: { tag_id?: string | null } | null };
+    type LiabilityRow = { id: string; name: string | null; lender: string | null; outstanding: number; recorded_at: string | null; settled_at: string | null; notes: string | null };
+    type LoanEngineRow = { id: string; lender_name: string | null; principal_amount: number; interest_rate_pct: number; loan_date: string; status: string; loan_payments: { id: string; amount: number; paid_at: string }[] | null };
     type FixedAssetDbRow = {
       id: string; name: string; category: string; description: string | null;
       purchase_date: string; purchase_cost: number; salvage_value: number;
@@ -237,7 +244,7 @@ export async function getAccountingData(
   // The cached fetch below uses the service-role key (bypasses RLS), so authorization
   // must happen here: tenant + role come from the DB via getBusinessContext().
   const ctx = await getBusinessContext(supabase);
-  requireAnyPermission(ctx, [PERMISSIONS.ACCOUNTING_VIEW, PERMISSIONS.ASSET_VIEW]);
+  requireAnyPermission(ctx, [PERMISSIONS.ACCOUNTING_VIEW, PERMISSIONS.ASSET_VIEW, PERMISSIONS.FINANCE_VIEW]);
   const businessId = ctx.businessId;
   const openingCash = Number(ctx.business.opening_cash_balance ?? 0);
 
@@ -410,7 +417,7 @@ export async function getAccountingData(
   // For paid loans, interest stops accruing on the date the last payment was made —
   // interest CANNOT accrue past the loan payoff date, so cap interestTo at that date.
   // For active loans, accrue through today.
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayDhaka();
   const allTimeInterestExpense = loansData.reduce((s, l) => {
     let interestTo = todayStr;
     if (l.status === "paid" && l.loan_payments && l.loan_payments.length > 0) {
@@ -429,10 +436,12 @@ export async function getAccountingData(
   const liabilitiesOutstanding = liabData
     .filter((l) => !l.settled_at)
     .reduce((s, l) => s + Number(l.outstanding), 0);
+  // principal received − payments made, for every loan: the same cash the cash ledger moves
+  // (a paid loan whose payments included interest nets below 0; the accrued interest below
+  // brings the liability back, so Assets = Liabilities + Equity still holds)
   const loanNetOutstanding = loansData.reduce((s, l) => {
-    if (l.status === "paid") return s;
     const paid = (l.loan_payments ?? []).reduce((ps, p) => ps + Number(p.amount), 0);
-    return s + Math.max(0, Number(l.principal_amount) - paid);
+    return s + Number(l.principal_amount) - paid;
   }, 0);
   const allTimeFinancingCash = liabilitiesOutstanding + loanNetOutstanding;
 
@@ -441,24 +450,22 @@ export async function getAccountingData(
   // both sides of Assets = Liabilities + Equity move by the same amount.
   const totalLiabilities = allTimeFinancingCash + allTimeInterestExpense;
 
-  // All-time cash position (for balance sheet cashAndBank).
-  // Operating: sales - all cattle purchases - all op costs - all inv purchases
-  // Investing: -(all fixed asset purchases)
-  // Financing: all partner investments - all partner withdrawals
+  // All-time cash position: ONE dated list of every cash movement (lib/accounting/cash-ledger.ts).
+  // The cash statement shows these same rows, so its closing balance is this figure.
   const allTimeSalesRevenue = sales.reduce((s, x) => s + Number(x.sale_price_total), 0);
   const allTimeTotalOpCosts = allExpenseCosts.reduce((s, c) => s + Number(c.amount), 0);
-  // allTimeFinancingCash = cash received from all loans net of repayments (cash basis).
-  // allTimeInterestExpense is accrued but not yet cash-paid — excluded from cash flow.
-  // Capitalized cattle costs (vet fees etc. tied to specific cattle) are real cash outflows
-  // excluded from allTimeTotalOpCosts. Subtract them from cashAndBank to keep it accurate.
-  // We ONLY subtract the cash portions (allCapitalizedCattleCosts), NOT feedCostByCattle!
-  // Feed cash outflow was already captured in allTimePurchaseValue.
-  const capitalizedCashOutflow = allCapitalizedCattleCosts.reduce((s, c) => s + Number(c.amount), 0);
-  const allTimeNetCashFlow =
-    (allTimeSalesRevenue - allCattleCost - allTimeTotalOpCosts - allTimePurchaseValue - capitalizedCashOutflow)
-    + (-(unlinkedFixedAssetCash + costEntryAssetTotal))
-    + (allPartnerInvestments - allPartnerWithdrawals)
-    + allTimeFinancingCash;
+  const cashLedger = buildCashLedger({
+    partnerTx: partnerTx.map((t) => ({ ...t, partner_name: t.partners?.name ?? null })),
+    sales: sales.map((x) => ({ ...x, tag: x.cattle?.tag_id ?? null })),
+    cattle,
+    costs,
+    treatments: treatments.map((t) => ({ ...t, tag: t.cattle?.tag_id ?? null })),
+    invTx: invTx.map((t) => ({ ...t, item_name: t.inventory_items?.name ?? null })),
+    fixedAssets: fixedAssetDb,
+    liabilities: liabData,
+    loans: loansData,
+  });
+  const allTimeNetCashFlow = cashNet(cashLedger);
 
   // Retained earnings = cumulative net income minus profit distributions paid to partners.
   // Uses totalAccumDep (all-time accumulated) and allTimeInterestExpense for correctness.
@@ -725,8 +732,8 @@ export async function getAccountingData(
   cr("3100", openingCash);
 
   // Loan proceeds: DR Cash, CR Liabilities (cash outstanding from both liability tables)
-  dr("1100", allTimeFinancingCash);
-  cr("2100", allTimeFinancingCash);
+  if (allTimeFinancingCash >= 0) { dr("1100", allTimeFinancingCash); cr("2100", allTimeFinancingCash); }
+  else { dr("2100", -allTimeFinancingCash); cr("1100", -allTimeFinancingCash); }   // repaid more than received (interest)
 
   // Partner investments: DR Cash, CR Partner Capital
   dr("1100", allPartnerInvestments);
@@ -748,10 +755,13 @@ export async function getAccountingData(
   dr("5100", allTimeCogs);
   cr("1400", allTimeCogs);
 
-  // Capitalized cattle costs: DR Livestock, CR Cash
-  const allTimeCapitalizedCosts = capitalizedActiveCosts + capitalizedSoldCosts + capitalizedDeadCosts;
-  dr("1400", allTimeCapitalizedCosts);
-  cr("1100", allTimeCapitalizedCosts);
+  // Capitalized cattle costs paid in cash (vet fees, costs tied to an animal): DR Livestock, CR Cash.
+  // Feed eaten by an animal is NOT cash here — it was paid when bought and moves from inventory
+  // below; it used to be credited to cash as well, so the trial balance showed less cash than
+  // the balance sheet.
+  const allTimeCapitalizedCash = allCapitalizedCattleCosts.reduce((s, c) => s + Number(c.amount), 0);
+  dr("1400", allTimeCapitalizedCash);
+  cr("1100", allTimeCapitalizedCash);
 
   // Inventory purchases (supplier invoices only): DR Inventory, CR Cash
   dr("1300", allTimePurchaseValue);
@@ -835,6 +845,9 @@ export async function getAccountingData(
     incomeStatement,
     cashFlow,
     fixedAssets,
+    cashLedger,
+    openingCash,
+    businessName: String(ctx.business.name ?? ""),
     asOf: new Date().toISOString(),
   };
 }

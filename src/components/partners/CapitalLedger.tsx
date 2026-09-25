@@ -11,6 +11,7 @@ import type { CapitalTxn } from "./capital-types";
 import { useL } from "@/i18n/text";
 import { partnerTxnLabel } from "@/lib/partners/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { todayDhaka } from "@/lib/dates";
 
 export type { CapitalTxn };
 
@@ -72,7 +73,7 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `capital_ledger_${new Date().toISOString().slice(0, 10)}.csv`
+      `capital_ledger_${todayDhaka()}.csv`
     );
     document.body.appendChild(link);
     link.click();

@@ -1,3 +1,4 @@
+import { todayDhaka } from "@/lib/dates";
 /**
  * Enterprise Livestock Bulk Import Engine
  */
@@ -200,7 +201,7 @@ export function validateLivestockRow(
   }
 
   const breed = (raw.breed || defaultOptions?.defaultBreed || "Local").trim();
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
   let purchaseDate = (raw.purchaseDate || defaultOptions?.defaultPurchaseDate || today).trim();
   if (purchaseDate && !/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate)) {
     const match = purchaseDate.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);

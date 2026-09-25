@@ -11,6 +11,7 @@ import type {
   LivestockPermissionRules,
   LifecycleTransitionRule,
 } from "./types";
+import { todayDhaka } from "@/lib/dates";
 
 /** Allowed livestock lifecycle status transitions based on biological and ERP constraints */
 export const VALID_STATUS_TRANSITIONS: Record<CattleStatus, CattleStatus[]> = {
@@ -276,7 +277,7 @@ export class LifecycleEngine {
       throw new InvalidStatusTransitionError(status, "sold");
     }
     if (withdrawalUntil) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayDhaka();
       if (withdrawalUntil >= today) {
         throw new WithdrawalPeriodActiveError(tagId, withdrawalUntil);
       }
@@ -319,7 +320,7 @@ export class LifecycleEngine {
     purchaseDate?: string | null,
     eventDate?: string | null
   ): void {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
 
     if (dob && dob > today) {
       throw new LifecycleDateSanityError(`Date of birth (${dob}) cannot be in the future.`);

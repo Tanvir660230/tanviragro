@@ -6,6 +6,7 @@ import { addDays, startOfMonth, todayDhaka } from "@/lib/dates";
 import { nextEidDate } from "@/lib/home/eid";
 import { buildHomeModel, type HomeInput, type HomeModel } from "@/lib/home/home-model";
 import type { FeedData } from "@/lib/feed/feed-data";
+import { AuthError, ForbiddenError } from "@/lib/errors/app-error";
 
 export type HomeInputs = { input: HomeInput; feed: FeedData; directCostByCattle: Record<string, number> };
 
@@ -57,7 +58,11 @@ export async function loadHomeInputs(supabase: SupabaseClient<any>, businessId: 
     const [all, month] = await Promise.all([getAccountingData(supabase), getAccountingData(supabase, startOfMonth(today), today)]);
     cash = all.balanceSheet.cashAndBank;
     monthOperatingExpenses = capitalSummary(month).operatingExpenses;
-  } catch { /* no accounting access */ }
+  } catch (e) {
+    // no accounting access → money is not shown; any other failure is a bug, so it is logged
+    // (it used to be swallowed, and the cash tile just showed "—" with no trace)
+    if (!(e instanceof ForbiddenError || e instanceof AuthError)) console.error("home: accounting engine failed", e);
+  }
 
   const price = (priceRes.data as { price_per_kg: number | string } | null)?.price_per_kg;
 

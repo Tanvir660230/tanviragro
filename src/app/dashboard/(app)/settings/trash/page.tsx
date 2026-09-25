@@ -16,6 +16,8 @@ import { PERMISSIONS } from "@/constants/roles";
 import { getL } from "@/i18n/server-text";
 import { costCategoryLabel, costTypeLabel } from "@/lib/expenses/labels";
 import { Tr } from "@/i18n/Tr";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
+import { isTreatmentDuplicate, type TreatmentFee } from "@/lib/expenses/treatment-duplicate";
 
 export const metadata: Metadata = { title: "ট্র্যাশ" };
 
@@ -27,11 +29,12 @@ export default async function TrashBinPage() {
   const locale = (cookieStore.get("NEXT_LOCALE")?.value === "bn" ? "bn" : "en");
   const t = await getDictionary(locale as "en" | "bn");
 
-  const [{ data: deletedCosts }, { data: deletedItems }, { data: deletedLogs }] =
+  const businessId = (await getCachedBusinessId()) ?? "";
+  const [{ data: deletedCosts }, { data: deletedItems }, { data: deletedLogs }, { data: treatmentRows }] =
     await Promise.all([
       supabase
         .from("cost_entries")
-        .select("id, type, category, amount, recorded_at, description, deleted_at")
+        .select("id, type, category, amount, recorded_at, description, cattle_id, deleted_at")
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
         .limit(100),
@@ -47,7 +50,14 @@ export default async function TrashBinPage() {
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
         .limit(100),
+      // to recognise the vet fees that were saved twice (their money is on these rows)
+      supabase
+        .from("cattle_treatments")
+        .select("cattle_id, vet_fee, additional_medical_cost, treated_at, cattle!inner(business_id, tag_id)")
+        .eq("cattle.business_id", businessId),
     ]);
+  const treatments: TreatmentFee[] = ((treatmentRows ?? []) as unknown as (TreatmentFee & { cattle: { tag_id: string | null } | null })[])
+    .map((t) => ({ ...t, tag: t.cattle?.tag_id ?? null }));
 
   const hasCosts = (deletedCosts ?? []).length > 0;
   const hasItems = (deletedItems ?? []).length > 0;
@@ -89,17 +99,23 @@ export default async function TrashBinPage() {
       {/* Deleted Cost Entries */}
       {hasCosts && (
         <Section title={`${t.trash.cost_entries} (${deletedCosts?.length})`} icon={DollarSign}>
-          {(deletedCosts as { id: string; type: string; category: string; amount: number; recorded_at: string; deleted_at: string }[]).map((e) => (
-            <TrashRow
-              key={e.id}
-              label={costCategoryLabel(e.category, locale)}
-              detail={`${costTypeLabel(e.type, locale)} · ৳${e.amount.toLocaleString("en-IN")} · ${L("তারিখ", "Recorded")} ${e.recorded_at.slice(0, 10)}`}
-              deletedAt={e.deleted_at}
-              restoreAction="cost_entry"
-              id={e.id}
-              table="cost_entries"
-            />
-          ))}
+          {(deletedCosts as { id: string; type: string; category: string; amount: number; recorded_at: string; description: string | null; cattle_id: string | null; deleted_at: string }[]).map((e) => {
+            const twin = isTreatmentDuplicate(e, treatments);
+            return (
+              <TrashRow
+                key={e.id}
+                label={`${costCategoryLabel(e.category, locale)}${e.description ? ` — ${e.description}` : ""}`}
+                detail={`${costTypeLabel(e.type, locale)} · ৳${Number(e.amount).toLocaleString("en-IN")} · ${L("তারিখ", "Recorded")} ${e.recorded_at.slice(0, 10)}`}
+                note={twin ? L(
+                  `একই ডাক্তারের খরচ দুবার লেখা হয়েছিল। টাকাটা গরু #${twin.tag ?? "?"}-এর চিকিৎসার রেকর্ডে একবার গোনা আছে (নগদ ও খরচ দুটোতেই)। ফেরত আনলে দুবার কাটা হবে, তাই ফেরত আনা বন্ধ।`,
+                  `The same vet fee was saved twice. The money is counted once, on the treatment record of #${twin.tag ?? "?"} (in cash and in costs). Restoring this would count it twice, so restore is off.`) : undefined}
+                deletedAt={e.deleted_at}
+                restoreAction={twin ? null : "cost_entry"}
+                id={e.id}
+                table="cost_entries"
+              />
+            );
+          })}
         </Section>
       )}
 
@@ -155,6 +171,7 @@ function Section({ title, icon: Icon, children }: { title: string; icon?: React.
 function TrashRow({
   label,
   detail,
+  note,
   deletedAt,
   restoreAction,
   id,
@@ -162,8 +179,9 @@ function TrashRow({
 }: {
   label: string;
   detail: string;
+  note?: string;
   deletedAt: string;
-  restoreAction: "cost_entry" | "inventory_item" | "weight_log";
+  restoreAction: "cost_entry" | "inventory_item" | "weight_log" | null;
   id: string;
   table: "cost_entries" | "inventory_items" | "weight_logs";
 }) {
@@ -175,8 +193,9 @@ function TrashRow({
         <p className="text-xs text-muted-foreground truncate mt-0.5">
           {detail} · <span className="text-muted-foreground/80 font-mono text-[11px]"><Tr bn="মোছা হয়েছে" en="Deleted" /> {deletedDate}</span>
         </p>
+        {note && <p className="mt-1 text-xs leading-snug text-emerald-700 dark:text-emerald-400">{note}</p>}
       </div>
-      <TrashRestoreButton id={id} restoreAction={restoreAction} table={table} />
+      {restoreAction && <TrashRestoreButton id={id} restoreAction={restoreAction} table={table} />}
     </div>
   );
 }

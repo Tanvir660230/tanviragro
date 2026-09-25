@@ -54,6 +54,7 @@ import { useL } from "@/i18n/text";
 import { partnerTxnLabel, partnerTypeLabel } from "@/lib/partners/labels";
 import { Tr } from "@/i18n/Tr";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { todayDhaka } from "@/lib/dates";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -185,7 +186,7 @@ export function PartnerProfileClient({
   const L = useL();
   const { locale } = useTranslation();
   const router = useRouter();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
 
   const [filter, setFilter] = useState<TxnFilter>("all");
   const [addTxnOpen, setAddTxnOpen] = useState(false);

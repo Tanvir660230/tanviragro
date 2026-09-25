@@ -23,6 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 export function AddCapitalTxnDialog({
   open,
@@ -50,7 +51,7 @@ export function AddCapitalTxnDialog({
     if (state?.error) toast.error(state.error);
   }, [state, setOpen, L]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

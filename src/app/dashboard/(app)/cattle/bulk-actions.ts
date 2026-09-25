@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
@@ -166,6 +166,7 @@ export async function bulkImportLivestockAction(
   }
 
   revalidatePath("/dashboard/cattle");
+  revalidateTag("accounting", { expire: 0 });   // cattle, costs or status changed: cash and the balance sheet
   revalidatePath("/dashboard");
 
   return {
@@ -217,6 +218,7 @@ export async function bulkBatchMovementAction(
   }
 
   revalidatePath("/dashboard/cattle");
+  revalidateTag("accounting", { expire: 0 });   // cattle, costs or status changed: cash and the balance sheet
   revalidatePath("/dashboard/cattle/pens");
 
   return { success: true, updatedCount: cattleIds.length };
@@ -281,6 +283,7 @@ export async function bulkBatchHealthAction(
   }
 
   revalidatePath("/dashboard/cattle");
+  revalidateTag("accounting", { expire: 0 });   // cattle, costs or status changed: cash and the balance sheet
   return { success: true, insertedCount: cattleIds.length };
 }
 
@@ -321,5 +324,6 @@ export async function bulkBatchStatusAction(
   }
 
   revalidatePath("/dashboard/cattle");
+  revalidateTag("accounting", { expire: 0 });   // cattle, costs or status changed: cash and the balance sheet
   return { success: true, updatedCount: cattleIds.length };
 }

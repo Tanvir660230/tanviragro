@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { measuredGrowth } from "@/lib/growth/baseline";
+import { todayDhaka } from "@/lib/dates";
 
 export async function GET() {
   const supabase = await createClient();
@@ -124,7 +125,7 @@ export async function GET() {
   });
 
   const csv = [headers.join(","), ...rows].join("\n");
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayDhaka();
 
   return new NextResponse("﻿" + csv, {
     headers: {

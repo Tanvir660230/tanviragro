@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 export interface SaleRecord {
   id: string;
   cattle_id: string;
@@ -235,7 +236,7 @@ export function PLSummary({
         <h1 className="text-2xl font-bold">{bizName} — {L("লাভ-ক্ষতির রিপোর্ট", "P&L report")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {L("তৈরি", "Generated")}:{" "}
-          <span suppressHydrationWarning>{new Date().toISOString().slice(0, 10)}</span>
+          <span suppressHydrationWarning>{todayDhaka()}</span>
         </p>
       </div>
 

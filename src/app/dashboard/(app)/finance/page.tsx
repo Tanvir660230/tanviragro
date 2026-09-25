@@ -4,7 +4,7 @@ import { SellTodaySummary } from "@/components/finance/SellTodaySummary";
 import { AddCostDialog } from "@/components/finance/AddCostDialog";
 import { CapitalSummaryCard } from "@/components/finance/CapitalSummaryCard";
 import { createClient } from "@/lib/supabase/server";
-import { CostList, type CostEntry, type InventoryPurchaseEntry } from "@/components/finance/CostList";
+import { CostList, type CostEntry, type InventoryPurchaseEntry, type TreatmentFeeEntry } from "@/components/finance/CostList";
 import { AssetTabPanel, type SimpleFixedAsset } from "@/components/finance/AssetTabPanel";
 import { computeDepreciation } from "@/lib/accounting/engine";
 import { PLSummary, type SaleRecord } from "@/components/finance/PLSummary";
@@ -26,6 +26,7 @@ import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 import { loadMonthlyConsumptions } from "@/lib/inventory/consumption-stats";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Landmark } from "lucide-react";
+import { addDays, startOfMonth, todayDhaka } from "@/lib/dates";
 
 
 export const metadata: Metadata = { title: "Finance & P&L" };
@@ -36,8 +37,15 @@ function computeFinanceDateRange(
   fe: string | undefined,
   fiscalYearStartMonth = 7,   // 1-based; default July for Bangladesh
 ): { start: string | null; end: string | null } {
-  const today    = new Date();
-  const todayStr = today.toISOString().split("T")[0];
+  // Dhaka calendar dates as strings: toISOString() gave the UTC date (yesterday before 06:00)
+  // and shifted month starts by a day on a UTC+6 machine.
+  const todayStr = todayDhaka();
+  const year = Number(todayStr.slice(0, 4));
+  const month = Number(todayStr.slice(5, 7));   // 1-based
+  const ym = (y: number, m: number) => {        // m may be ≤ 0: roll back into earlier years
+    const t = y * 12 + (m - 1);
+    return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
+  };
 
   if (fp === "all") return { start: null, end: null };
   if (!fp && fs)    return { start: fs, end: fe ?? todayStr };
@@ -45,27 +53,19 @@ function computeFinanceDateRange(
   const preset = fp ?? "this-month";
 
   if (preset === "last-month") {
-    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const end   = new Date(today.getFullYear(), today.getMonth(),     0);
-    return { start: start.toISOString().split("T")[0], end: end.toISOString().split("T")[0] };
+    const start = `${ym(year, month - 1)}-01`;
+    return { start, end: addDays(`${ym(year, month)}-01`, -1) };
   }
   if (preset === "last-3m") {
-    const start = new Date(today.getFullYear(), today.getMonth() - 3, 1);
-    return { start: start.toISOString().split("T")[0], end: todayStr };
+    return { start: `${ym(year, month - 3)}-01`, end: todayStr };
   }
   if (preset === "this-year") {
-    // Use the business's configured fiscal year start month (1-indexed).
-    // Build date string directly (avoids toISOString() UTC-offset bug on non-UTC servers).
-    const fyMonth0 = fiscalYearStartMonth - 1; // 0-indexed for getMonth() comparison
-    const currentMonth = today.getMonth();
-    const fyYear = currentMonth >= fyMonth0 ? today.getFullYear() : today.getFullYear() - 1;
-    const fyMonthStr = String(fiscalYearStartMonth).padStart(2, "0");
-    return { start: `${fyYear}-${fyMonthStr}-01`, end: todayStr };
+    const fyYear = month >= fiscalYearStartMonth ? year : year - 1;
+    return { start: `${fyYear}-${String(fiscalYearStartMonth).padStart(2, "0")}-01`, end: todayStr };
   }
 
   // Default / "this-month"
-  const start = new Date(today.getFullYear(), today.getMonth(), 1);
-  return { start: start.toISOString().split("T")[0], end: todayStr };
+  return { start: startOfMonth(todayStr), end: todayStr };
 }
 
 export default async function FinancePage(props: {
@@ -167,7 +167,7 @@ export default async function FinancePage(props: {
     businessId
       ? supabase
           .from("cattle_treatments")
-          .select("cattle_id, vet_fee, additional_medical_cost, cattle!inner(business_id)")
+          .select("id, cattle_id, vet_fee, additional_medical_cost, treated_at, diagnosis, cattle!inner(business_id, tag_id)")
           .eq("cattle.business_id", businessId)
       : Promise.resolve({ data: [] }),
     // Dead cattle purchase prices are a realized loss — they are not sales revenue,
@@ -318,6 +318,12 @@ export default async function FinancePage(props: {
     }
   }
 
+  // vet fees live on the treatment rows; the expense list shows them for the same period
+  const treatmentFees: TreatmentFeeEntry[] = ((treatmentsData ?? []) as unknown as { id: string; cattle_id: string; vet_fee: number | null; additional_medical_cost: number | null; treated_at: string; diagnosis: string | null; cattle: { tag_id: string | null } | null }[])
+    .map((t) => ({ id: t.id, cattle_id: t.cattle_id, date: String(t.treated_at).slice(0, 10), tag: t.cattle?.tag_id ?? null, diagnosis: t.diagnosis, amount: Number(t.vet_fee ?? 0) + Number(t.additional_medical_cost ?? 0) }))
+    .filter((t) => t.amount > 0 && (!filterStart || (t.date >= filterStart && (!filterEnd || t.date <= filterEnd))))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
   type RawLoan = Omit<LoanRow, "payments"> & { loan_payments: LoanRow["payments"] };
   const loans: LoanRow[] = ((loansData ?? []) as RawLoan[]).map((l) => ({
     ...l,
@@ -467,7 +473,7 @@ export default async function FinancePage(props: {
             </ErrorBoundary>
           </div>
         }
-        costList={<CostList entries={filteredEntries} inventoryPurchases={inventoryPurchases} />}
+        costList={<CostList entries={filteredEntries} inventoryPurchases={inventoryPurchases} treatmentFees={treatmentFees} />}
         assets={<AssetTabPanel costAssets={assetEntries} fixedAssets={fixedAssets} />}
         budget={<ErrorBoundary label="Budget Forecast"><BudgetForecastPanel days={budgetDays} /></ErrorBoundary>}
         loans={<LoanDashboard loans={loans} />}

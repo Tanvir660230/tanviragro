@@ -59,6 +59,24 @@ function value(t: LedgerTxInput): number {
 
 const cents = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
 
+function movementOf(t: LedgerTxInput): string {
+  return t.movement_type ?? (t.type === "purchase" ? "purchase" : "consumption");
+}
+
+/**
+ * Cash paid (+) or taken back (−) by one ledger row: supplier purchases are the only cash
+ * movement, a purchase reversal undoes one. Every other row is 0. The same rule as
+ * `cashPurchases` below, so the cash ledger and the accounting engine cannot disagree.
+ */
+export function inventoryCashOut(t: LedgerTxInput): number {
+  const mt = movementOf(t);
+  if (t.type === "purchase") {
+    if (mt === "consumption_reversal" || mt === "opening_balance" || IN_NON_CASH.has(mt)) return 0;
+    return value(t);
+  }
+  return mt === "purchase_reversal" ? -value(t) : 0;
+}
+
 export function summarizeInventoryLedger(rows: LedgerTxInput[]): InventoryLedgerSummary {
   const s: InventoryLedgerSummary = {
     cashPurchases: 0, openingBalance: 0, otherIn: 0, reversals: 0, outTotal: 0, outCapitalized: 0,
@@ -67,7 +85,7 @@ export function summarizeInventoryLedger(rows: LedgerTxInput[]): InventoryLedger
   for (const t of rows) {
     const v = value(t);
     const isIn = t.type === "purchase";
-    const mt = t.movement_type ?? (isIn ? "purchase" : "consumption");
+    const mt = movementOf(t);
     if (isIn) {
       if (mt === "consumption_reversal") {
         // undo: take the value back out of the account the consumption went to

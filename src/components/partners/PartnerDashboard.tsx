@@ -34,6 +34,7 @@ import { AddPartnerDialog } from "./modals/AddPartnerDialog";
 import { AddTransactionDialog } from "./modals/AddTransactionDialog";
 import { DeclareDistributionModal } from "./modals/DeclareDistributionModal";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ export function PartnerDashboard({
   const { t } = useTranslation();
 
   const [distOpen, setDistOpen] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
 
   // Management fee
   const mgmtFeeAmount = netPL > 0 ? (netPL * mgmtFeeRate) / 100 : 0;

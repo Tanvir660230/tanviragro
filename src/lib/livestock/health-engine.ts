@@ -13,6 +13,7 @@ import {
   PrescriptionDosageError,
   UnauthorizedMedicalActionError,
 } from "./errors";
+import { todayDhaka } from "@/lib/dates";
 
 export function addDaysToDate(dateStr: string, days: number): string {
   const parts = dateStr.slice(0, 10).split("-").map(Number);
@@ -199,7 +200,7 @@ export class HealthEngine {
     asOf?: string
   ): boolean {
     if (!withdrawalUntil) return false;
-    const today = asOf ?? new Date().toISOString().slice(0, 10);
+    const today = asOf ?? todayDhaka();
     return withdrawalUntil >= today;
   }
 
@@ -229,7 +230,7 @@ export class HealthEngine {
     latestVitals?: VitalSigns
   ): HealthAlert[] {
     const alerts: HealthAlert[] = [];
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
 
     // 1. Overdue Vaccines / Protocols
     const pendingEvents = events.filter((e) => !e.completed_at);
@@ -341,7 +342,7 @@ export class HealthEngine {
     }[],
     certifyingVet: string
   ): HealthCertificateSummary {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
     const completedVaccines = events
       .filter((e) => e.event_type === "vaccine" && e.completed_at)
       .map((e) => ({ title: e.title, completedAt: e.completed_at! }));

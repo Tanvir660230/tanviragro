@@ -53,13 +53,15 @@ describe("depreciation on the real assets (straight-line, full months)", () => {
 describe("no asset purchase is counted twice (source guards)", () => {
   test("engine: linked fixed assets are not cash again; linked payments are not value again", () => {
     const src = read("lib/accounting/engine.ts");
-    expect(src).toMatch(/-\(unlinkedFixedAssetCash \+ costEntryAssetTotal\)/);
+    // cash comes from the one cash ledger (tested in cash-ledger.test.ts)
+    expect(src).toMatch(/allTimeNetCashFlow = cashNet\(cashLedger\)/);
+    expect(read("lib/accounting/cash-ledger.ts")).toMatch(/if \(a\.source_cost_entry_id\) continue;/);
     expect(src).toMatch(/netFixedAssets = totalFixedAssetCost - totalAccumDep \+ unlinkedAssetCostValue/);
     expect(src).toMatch(/dr\("1500", unlinkedFixedAssetCash\)/);
     expect(src).toMatch(/inPeriod\(a\.purchaseDate\) && !a\.sourceCostEntryId/);
   });
-  test("the statement skips fixed assets that have a payment record", () => {
-    expect(read("app/dashboard/(app)/finance/statement-action.ts")).toMatch(/\.is\("source_cost_entry_id", null\)/);
+  test("the statement reads the same cash ledger as the balance sheet", () => {
+    expect(read("app/dashboard/(app)/finance/statement-action.ts")).toMatch(/cashStatement\(acc\.cashLedger, acc\.openingCash/);
     // the old financial repository (a second cash calculation) was removed; the accounting engine is the source
     expect(fs.existsSync(path.join(__dirname, "..", "lib/financial/financial-repository.ts"))).toBe(false);
   });

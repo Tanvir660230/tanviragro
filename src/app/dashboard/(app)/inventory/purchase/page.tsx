@@ -10,6 +10,7 @@ import { undonePurchaseIds } from "@/lib/inventory/purchase-rows";
 import { buildPurchaseContext, type PurchaseRow } from "@/lib/inventory/purchase-memo";
 import { todayDhaka } from "@/lib/dates";
 import { selectAll } from "@/lib/supabase/select-all";
+import { SupplierDuesCard, type SupplierDue } from "@/components/inventory/SupplierDuesCard";
 
 export const metadata = {
   title: "Add Purchase Invoice | Tanvir Agro",
@@ -37,7 +38,7 @@ export default async function BulkPurchasePage() {
       .order("id")).then((data) => ({ data })),
     supabase
       .from("liabilities")
-      .select("lender, outstanding")
+      .select("id, lender, name, outstanding, recorded_at")
       .eq("business_id", businessId)
       .eq("category", "accounts_payable")
       .is("settled_at", null)
@@ -56,10 +57,14 @@ export default async function BulkPurchasePage() {
     dues: (duesData ?? []) as { lender: string | null; outstanding: number }[],
   });
   const t = PURCHASE_TEXT[lang];
+  const dues: SupplierDue[] = ((duesData ?? []) as { id: string; lender: string | null; name: string; outstanding: number | string; recorded_at: string }[])
+    .filter((d) => Number(d.outstanding) > 0)
+    .map((d) => ({ id: d.id, lender: d.lender || d.name, outstanding: Number(d.outstanding), since: String(d.recorded_at).slice(0, 10) }));
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 pb-12">
       <PageHeader title={t.title} subtitle={t.subtitle} icon={ReceiptText} back="/dashboard/inventory" />
+      <SupplierDuesCard dues={dues} today={todayDhaka()} lang={lang} />
       <BulkPurchaseClient items={items} context={context} today={todayDhaka()} lang={lang} />
     </div>
   );

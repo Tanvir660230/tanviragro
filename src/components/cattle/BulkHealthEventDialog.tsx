@@ -24,6 +24,7 @@ import { createBulkHealthEvents, type BulkHealthFormState } from "@/app/dashboar
 import { useTranslation } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 interface CattleOption {
   id: string;
@@ -191,7 +192,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
             <Label htmlFor="bh_date">
               {t.cattle_details.health.scheduled_date} *
             </Label>
-            <Input id="bh_date" name="scheduled_at" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+            <Input id="bh_date" name="scheduled_at" type="date" required defaultValue={todayDhaka()} />
           </div>
 
           {/* Notes */}

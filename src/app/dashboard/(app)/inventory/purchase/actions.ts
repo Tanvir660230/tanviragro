@@ -150,8 +150,9 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
         await supabase
           .from("liabilities")
           .update({
-            principal: existingLiab.principal + dueAmount,
-            outstanding: existingLiab.outstanding + dueAmount,
+            // numeric columns may arrive as strings: "1200" + 400 would be "1200400"
+            principal: Number(existingLiab.principal) + dueAmount,
+            outstanding: Number(existingLiab.outstanding) + dueAmount,
             notes: (existingLiab.notes || "") + `\n+ ${dueAmount} on ${date} (Bulk Purchase).`,
           })
           .eq("id", existingLiab.id);
@@ -205,5 +206,53 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
     return { success: true };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to record bulk purchase" };
+  }
+}
+
+/**
+ * The shop was paid (part of) what the farm owed. The due goes down and the payment is noted
+ * with its date ("Paid <amount> on <date>"); the cash ledger reads that line as money out on
+ * that day (lib/accounting/cash-ledger.ts). Before this there was no way to pay a due, so the
+ * amount stayed in cash for ever.
+ */
+export async function paySupplierDue(formData: FormData): Promise<{ success?: true; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.INVENTORY_PURCHASE);
+
+    const id = String(formData.get("id") ?? "");
+    const date = String(formData.get("date") ?? "");
+    const amount = Math.round(parseFloat(String(formData.get("amount") ?? "")) * 100) / 100;
+    if (!id) return { error: "Due not found" };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Date is required" };
+    if (!Number.isFinite(amount) || amount <= 0) return { error: "Amount must be more than 0" };
+
+    const lockError = await verifyFinancialLock(supabase, ctx.businessId, date);
+    if (lockError) return { error: lockError };
+
+    const { data: liab } = await supabase.from("liabilities")
+      .select("id, outstanding, notes, recorded_at, settled_at")
+      .eq("id", id).eq("business_id", ctx.businessId).is("deleted_at", null).maybeSingle();
+    if (!liab || liab.settled_at) return { error: "Due not found" };
+    const outstanding = Number(liab.outstanding);
+    if (amount > outstanding + 0.005) return { error: `Only ৳${outstanding} is due` };
+    if (liab.recorded_at && date < String(liab.recorded_at).slice(0, 10)) return { error: "The payment cannot be before the due began" };
+
+    const left = Math.max(0, Math.round((outstanding - amount) * 100) / 100);
+    const { error } = await supabase.from("liabilities").update({
+      outstanding: left,
+      settled_at: left === 0 ? date : null,
+      notes: (liab.notes || "") + `\nPaid ${amount} on ${date}.`,
+    }).eq("id", id);
+    if (error) return { error: "Could not save the payment" };
+
+    revalidatePath("/dashboard/inventory/purchase");
+    revalidatePath("/dashboard/finance");
+    revalidatePath("/dashboard");
+    revalidateTag("accounting", { expire: 0 });
+    return { success: true };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Could not save the payment" };
   }
 }

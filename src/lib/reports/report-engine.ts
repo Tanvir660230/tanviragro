@@ -1,5 +1,6 @@
 import { getAccountingData } from "@/lib/accounting/engine";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { todayDhaka } from "@/lib/dates";
 
 export interface ReportFilterOptions {
   startDate?: string;
@@ -105,7 +106,7 @@ export class ReportEngine {
       year: "numeric",
     });
 
-    const reportId = "TA-RPT-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-001";
+    const reportId = "TA-RPT-" + todayDhaka().replace(/-/g, "") + "-001";
 
     return {
       bizName,

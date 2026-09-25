@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Dictionary } from "@/i18n/getDictionary";
 
  
+import { todayDhaka } from "@/lib/dates";
 type Client = SupabaseClient<any>;
 
 export interface MonthlyPoint {
@@ -371,7 +372,7 @@ export async function getSmartInsights(
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDhaka();
   const sevenDaysLater = new Date();
   sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
   const sevenDaysLaterStr = sevenDaysLater.toISOString().slice(0, 10);

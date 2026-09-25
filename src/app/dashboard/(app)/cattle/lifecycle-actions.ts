@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
@@ -225,6 +225,7 @@ export async function executeLifecycleTransitionAction(
     }
 
     revalidatePath("/dashboard/cattle");
+    revalidateTag("accounting", { expire: 0 });   // cattle, costs or status changed: cash and the balance sheet
     revalidatePath(`/dashboard/cattle/${cattle.id}`);
 
     return {

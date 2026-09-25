@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { todayDhaka } from "@/lib/dates";
 
-export const todayIso = () => new Date().toISOString().slice(0, 10);
+export const todayIso = () => todayDhaka();
 
 export const dateSchema = z
   .string()

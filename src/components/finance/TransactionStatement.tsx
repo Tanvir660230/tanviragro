@@ -6,6 +6,7 @@ import { getStatementData } from "@/app/dashboard/(app)/finance/statement-action
 import type { TxnRow, StatementResult } from "@/app/dashboard/(app)/finance/statement-action";
 import { DataPagination } from "@/components/ui/data-pagination";
 import { useL } from "@/i18n/text";
+import { todayDhaka, startOfMonth } from "@/lib/dates";
 
 const BADGE: Record<TxnRow["category"], string> = {
   "Capital In":      "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
@@ -14,6 +15,8 @@ const BADGE: Record<TxnRow["category"], string> = {
   "Cattle Purchase": "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
   "Inventory":       "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   "Operating Cost":  "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400",
+  "Vet Fee":         "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
+  "Supplier Due":    "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
   "Asset Purchase":  "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
   "Loan Received":   "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
   "Loan Repayment":  "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300",
@@ -25,20 +28,21 @@ function fmt(n: number) {
 
 const CATEGORY_BN: Record<string, string> = {
   "Capital In": "মূলধন জমা", "Capital Out": "মূলধন তোলা", "Cattle Sale": "গরু বিক্রি", "Cattle Purchase": "গরু কেনা",
-  "Inventory": "খাবার/স্টক", "Operating Cost": "খরচ", "Asset Purchase": "সম্পদ কেনা", "Loan Received": "ঋণ নেওয়া", "Loan Repayment": "ঋণ শোধ",
+  "Inventory": "খাবার/স্টক", "Operating Cost": "খরচ", "Vet Fee": "ডাক্তার/চিকিৎসা",
+  "Supplier Due": "দোকানে বাকি (এখনো দেওয়া হয়নি)", "Asset Purchase": "সম্পদ কেনা", "Loan Received": "ঋণ নেওয়া", "Loan Repayment": "ঋণ শোধ",
 };
 
 function fmtDate(d: string) {
   return d.slice(0, 10);
 }
 
+// Dhaka calendar: the UTC date is still "yesterday" before 06:00, which hid today's entries
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todayDhaka();
 }
 
 function firstOfMonthStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return startOfMonth(todayDhaka());
 }
 
 export function TransactionStatement() {

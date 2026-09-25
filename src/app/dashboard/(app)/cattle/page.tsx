@@ -83,7 +83,7 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
     );
   }
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = todayDhaka();
 
   // 1. Fetch all cattle
   const { data: cattleData } = await supabase

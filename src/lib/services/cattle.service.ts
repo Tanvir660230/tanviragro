@@ -6,6 +6,7 @@ import { CostAttributionEngine, type DirectCostEntry } from "@/lib/livestock/cos
 import { LivestockEventBus } from "@/lib/livestock/events";
 import { ValidationError } from "@/lib/errors/app-error";
 import type { CattleStatus } from "@/types/database";
+import { todayDhaka } from "@/lib/dates";
 
 export class CattleDomainService {
   /**
@@ -26,7 +27,7 @@ export class CattleDomainService {
     if (input.initialWeightKg <= 0) {
       throw new ValidationError("Initial weight must be greater than zero kg");
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
     if (input.purchaseDate > today) {
       throw new ValidationError("Purchase date cannot be in the future");
     }
@@ -39,7 +40,7 @@ export class CattleDomainService {
     if (weightKg <= 0 || weightKg > 2000) {
       throw new ValidationError("Weight must be between 1 and 2,000 kg");
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDhaka();
     if (recordedAt > today) {
       throw new ValidationError("Weight recording date cannot be in the future");
     }

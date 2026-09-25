@@ -1,6 +1,7 @@
 import { getServerClient } from "@/lib/supabase/cached";
 import { getAccountingData, type AccountingData } from "@/lib/accounting/engine";
 import { getL } from "@/i18n/server-text";
+import { AuthError, ForbiddenError } from "@/lib/errors/app-error";
 
 function bdt(n: number): string {
   if (!isFinite(n)) return "৳—";
@@ -32,7 +33,8 @@ export async function CapitalSummaryCard() {
   let data: AccountingData;
   try {
     data = await getAccountingData(await getServerClient());
-  } catch {
+  } catch (e) {
+    if (!(e instanceof ForbiddenError || e instanceof AuthError)) console.error("money summary: accounting engine failed", e);
     return null;   // no accounting permission → the card is not shown
   }
   const s = capitalSummary(data);

@@ -23,6 +23,7 @@ import {
 import { createBulkCost, type BulkCostFormState } from "@/app/dashboard/(app)/cattle/actions";
 import { toast } from "sonner";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { todayDhaka } from "@/lib/dates";
 
 interface CattleOption {
   id: string;
@@ -209,8 +210,8 @@ export function BulkCostDialog({ activeCattle, open: externalOpen, onOpenChange:
               id="bc_date" 
               name="recorded_at" 
               type="date" 
-              max={new Date().toISOString().slice(0, 10)}
-              defaultValue={new Date().toISOString().split("T")[0]}
+              max={todayDhaka()}
+              defaultValue={todayDhaka()}
               required 
             />
           </div>

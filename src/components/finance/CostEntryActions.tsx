@@ -27,6 +27,7 @@ import type { CostEntry } from "@/components/finance/CostList";
 import { useL } from "@/i18n/text";
 import { costCategoryLabel, costTypeLabel } from "@/lib/expenses/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { todayDhaka } from "@/lib/dates";
 
 const FIXED_CATEGORIES    = ["Rent", "Salary", "Utilities", "Insurance", "Other"];
 const VARIABLE_CATEGORIES = ["Feed", "Medicine", "Labour", "Transport", "Veterinary", "Other"];
@@ -55,7 +56,7 @@ function EditDialog({ entry, onClose }: { entry: CostEntry; onClose: () => void 
   const [date, setDate]          = useState(entry.recorded_at.slice(0, 10));
   const [desc, setDesc]          = useState(entry.description ?? "");
   const [error, setError]        = useState<string | null>(null);
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
 
   const effectiveType     = entryClass === "asset" ? "fixed" : costType;
   const availableCategories = getCategories(effectiveType, entryClass);

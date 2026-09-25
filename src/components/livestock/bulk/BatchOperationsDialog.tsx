@@ -26,6 +26,7 @@ import {
   bulkBatchHealthAction,
   bulkBatchStatusAction,
 } from "@/app/dashboard/(app)/cattle/bulk-actions";
+import { todayDhaka } from "@/lib/dates";
 
 export interface BatchOperationsDialogProps {
   open: boolean;
@@ -51,7 +52,7 @@ export function BatchOperationsDialog({
 
   const [healthType, setHealthType] = useState<"vaccination" | "deworming" | "checkup" | "treatment">("deworming");
   const [healthName, setHealthName] = useState("");
-  const [healthDate, setHealthDate] = useState(new Date().toISOString().split("T")[0]);
+  const [healthDate, setHealthDate] = useState(todayDhaka());
   const [healthCost, setHealthCost] = useState("");
   const [healthNotes, setHealthNotes] = useState("");
 

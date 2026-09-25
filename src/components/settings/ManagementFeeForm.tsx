@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import type { ManagementFeeRate } from "@/types/database";
 import { Percent, CalendarDays, Trash2, Info } from "lucide-react";
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 
 interface Props {
   currentRate: ManagementFeeRate | null;
@@ -57,7 +58,7 @@ export function ManagementFeeForm({ currentRate, history }: Props) {
     if (state?.error) toast.error(state.error);
   }, [state]);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
 
   return (
     <div className="space-y-5">

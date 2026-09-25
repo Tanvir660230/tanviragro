@@ -177,3 +177,40 @@ Parallel engines that go: `lib/financial` (except the pieces the accounting engi
 **More unused code removed:** vaccination engine, 9 cattle components that were imported but never shown, an unused 480-line cattle form, unused imports in 80 files, 5 database queries whose results were never used (partners 4, money 1).
 
 **Left as is, on purpose:** the partners page computes profit on a "realised" basis (cost of animals still on the farm is excluded) for profit sharing; that is a business rule, not a display bug. Data (names, notes, units like "piece", English month names in some dates) stays as entered.
+
+## 8. One cash ledger (2026-09-26)
+
+**Problem.** Cash was computed in two places that disagreed:
+- the accounting engine (Home, Finance, Report, Balance Sheet);
+- the cash statement (`finance/statement-action.ts`), which queried the tables on its own. It:
+  - left out vet fees on treatments, which became visible after C14;
+  - ignored supplier dues;
+  - counted soft-deleted partner entries and deleted animals;
+  - stopped at 1,000 stock rows.
+
+The trial balance also credited cash for feed eaten by an animal. That feed was already paid when it was bought.
+
+**Now.** `src/lib/accounting/cash-ledger.ts` builds one dated list of every cash movement.
+- Engine: `cashAndBank = opening cash + Σ rows`.
+- Statement: it shows those same rows (`cashStatement`), so its closing balance is the cash on every other page.
+- Trial balance: its Cash line equals the balance sheet (`accounting-cash.test.ts`).
+- Loans: the cash of every loan is principal received − payments made (was clamped / zeroed for paid loans).
+
+**Fixed at the same time**
+- **Dhaka dates everywhere "today" is used** (36 files). Before 06:00 in Dhaka the UTC date is yesterday, which:
+  - dated new entries a day early;
+  - hid today's rows from the statement and the Finance filter;
+  - rejected today as "in the future".
+- **Money tables read page by page.** Costs, partners, sales and treatments were plain selects that stop at 1,000 rows.
+- **Vet fees shown in the expense list.** They are on the treatment rows.
+- **Trash:** the C14 duplicates say why they were removed, and restore is off. Restoring one would take the same money twice.
+- **Accounting failures are logged.** The home cash tile and the money summary used to hide them as "—".
+- **Cache refreshed** after cattle bulk and status actions (`revalidateTag("accounting")`).
+- **Serwist wrapper removed.** It never ran under Turbopack and only printed a build warning. `public/sw.js` is the hand-written push worker.
+
+**Supplier dues can be paid.** Before this, a due could only grow: nothing could record paying the shop, so the amount stayed in cash for ever.
+- The purchase page has a "দোকানের বাকি" card with a pay form (`paySupplierDue`).
+- A payment lowers the due and notes `Paid <amount> on <date>`. The cash ledger takes it out of cash on that day.
+- The due arithmetic now coerces the numeric columns to numbers.
+
+**Still open:** confirm the production cash against the owner's count. The production read was not allowed in this session.

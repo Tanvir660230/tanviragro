@@ -12,6 +12,7 @@ import { submitBulkCosts, type BulkCostItem } from "@/app/dashboard/(app)/financ
 import { useL } from "@/i18n/text";
 import { costCategoryLabel } from "@/lib/expenses/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { todayDhaka } from "@/lib/dates";
 
 const FIXED_CATEGORIES = ["Rent", "Salary", "Utilities", "Insurance", "Other"];
 const VARIABLE_CATEGORIES = ["Feed", "Medicine", "Labour", "Transport", "Veterinary", "Other"];
@@ -24,7 +25,7 @@ export function BulkCostClient() {
   const { locale } = useTranslation();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
 
   const [rows, setRows] = useState<CostRow[]>([
     { id: crypto.randomUUID(), mode: "expense-fixed", category: "", amount: 0, recordedAt: today, description: "" }

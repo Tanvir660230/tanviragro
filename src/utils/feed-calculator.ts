@@ -1,3 +1,4 @@
+import { todayDhaka } from "@/lib/dates";
 export const ROUGHAGE_TYPES = [
   { id: "straw",  label: "Khor / Straw (খড়)",   labelBn: "খড়",        dmPercent: 0.90 },
   { id: "hay",    label: "Hay (হে)",              labelBn: "হে",         dmPercent: 0.85 },
@@ -37,7 +38,7 @@ export interface FeedRequirement {
  */
 export function calculateProjectedWeight(
   data: CattleFeedData,
-  targetDateStr: string = new Date().toISOString().slice(0, 10)
+  targetDateStr: string = todayDhaka()
 ): { projectedWeight: number; daysSinceWeighing: number; daysOnFarm: number } {
   const targetDate = new Date(targetDateStr);
   const purchaseDate = new Date(data.purchaseDate);
@@ -68,7 +69,7 @@ export function calculateProjectedWeight(
  */
 export function calculateDailyFeedRequirement(
   data: CattleFeedData,
-  targetDateStr: string = new Date().toISOString().slice(0, 10),
+  targetDateStr: string = todayDhaka(),
   realDateStr: string = targetDateStr
 ): FeedRequirement {
   const { projectedWeight } = calculateProjectedWeight(data, targetDateStr);
@@ -146,7 +147,7 @@ export function calculateDailyFeedRequirement(
  * A week starts on Friday and ends on Thursday. So feed given from Fri-Thu is based on
  * the cow's weight projected on the preceding Thursday.
  */
-export function getEffectiveFeedDate(todayStr: string = new Date().toISOString().slice(0, 10)): string {
+export function getEffectiveFeedDate(todayStr: string = todayDhaka()): string {
   const d = new Date(todayStr);
   const day = d.getDay(); // 0=Sun … 4=Thu … 6=Sat
 

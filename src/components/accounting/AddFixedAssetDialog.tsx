@@ -26,6 +26,7 @@ import { addFixedAsset, type FixedAssetFormState } from "@/app/dashboard/(app)/a
 import { toast } from "sonner";
 
 import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
 export function AddFixedAssetDialog() {
   const L = useL();
   const router = useRouter();
@@ -52,7 +53,7 @@ export function AddFixedAssetDialog() {
     if (next) { setFormKey((k) => k + 1); setMethod("straight_line"); }
   };
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDhaka();
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

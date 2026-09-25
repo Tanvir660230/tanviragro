@@ -1,3 +1,4 @@
+import { todayDhaka } from "@/lib/dates";
 export interface AnimalWizardIdentification {
   name: string;
   tagId: string;
@@ -88,7 +89,7 @@ export const DEFAULT_WIZARD_STATE: AnimalWizardState = {
   health: { status: "active", isQuarantined: false, lastVaccinationDate: null, dewormingDate: null, healthNotes: "" },
   origin: {
     originType: "purchase",
-    purchaseDate: new Date().toISOString().split("T")[0],
+    purchaseDate: todayDhaka(),
     purchasePrice: 0,
     initialWeightKg: 0,
     initialWeightType: "measured",

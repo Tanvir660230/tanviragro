@@ -147,9 +147,10 @@ export async function updatePurchaseMemo(
       await supabase
         .from("liabilities")
         .update({
-          principal: existingLiab.principal + difference,
-          outstanding: existingLiab.outstanding + difference,
-          notes: existingLiab.notes + `\n${sign}${difference.toFixed(2)} on ${date} (Auto-adjusted from memo edit).`,
+          // numeric columns may arrive as strings: "1200" + 400 would be "1200400"
+          principal: Number(existingLiab.principal) + difference,
+          outstanding: Math.max(0, Number(existingLiab.outstanding) + difference),
+          notes: (existingLiab.notes || "") + `\n${sign}${difference.toFixed(2)} on ${date} (Auto-adjusted from memo edit).`,
         })
         .eq("id", existingLiab.id);
     }

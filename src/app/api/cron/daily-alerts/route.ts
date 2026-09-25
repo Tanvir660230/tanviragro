@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { sendWhatsAppWithFallback } from "@/lib/notifications";
 import { authenticateApiRoute } from "@/lib/auth/api-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
   const messages: string[] = [];
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = todayDhaka();
 
   // 1. Low Stock — compute from transactions (no current_stock column)
   const [{ data: allTxns }, { data: items }] = await Promise.all([
