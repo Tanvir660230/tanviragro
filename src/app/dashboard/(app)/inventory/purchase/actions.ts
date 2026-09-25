@@ -16,6 +16,8 @@ export type PurchaseItem = {
   newItemName?: string;
   newItemCategory?: string; // "feed", "medicine", "equipment"
   newItemUnit?: string;
+  /** new item counted in pieces/bundles: kg in one unit (optional) */
+  newItemKgPerUnit?: number | null;
   qty: number;
   itemTotalCost: number;
   mode?: string;
@@ -36,6 +38,9 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
     const paidAmountStr = formData.get("paidAmount") as string;
     const paidAmount = paidAmountStr ? parseFloat(paidAmountStr) : 0;
     const notes = (formData.get("notes") as string)?.trim();
+    // one key per memo form: a double tap or a retry never saves the memo twice
+    const memoKey = ((formData.get("memoKey") as string) || "").trim();
+    const rowKey = (idx: number) => (memoKey ? `memo:${memoKey}:${idx}` : null);
 
     if (!date) return { error: "Date is required" };
     if (!supplierName) return { error: "Supplier Name is required" };
@@ -47,6 +52,11 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
 
     const lockError = await verifyFinancialLock(supabase, ctx.businessId, date);
     if (lockError) return { error: lockError };
+
+    if (memoKey) {
+      const { data: already } = await supabase.from("inventory_transactions").select("id").eq("idempotency_key", rowKey(0)!).maybeSingle();
+      if (already) return { success: true, duplicate: true };
+    }
 
     // Total raw items cost
     const rawItemsTotal = items.reduce((sum, it) => sum + (it.itemTotalCost || 0), 0);
@@ -68,18 +78,27 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
         if (!it.newItemName || !it.newItemCategory || !it.newItemUnit) {
           return { error: "New items must have name, category, and unit" };
         }
-        const { data: insertedItem, error: itemErr } = await supabase
-          .from("inventory_items")
-          .insert({
-            business_id: ctx.businessId,
-            name: it.newItemName.trim(),
-            category: it.newItemCategory as "feed" | "medicine" | "equipment" | "roughage" | "other",
-            unit: it.newItemUnit.trim(),
-          })
-          .select("id")
-          .single();
-        if (itemErr) return { error: `Failed to create item: ${it.newItemName}` };
-        finalItemId = insertedItem.id;
+        // an item with this name already exists: use it instead of making a second one
+        const { data: same } = await supabase.from("inventory_items").select("id")
+          .eq("business_id", ctx.businessId).is("deleted_at", null).ilike("name", it.newItemName.trim()).limit(1).maybeSingle();
+        if (same) {
+          finalItemId = same.id;
+        } else {
+          const kgPerUnit = it.newItemKgPerUnit != null && Number(it.newItemKgPerUnit) > 0 ? Number(it.newItemKgPerUnit) : null;
+          const { data: insertedItem, error: itemErr } = await supabase
+            .from("inventory_items")
+            .insert({
+              business_id: ctx.businessId,
+              name: it.newItemName.trim(),
+              category: it.newItemCategory as "feed" | "medicine" | "equipment" | "roughage" | "other",
+              unit: it.newItemUnit.trim(),
+              ...(kgPerUnit ? { kg_per_unit: kgPerUnit } : {}),
+            })
+            .select("id")
+            .single();
+          if (itemErr) return { error: `Failed to create item: ${it.newItemName}` };
+          finalItemId = insertedItem.id;
+        }
       }
       if (!finalItemId) return { error: "Item ID missing" };
       finalItems.push({ ...it, itemId: finalItemId });
@@ -106,10 +125,12 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
         unit_cost: costed.unitCost,
         recorded_at: date,
         notes: `Invoice Memo. Supplier: ${supplierName}. | Transport: ${transportCost} | Mode: ${it.mode || "loose"} | Bags: ${it.bags || ""} | KgPerBag: ${it.kgPerBag || ""}` + (notes ? ` | ${notes}` : ""),
+        idempotency_key: rowKey(idx),
       };
     });
 
     const { error: txErr } = await supabase.from("inventory_transactions").insert(txnsToInsert);
+    if (txErr?.code === "23505") return { success: true, duplicate: true };   // the same memo form was saved a moment ago
     if (txErr) return { error: "Failed to record transactions" };
 
     // Create or Update Liability if due
@@ -175,6 +196,8 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
     );
 
     revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/inventory/purchase");
+    revalidatePath("/dashboard/inventory/purchase/history");
     revalidatePath("/dashboard/finance");
     revalidatePath("/dashboard");
     revalidateTag("accounting", { expire: 0 });
