@@ -4,7 +4,6 @@ import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import { ArrowRightLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { MovementsClient } from "@/components/inventory/MovementsClient";
 
 export const metadata: Metadata = { title: "Stock Movements | Inventory" };
@@ -36,7 +35,6 @@ export default async function MovementsPage() {
         icon={ArrowRightLeft}
         back="/dashboard/inventory"
       />
-      <InventorySubNav />
       <MovementsClient movements={movements} />
     </div>
   );

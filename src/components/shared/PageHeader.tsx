@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
+import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
 interface PageHeaderProps {
   title: string;
@@ -61,7 +62,7 @@ export function PageHeader({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight truncate font-heading">
-              {title}
+              <SitePageTitle fallback={title} />
             </h1>
             {badge !== undefined && (
               <Badge variant={badgeVariant === "destructive" ? "destructive" : badgeVariant === "warning" ? "warning" : "secondary"} className="h-5 px-2 text-[11px] font-semibold">

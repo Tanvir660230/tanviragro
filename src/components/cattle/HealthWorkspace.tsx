@@ -707,7 +707,7 @@ export function HealthWorkspace({
               <div className="p-4 rounded-2xl border border-border bg-card space-y-3">
                 <div className="flex justify-between items-start border-b border-border pb-3">
                   <div>
-                    <h4 className="text-base font-black">Tanvir Agro Livestock Enterprise</h4>
+                    <h4 className="text-base font-black">Tanvir Agro</h4>
                     <p className="text-xs text-muted-foreground">Certified Veterinary Health Record</p>
                   </div>
                   <div className="text-right">

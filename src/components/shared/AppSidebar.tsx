@@ -47,7 +47,8 @@ export function AppSidebar({
   return (
     <>
       {/* Desktop / Tablet Sidebar */}
-      <div className="hidden md:flex sticky top-0 h-svh shrink-0 z-30">
+      {/* fills the column the shell reserves (it used to shrink to its text, leaving a blank strip) */}
+      <div className="hidden md:flex h-svh w-full [&>*]:flex-1 [&>*]:min-w-0">
         {isSidebarCollapsed ? (
           <SidebarCollapsed
             isAdmin={isAdmin}

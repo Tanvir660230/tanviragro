@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { HeartPulse, Activity, ShieldAlert, Skull, Syringe, ClipboardList, AlertTriangle, CheckCircle } from "lucide-react";
+import { HeartPulse, Activity, ShieldAlert, Syringe, ClipboardList, AlertTriangle, CheckCircle } from "lucide-react";
 import { getServerClient, getCachedBusinessId } from "@/lib/supabase/cached";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import Link from "next/link";
+import { todayDhaka, addDays, startOfMonth } from "@/lib/dates";
 
 export const metadata: Metadata = {
-  title: "Health & Veterinary | Dashboard",
+  title: "স্বাস্থ্য",
 };
 
 export default function HealthDashboardPage() {
@@ -37,10 +38,7 @@ function DashboardSkeleton() {
           <div key={i} className="h-28 animate-shimmer rounded-2xl" />
         ))}
       </div>
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 h-72 animate-shimmer rounded-2xl" />
-        <div className="h-72 animate-shimmer rounded-2xl" />
-      </div>
+      <div className="h-72 animate-shimmer rounded-2xl" />
     </div>
   );
 }
@@ -49,13 +47,13 @@ async function HealthDashboardSection() {
   const supabase = await getServerClient();
   const businessId = await getCachedBusinessId();
   if (!businessId) {
-    return <EmptyState icon={HeartPulse} title="No business found" />;
+    return <EmptyState icon={HeartPulse} title="খামার পাওয়া যায়নি" />;
   }
 
-  const today = new Date();
-  const todayISO = today.toISOString().slice(0, 10);
-  const in7ISO = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+  // farm calendar (Dhaka), not the server's UTC date
+  const todayISO = todayDhaka();
+  const in7ISO = addDays(todayISO, 7);
+  const firstOfMonth = startOfMonth(todayISO);
 
   const [
     { count: totalActive },
@@ -63,115 +61,78 @@ async function HealthDashboardSection() {
     { data: rawEvents },
     { count: completedThisMonth },
     { data: recentTreatments },
-    diseaseRes,
   ] = await Promise.all([
     supabase.from("cattle").select("*", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active").is("deleted_at", null),
     supabase.from("cattle").select("*", { count: "exact", head: true }).eq("business_id", businessId).eq("is_quarantined", true).is("deleted_at", null),
-    supabase.from("health_events").select("id, cattle_id, title, event_type, scheduled_at").eq("business_id", businessId).is("completed_at", null).is("deleted_at", null).order("scheduled_at", { ascending: true }).limit(200),
+    supabase.from("health_events").select("id, cattle_id, title, event_type, scheduled_at").eq("business_id", businessId).is("completed_at", null).is("deleted_at", null).order("scheduled_at", { ascending: true }).limit(1000),
     supabase.from("health_events").select("*", { count: "exact", head: true }).eq("business_id", businessId).gte("completed_at", firstOfMonth).is("deleted_at", null),
     supabase.from("cattle_treatments").select("id, cattle_id, diagnosis, treated_at, vet_fee").order("treated_at", { ascending: false }).limit(5),
-    (supabase as any).from("disease_records").select("id, disease_name, severity, status").eq("business_id", businessId).in("status", ["active", "under_treatment"]).order("diagnosis_date", { ascending: false }).limit(5),
   ]);
 
   const pending = rawEvents ?? [];
   const overdueCount = pending.filter((e) => e.scheduled_at < todayISO).length;
   const thisWeekCount = pending.filter((e) => e.scheduled_at >= todayISO && e.scheduled_at <= in7ISO).length;
-  const diseaseRows: any[] = diseaseRes.data ?? [];
-
-  const SEVERITY_COLOR: Record<string, string> = {
-    mild: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    moderate: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-    severe: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    critical: "bg-red-200 text-red-800 dark:bg-red-900/50 dark:text-red-300",
-  };
 
   const TYPE_LABEL: Record<string, string> = {
-    vaccine: "Vaccine", checkup: "Check-up", deworming: "Deworming", treatment: "Treatment", other: "Other",
+    vaccine: "টিকা", checkup: "চেকআপ", deworming: "কৃমিনাশক", treatment: "চিকিৎসা", other: "অন্যান্য",
   };
+  const TASKS = "/dashboard/health/vaccinations";
 
   return (
     <>
       <PageHeader
-        title="Health & Veterinary EHR"
-        subtitle={`${totalActive ?? 0} active animals · ${overdueCount > 0 ? `${overdueCount} overdue events` : "All events on track"}`}
+        title="স্বাস্থ্য"
+        subtitle={`${totalActive ?? 0}টি সক্রিয় গরু · ${overdueCount > 0 ? `${overdueCount}টি কাজ বাকি পড়ে আছে` : "সব কাজ সময়মতো"}`}
         icon={HeartPulse}
         badge={overdueCount || undefined}
         badgeVariant="destructive"
         actions={
-          <Link href="/dashboard/health/records" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
-            <ClipboardList className="h-3.5 w-3.5" />
-            All Records
+          <Link href={TASKS} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
+            <Syringe className="h-3.5 w-3.5" />
+            টিকা ও কাজ
           </Link>
         }
       />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Active Animals" value={totalActive ?? 0} icon={Activity} accentColor="emerald" href="/dashboard/cattle" subtext="in records" />
-        <StatCard label="Pending Events" value={pending.length} icon={ClipboardList} accentColor={overdueCount > 0 ? "rose" : "blue"} href="/dashboard/health/records" subtext={overdueCount > 0 ? `${overdueCount} overdue` : `${thisWeekCount} this week`} />
-        <StatCard label="Quarantine" value={quarantined ?? 0} icon={ShieldAlert} accentColor={quarantined ? "amber" : "slate"} href="/dashboard/health/quarantine" subtext="animals isolated" />
-        <StatCard label="Completed (Month)" value={completedThisMonth ?? 0} icon={CheckCircle} accentColor="violet" subtext="health events done" />
+        <StatCard label="সক্রিয় গরু" value={totalActive ?? 0} icon={Activity} accentColor="emerald" href="/dashboard/cattle" subtext="খামারে আছে" />
+        <StatCard label="বাকি কাজ" value={pending.length} icon={ClipboardList} accentColor={overdueCount > 0 ? "rose" : "blue"} href={TASKS} subtext={overdueCount > 0 ? `${overdueCount}টি সময় পেরিয়েছে` : `এই সপ্তাহে ${thisWeekCount}টি`} />
+        <StatCard label="আলাদা রাখা" value={quarantined ?? 0} icon={ShieldAlert} accentColor={quarantined ? "amber" : "slate"} subtext="কোয়ারেন্টাইনে" />
+        <StatCard label="এই মাসে শেষ" value={completedThisMonth ?? 0} icon={CheckCircle} accentColor="violet" subtext="সম্পন্ন কাজ" />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
-        <SectionCard title="Pending Health Events" icon={AlertTriangle} iconVariant={overdueCount > 0 ? "red" : "amber"} className="lg:col-span-2" action={<Link href="/dashboard/health/records" className="text-xs text-primary hover:underline font-medium">View all</Link>}>
-          {pending.length === 0 ? (
-            <EmptyState icon={CheckCircle} title="All clear!" description="No pending health events." compact />
-          ) : (
-            <div className="divide-y divide-border/60">
-              {pending.slice(0, 8).map((ev) => {
-                const isOverdue = ev.scheduled_at < todayISO;
-                return (
-                  <div key={ev.id} className="flex items-center gap-3 py-2.5">
-                    <div className={`h-2 w-2 rounded-full shrink-0 ${isOverdue ? "bg-red-500" : "bg-amber-400"}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{ev.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {TYPE_LABEL[ev.event_type] ?? ev.event_type} · {ev.scheduled_at}
-                        {isOverdue && <span className="ml-1 text-red-500 font-semibold"> Overdue</span>}
-                      </p>
-                    </div>
+      <SectionCard title="বাকি স্বাস্থ্য কাজ" icon={AlertTriangle} iconVariant={overdueCount > 0 ? "red" : "amber"} action={<Link href={TASKS} className="text-xs text-primary hover:underline font-medium">সব দেখুন</Link>}>
+        {pending.length === 0 ? (
+          <EmptyState icon={CheckCircle} title="সব ঠিক আছে" description="কোনো বাকি কাজ নেই।" compact />
+        ) : (
+          <div className="divide-y divide-border/60">
+            {pending.slice(0, 8).map((ev) => {
+              const isOverdue = ev.scheduled_at < todayISO;
+              return (
+                <div key={ev.id} className="flex items-center gap-3 py-2.5">
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${isOverdue ? "bg-red-500" : "bg-amber-400"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{ev.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {TYPE_LABEL[ev.event_type] ?? ev.event_type} · {ev.scheduled_at}
+                      {isOverdue && <span className="ml-1 text-red-500 font-semibold"> সময় পেরিয়েছে</span>}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </SectionCard>
-        <div className="space-y-4">
-          <SectionCard title="Active Diseases" icon={AlertTriangle} iconVariant="red" action={<Link href="/dashboard/health/diseases" className="text-xs text-primary hover:underline font-medium">View all</Link>}>
-            {diseaseRows.length === 0 ? (
-              <EmptyState icon={CheckCircle} title="No active cases" compact />
-            ) : (
-              <div className="space-y-2">
-                {diseaseRows.slice(0, 4).map((d: any) => (
-                  <div key={d.id} className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium truncate">{d.disease_name}</p>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${SEVERITY_COLOR[d.severity] ?? ""}`}>{d.severity}</span>
-                  </div>
-                ))}
-              </div>
+                </div>
+              );
+            })}
+            {pending.length > 8 && (
+              <Link href={TASKS} className="block py-2.5 text-center text-xs font-medium text-primary hover:underline">
+                আরও {pending.length - 8}টি কাজ দেখুন
+              </Link>
             )}
-          </SectionCard>
-          <SectionCard title="Quick Access" icon={HeartPulse} iconVariant="primary">
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { href: "/dashboard/health/vaccinations", label: "Vaccinations", icon: Syringe },
-                { href: "/dashboard/health/treatments", label: "Treatments", icon: Activity },
-                { href: "/dashboard/health/quarantine", label: "Quarantine", icon: ShieldAlert },
-                { href: "/dashboard/health/mortality", label: "Mortality", icon: Skull },
-              ].map((item) => (
-                <Link key={item.href} href={item.href} className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-xs font-medium hover:bg-muted/60 transition-colors">
-                  <item.icon className="h-3.5 w-3.5 text-muted-foreground" />
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </SectionCard>
-        </div>
-      </div>
+          </div>
+        )}
+      </SectionCard>
       {recentTreatments && recentTreatments.length > 0 && (
-        <SectionCard title="Recent Treatments" icon={Activity} iconVariant="blue" action={<Link href="/dashboard/health/treatments" className="text-xs text-primary hover:underline font-medium">View all</Link>}>
+        <SectionCard title="সাম্প্রতিক চিকিৎসা" icon={Activity} iconVariant="blue" action={<Link href="/dashboard/health/treatments" className="text-xs text-primary hover:underline font-medium">সব দেখুন</Link>}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-border/60"><th className="py-2 text-left text-xs font-semibold text-muted-foreground">Diagnosis</th><th className="py-2 text-left text-xs font-semibold text-muted-foreground">Date</th><th className="py-2 text-right text-xs font-semibold text-muted-foreground">Vet Fee</th></tr></thead>
+              <thead><tr className="border-b border-border/60"><th className="py-2 text-left text-xs font-semibold text-muted-foreground">রোগ</th><th className="py-2 text-left text-xs font-semibold text-muted-foreground">তারিখ</th><th className="py-2 text-right text-xs font-semibold text-muted-foreground">ডাক্তারের ফি</th></tr></thead>
               <tbody className="divide-y divide-border/40">
                 {recentTreatments.map((t) => (
                   <tr key={t.id}>
@@ -188,4 +149,3 @@ async function HealthDashboardSection() {
     </>
   );
 }
-

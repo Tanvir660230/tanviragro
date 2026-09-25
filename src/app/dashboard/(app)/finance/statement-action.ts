@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 export type TxnCategory =
   | "Capital In"
@@ -45,7 +46,7 @@ export async function getStatementData(
   const { data: bizData } = await supabase
     .from("businesses")
     .select("id, name, opening_cash_balance")
-    .eq("owner_id", user.id)
+    .eq("id", (await getCachedBusinessId()) ?? "")
     .maybeSingle();
 
   if (!bizData) return { businessName: "", openingBalance: 0, transactions: [] };

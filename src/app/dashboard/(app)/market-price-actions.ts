@@ -5,16 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 
  
-async function getBusinessId(supabase: SupabaseClient<any>, userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", userId)
-    .maybeSingle();
-  if (error || !data) throw new Error("Business not found");
-  return data.id;
+async function getBusinessId(supabase: SupabaseClient<any>, _userId: string): Promise<string> {
+  // owner or team member (the central resolver), not only the owner
+  const id = await getCurrentBusinessId(supabase);
+  if (!id) throw new Error("Business not found");
+  return id;
 }
 
 export async function upsertMarketPrice(

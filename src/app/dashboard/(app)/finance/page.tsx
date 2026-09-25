@@ -25,6 +25,8 @@ import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
 import { loadMonthlyConsumptions } from "@/lib/inventory/consumption-stats";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Landmark } from "lucide-react";
 
 
 export const metadata: Metadata = { title: "Finance & P&L" };
@@ -429,21 +431,7 @@ export default async function FinancePage(props: {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Link
-          href="/dashboard/finance/utilities"
-          className="inline-flex h-9 items-center rounded-lg border border-border/70 bg-card px-3 text-xs font-medium hover:bg-muted"
-        >
-          Utility expenses →
-        </Link>
-        <Link
-          href="/dashboard/finance/bulk-add"
-          className="inline-flex h-9 items-center rounded-lg border border-border/70 bg-card px-3 text-xs font-medium hover:bg-muted"
-        >
-          Add several →
-        </Link>
-        <AddCostDialog />
-      </div>
+      <PageHeader title="Money" icon={Landmark} actions={<AddCostDialog />} className="mb-0" />
       <Suspense fallback={null}>
         <CapitalSummaryCard />
       </Suspense>

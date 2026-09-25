@@ -17,6 +17,7 @@ import {
   computeAccount,
   type PartnerAccountSummary,
 } from "@/lib/partners/calculations";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 export const metadata: Metadata = { title: "Partner Profile" };
 
@@ -39,7 +40,7 @@ export default async function PartnerProfilePage({
   const { data: bizData } = await supabase
     .from("businesses")
     .select("id, default_daily_gain_kg")
-    .eq("owner_id", user.id)
+    .eq("id", (await getCachedBusinessId()) ?? "")
     .maybeSingle();
 
   const businessId = bizData?.id ?? null;

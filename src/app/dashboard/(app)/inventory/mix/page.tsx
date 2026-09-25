@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { Blend } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
@@ -72,7 +71,6 @@ export default async function FeedMixPage() {
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 pb-12">
-      <InventorySubNav />
       <PageHeader title={t.title} subtitle={t.subtitle} icon={Blend} back="/dashboard/inventory" />
       <MixClient data={data} lang={lang} />
     </div>

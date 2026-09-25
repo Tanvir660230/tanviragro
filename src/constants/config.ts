@@ -36,7 +36,6 @@ export const ROUTES = {
   ACCOUNTING: "/dashboard/accounting",
   PARTNERS: "/dashboard/partners",
   COMPLIANCE: "/dashboard/compliance",
-  OPERATIONS: "/dashboard/operations",
   NOTIFICATIONS: "/dashboard/notifications",
   REPORTS: "/dashboard/report",
   SETTINGS: "/dashboard/settings",

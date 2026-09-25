@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { PrintButton } from "@/components/ui/print-button";
 import { ZakatCalculator } from "@/components/finance/ZakatCalculator";
 import { cn } from "@/lib/utils";
+import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
 
 export interface InventoryItemStock {
@@ -139,10 +140,10 @@ export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Enterprise Report Center
+                <SitePageTitle fallback="Reports" />
               </h1>
               <p className="text-xs sm:text-sm text-muted-foreground">
-                Consolidated business intelligence, audited financial statements &amp; print hub
+                {bizName}
               </p>
             </div>
           </div>

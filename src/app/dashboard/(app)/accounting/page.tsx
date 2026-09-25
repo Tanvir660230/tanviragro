@@ -23,6 +23,7 @@ import type { FinancialLock } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
 export const metadata: Metadata = { title: "Accounting & Ledger" };
 
@@ -101,7 +102,7 @@ export default async function AccountingPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              Accounting &amp; Ledger
+              <SitePageTitle fallback="Accounts" />
             </h1>
             <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary">
               Double-Entry

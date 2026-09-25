@@ -4,7 +4,6 @@ import { AlertTriangle, Blend, History, Package, PlayCircle, Receipt, Scale, Whe
 import { createClient } from "@/lib/supabase/server";
 import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { StockList, type StockStatus } from "@/components/inventory/StockList";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { InventoryFeedBoard } from "@/components/inventory/InventoryFeedBoard";
 import { loadFeedData, syncFeedAutoUsage } from "@/lib/feed/feed-data";
 import { getBusinessContext } from "@/lib/context/business-context";
@@ -164,7 +163,6 @@ export default async function InventoryPage({
 
   return (
     <div className="w-full min-w-0 space-y-5 pb-12">
-      <InventorySubNav />
 
       {/* header */}
       <header className="flex flex-wrap items-start justify-between gap-3">

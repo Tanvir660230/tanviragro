@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { ReceiptText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
@@ -60,7 +59,6 @@ export default async function BulkPurchasePage() {
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 pb-12">
-      <InventorySubNav />
       <PageHeader title={t.title} subtitle={t.subtitle} icon={ReceiptText} back="/dashboard/inventory" />
       <BulkPurchaseClient items={items} context={context} today={todayDhaka()} lang={lang} />
     </div>

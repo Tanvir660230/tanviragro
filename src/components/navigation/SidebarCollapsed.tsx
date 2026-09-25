@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { PanelLeftOpen, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logout } from '@/app/(auth)/login/actions';
-import { ENTERPRISE_NAV_CONFIG, isNavActive } from './nav-config';
+import { ENTERPRISE_NAV_CONFIG, isNavActive, navLabel } from './nav-config';
+import { useTranslation } from '@/i18n/I18nProvider';
 import { useShell } from '@/components/layout/ShellContext';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { ExtendedUserRole } from '@/constants/roles';
@@ -26,6 +27,7 @@ export function SidebarCollapsed({
   className,
 }: SidebarCollapsedProps) {
   const { toggleSidebar } = useShell();
+  const { locale } = useTranslation();
   const bizName = business?.name ?? 'Tanvir Agro';
 
   return (
@@ -62,7 +64,7 @@ export function SidebarCollapsed({
                             </Link>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                            {item.defaultLabel}
+                            {navLabel(item, locale)}
                         </TooltipContent>
                     </Tooltip>
                 );

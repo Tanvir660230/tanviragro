@@ -8,6 +8,7 @@ import type {
   InsuranceAlert,
   UnweighedAlert,
 } from "./SmartAlertsDropdown";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 export async function TopBar() {
   const supabase = await createClient();
@@ -20,7 +21,7 @@ export async function TopBar() {
   const sevenDaysAgoISO = new Date(now.getTime() -  7 * 86400000).toISOString().slice(0, 10);
 
   const [{ data: bizData }, { data: profileData }] = await Promise.all([
-    supabase.from("businesses").select("id, name, logo_url").eq("owner_id", user?.id ?? "").maybeSingle(),
+    supabase.from("businesses").select("id, name, logo_url").eq("id", (await getCachedBusinessId()) ?? "").maybeSingle(),
     supabase.from("profiles").select("full_name, avatar_url").eq("id", user?.id ?? "").maybeSingle(),
   ]);
 

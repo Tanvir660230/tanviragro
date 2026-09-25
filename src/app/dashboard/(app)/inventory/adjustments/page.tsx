@@ -4,7 +4,6 @@ import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { AdjustmentsClient } from "@/components/inventory/AdjustmentsClient";
 
 export const metadata: Metadata = { title: "Adjustments | Inventory" };
@@ -37,7 +36,6 @@ export default async function AdjustmentsPage() {
         icon={ClipboardList}
         back="/dashboard/inventory"
       />
-      <InventorySubNav />
       <AdjustmentsClient adjustments={adjustments} />
     </div>
   );

@@ -51,8 +51,9 @@ function AppShellInner({
       {sidebar && (
         <div
           className={cn(
-            "hidden md:block sticky top-0 h-svh shrink-0 transition-all duration-200 z-30",
-            isSidebarCollapsed ? "w-16" : "w-56 lg:w-64"
+            // phones: no box of its own, so the menu drawer inside can open (it used to be hidden with it)
+            "contents md:block md:sticky md:top-0 md:h-svh md:shrink-0 md:transition-all md:duration-200 md:z-30",
+            isSidebarCollapsed ? "md:w-16" : "md:w-56 lg:w-64"
           )}
         >
           {sidebar}

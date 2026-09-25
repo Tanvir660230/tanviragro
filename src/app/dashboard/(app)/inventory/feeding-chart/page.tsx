@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { Scale } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
@@ -61,7 +60,6 @@ export default async function FeedingChartPage() {
 
   return (
     <div className="w-full min-w-0 space-y-4 pb-12">
-      <InventorySubNav />
       <PageHeader title={t.title} subtitle={t.sub} icon={Scale} back="/dashboard/inventory" />
       <FeedChartClient data={data} lang={lang} />
     </div>

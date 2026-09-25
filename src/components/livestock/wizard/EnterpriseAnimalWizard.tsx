@@ -214,7 +214,7 @@ export function EnterpriseAnimalWizard({
           <div className="flex items-center justify-between">
             <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <span>{editAnimalId ? `Edit Livestock Profile (${state.identification.tagId || "Animal"})` : "Enterprise Animal Registration"}</span>
+              <span>{editAnimalId ? `Edit Livestock Profile (${state.identification.tagId || "Animal"})` : "New animal"}</span>
             </DialogTitle>
             <Badge variant="outline" className="text-xs">
               Step {currentStep} of 8

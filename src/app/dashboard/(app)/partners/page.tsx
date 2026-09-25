@@ -11,6 +11,7 @@ import { Users } from "lucide-react";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { getHerdFeedShareByCattle } from "@/lib/inventory/herd-feed-share";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 export const metadata: Metadata = { title: "Partners" };
 
@@ -27,7 +28,7 @@ export default async function PartnersPage() {
   const { data: bizData } = await supabase
     .from("businesses")
     .select("id, unit_price_bdt, default_daily_gain_kg, default_roughage_type")
-    .eq("owner_id", userId)
+    .eq("id", (await getCachedBusinessId()) ?? "")
     .maybeSingle();
 
   const businessId: string | null = bizData?.id ?? null;

@@ -1,6 +1,4 @@
 import { notificationEngine } from "@/lib/notifications/engine";
-import { workflowEngine } from "@/lib/workflows/engine";
-import { eventBus } from "@/lib/events/event-bus";
 
 describe("Phase 9: Enterprise Notification, Workflow & Automation Engine", () => {
   it("compiles notification templates with variable substitution", () => {
@@ -36,29 +34,5 @@ describe("Phase 9: Enterprise Notification, Workflow & Automation Engine", () =>
     expect(notifsB.length).toBe(0);
   });
 
-  it("evaluates workflow rules against published domain events", async () => {
-    const rules = workflowEngine.getRules();
-    expect(Array.isArray(rules)).toBe(true);
-
-    const testEvent = {
-      eventId: "evt_test_1",
-      eventType: "InventoryLow" as const,
-      timestamp: new Date().toISOString(),
-      businessId: "biz_test_rules",
-      priority: "high" as const,
-      title: "Low Stock: Napier Grass",
-      description: "Napier Grass depleted to 0 KG",
-      itemId: "item_123",
-      itemName: "Napier Grass",
-      currentStock: 0,
-      threshold: 10,
-      unit: "KG",
-      category: "inventory" as const,
-      isExpiringSoon: false,
-    };
-
-    eventBus.emit(testEvent);
-    expect(eventBus.getRecentEvents().length).toBeGreaterThan(0);
-  });
 });
 

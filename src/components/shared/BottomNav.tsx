@@ -3,87 +3,31 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import {
-  Home, Beef, Package, BarChart3, MoreHorizontal,
-  Users, Store, Settings, ClipboardList, FileText,
-  X, BookOpen, Landmark, Activity,
-} from "lucide-react";
+import { MoreHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { SITE, GROUP_LABELS, activeHref, tr, type SiteSection } from "@/components/navigation/site-map";
 
-const MOBILE_NAV = [
-  { href: "/dashboard",           navKey: "home",      icon: Home,      adminOnly: false },
-  { href: "/dashboard/cattle",    navKey: "cattle",    icon: Beef,      adminOnly: false },
-  { href: "/dashboard/inventory", navKey: "inventory", icon: Package,   adminOnly: false },
-  { href: "/dashboard/finance",   navKey: "finance",   icon: BarChart3, adminOnly: true  },
-];
-
-type MoreLink = {
-  href:      string;
-  labelKey:  string;
-  icon:      React.ComponentType<{ className?: string }>;
-  adminOnly: boolean;
-};
-
-type MoreGroup = {
-  label:     string;
-  links:     MoreLink[];
-};
-
-const MORE_GROUPS: MoreGroup[] = [
-  {
-    label: "Business",
-    links: [
-      { href: "/dashboard/finance/loans", labelKey: "loans",      icon: Landmark,     adminOnly: true  },
-      { href: "/dashboard/accounting",    labelKey: "accounting", icon: BookOpen,     adminOnly: true  },
-      { href: "/dashboard/partners",      labelKey: "partners",   icon: Users,        adminOnly: false },
-      { href: "/dashboard/vendors",       labelKey: "vendors",    icon: Store,        adminOnly: false },
-    ],
-  },
-  {
-    label: "Reports",
-    links: [
-      { href: "/dashboard/compliance", labelKey: "compliance", icon: ClipboardList, adminOnly: false },
-      { href: "/dashboard/report",     labelKey: "report",     icon: FileText,      adminOnly: true  },
-    ],
-  },
-  {
-    label: "System",
-    links: [
-      { href: "/dashboard/operations", labelKey: "operations", icon: Activity, adminOnly: true },
-      { href: "/dashboard/settings", labelKey: "settings", icon: Settings, adminOnly: true },
-    ],
-  },
-];
-
-/** Returns true when `href` is the most-specific match for the current pathname. */
-function isNavActive(href: string, pathname: string, allHrefs: string[]): boolean {
-  if (href === "/dashboard") return pathname === "/dashboard";
-  if (!pathname.startsWith(href)) return false;
-  return !allHrefs.some(
-    (other) => other !== href && other.startsWith(href) && pathname.startsWith(other)
-  );
-}
+// the bottom bar and the "More" sheet, both from THE site map (site-map.ts)
+const BOTTOM = SITE.filter((s) => s.bottomBar);
+const MORE = SITE.filter((s) => !s.bottomBar);
+const MORE_GROUPS = (["daily", "money", "system"] as const)
+  .map((g) => ({ id: g, label: GROUP_LABELS[g], links: MORE.filter((s) => s.group === g) }))
+  .filter((g) => g.links.length > 0);
+const sectionHrefs = (s: SiteSection) => [s.href, ...s.pages.map((p) => p.href)];
 
 export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
-  const pathname  = usePathname();
-  const { t }     = useTranslation();
+  const pathname  = usePathname() ?? "";
+  const { t, locale } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const current = activeHref(pathname);
+  // a section is active when the current page is the section or one of its pages
+  const isOn = (s: SiteSection) => current != null && sectionHrefs(s).includes(current);
 
-  const navItems = MOBILE_NAV.filter((n) => !n.adminOnly || isAdmin);
-
-  const allMoreLinks: MoreLink[] = MORE_GROUPS.flatMap((g) => g.links);
-  const visibleMoreGroups = MORE_GROUPS.map((g) => ({
-    ...g,
-    links: g.links.filter((l) => !l.adminOnly || isAdmin),
-  })).filter((g) => g.links.length > 0);
-
-  const allBottomHrefs = [
-    ...navItems.map((n) => n.href),
-    ...allMoreLinks.map((l) => l.href),
-  ];
-
-  const moreActive = allMoreLinks.some((l) => isNavActive(l.href, pathname, allBottomHrefs));
+  const navItems = BOTTOM.filter((n) => !n.adminOnly || isAdmin);
+  const visibleMoreGroups = MORE_GROUPS.map((g) => ({ ...g, links: g.links.filter((l) => !l.adminOnly || isAdmin) }))
+    .filter((g) => g.links.length > 0);
+  const moreActive = MORE.some(isOn);
 
   return (
     <>
@@ -123,19 +67,20 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
         {/* Grouped links */}
         <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin">
           {visibleMoreGroups.map((group) => (
-            <div key={group.label}>
+            <div key={group.id}>
               {/* Section label */}
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/50 select-none">
-                  {group.label}
+                  {tr(group.label, locale)}
                 </span>
                 <div className="h-px flex-1 bg-border/40" />
               </div>
 
               {/* Links grid */}
               <div className="grid grid-cols-3 gap-2">
-                {group.links.map(({ href, labelKey, icon: Icon }) => {
-                  const active = isNavActive(href, pathname, allBottomHrefs);
+                {group.links.map((sec) => {
+                  const { href, icon: Icon } = sec;
+                  const active = isOn(sec);
                   return (
                     <Link
                       key={href}
@@ -150,7 +95,7 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
                     >
                       <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground/70")} />
                       <span className="leading-tight text-[11px] line-clamp-1">
-                        {t.sidebar[labelKey as keyof typeof t.sidebar]}
+                        {tr(sec.label, locale)}
                       </span>
                     </Link>
                   );
@@ -167,8 +112,9 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
         className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar/90 backdrop-blur-xl border-t border-sidebar-border/50 safe-bottom shadow-lg"
       >
         <div className="flex items-stretch">
-          {navItems.map(({ href, navKey, icon: Icon }) => {
-            const active = isNavActive(href, pathname, allBottomHrefs);
+          {navItems.map((sec) => {
+            const { href, icon: Icon } = sec;
+            const active = isOn(sec);
             return (
               <Link
                 key={href}
@@ -185,7 +131,7 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
                 )}
                 <Icon className={cn("h-5 w-5 transition-transform duration-150", active && "scale-110 text-sidebar-primary")} />
                 <span className={cn("text-[11px] leading-none", active && "font-semibold")}>
-                  {t.nav[navKey as keyof typeof t.nav]}
+                  {tr(sec.label, locale)}
                 </span>
               </Link>
             );

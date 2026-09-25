@@ -114,7 +114,7 @@ export function BusinessProfileForm({ initialData }: BusinessProfileFormProps) {
           )}
         </div>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">Farm / Enterprise Logo</p>
+          <p className="text-sm font-semibold text-foreground">Farm logo</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
             PNG, JPG, or WebP. Displayed on printable documents and invoices.
           </p>

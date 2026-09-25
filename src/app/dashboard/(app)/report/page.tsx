@@ -4,10 +4,11 @@ import { ReportHubClient } from "@/components/report/ReportHubClient";
 import { ReportEngine } from "@/lib/reports/report-engine";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 export const metadata: Metadata = {
-  title: "Analytics, BI & Report Center | Tanvir Agro",
-  description: "Enterprise executive decision platform, operational KPIs, custom report builder & financial statements",
+  title: "রিপোর্ট",
+  description: "খামারের হিসাব, গরু ও খাবারের রিপোর্ট",
 };
 
 export default async function ReportPage() {
@@ -23,12 +24,12 @@ export default async function ReportPage() {
     ? await supabase
         .from("businesses")
         .select("id, name")
-        .eq("owner_id", userId)
+        .eq("id", (await getCachedBusinessId()) ?? "")
         .maybeSingle()
     : { data: null };
 
   const businessId: string | null = (bizRow as { id?: string } | null)?.id ?? null;
-  const bizName: string           = (bizRow as { name?: string } | null)?.name ?? "Tanvir Agro Enterprise";
+  const bizName: string           = (bizRow as { name?: string } | null)?.name ?? "Tanvir Agro";
 
   if (!businessId) {
     return (

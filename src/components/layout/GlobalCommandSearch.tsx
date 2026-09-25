@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Search, Beef, LayoutDashboard, Package, BarChart3, Settings,
-  Plus, Scale, Zap, DollarSign, Store, Users, FileText, Clock, X, ArrowRight, Sparkles
-} from "lucide-react";
+import { Search, Beef, Package, Plus, Scale, Zap, DollarSign, Clock, X, ArrowRight, Sparkles } from "lucide-react";
 import { useShell } from "./ShellContext";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { SITE, tr } from "@/components/navigation/site-map";
 
 interface Entry {
   id: string;
@@ -20,26 +19,32 @@ interface Entry {
   badge?: string;
 }
 
-const PAGES: Entry[] = [
-  { id: "p-1", title: "Dashboard Overview", subtitle: "Live KPIs & farm metrics", category: "pages", icon: LayoutDashboard, href: "/dashboard", keywords: ["home","main"] },
-  { id: "p-2", title: "Cattle Registry", subtitle: "Animal records, tags & weights", category: "livestock", icon: Beef, href: "/dashboard/cattle", keywords: ["cow","bull","cattle"] },
-  { id: "p-3", title: "Feed & Inventory", subtitle: "Stock levels & consumption", category: "inventory", icon: Package, href: "/dashboard/inventory", keywords: ["feed","stock","ration"] },
-  { id: "p-4", title: "Financial Ledger", subtitle: "Expenses, income & cash flow", category: "finance", icon: BarChart3, href: "/dashboard/finance", keywords: ["profit","loss","expense"] },
-  { id: "p-5", title: "Partners & Investors", subtitle: "Syndication shares & payouts", category: "finance", icon: Users, href: "/dashboard/partners", keywords: ["investor","partner"] },
-  { id: "p-6", title: "Vendors & Suppliers", subtitle: "Feed vendors & suppliers", category: "inventory", icon: Store, href: "/dashboard/vendors", keywords: ["supplier","vendor"] },
-  { id: "p-7", title: "Enterprise Reports", subtitle: "Analytics & export engine", category: "reports", icon: FileText, href: "/dashboard/report", keywords: ["report","export"] },
-  { id: "p-8", title: "Settings & Setup", subtitle: "Farm config & security", category: "pages", icon: Settings, href: "/dashboard/settings", keywords: ["setting","config"] },
-  { id: "p-9", title: "Commerce Hub", subtitle: "Purchases, sales & logistics", category: "commerce", icon: Store, href: "/dashboard/commerce", keywords: ["commerce","purchase","sale","invoice"] },
-  { id: "p-10", title: "Compliance & Protocols", subtitle: "Biosecurity & audit trail", category: "compliance", icon: FileText, href: "/dashboard/compliance", keywords: ["compliance","protocol","audit"] },
-  { id: "p-11", title: "Notifications & Alerts", subtitle: "Push alerts & reminders", category: "pages", icon: Clock, href: "/dashboard/notifications", keywords: ["notifications","alerts","push"] },
-  { id: "p-12", title: "Operations Dashboard", subtitle: "Daily tasks & workflows", category: "pages", icon: Clock, href: "/dashboard/operations", keywords: ["operations","daily","workflow"] },
-  { id: "p-13", title: "Accounting & Ledger", subtitle: "General ledger & financial statements", category: "finance", icon: FileText, href: "/dashboard/accounting", keywords: ["accounting","ledger","journal","balance sheet"] },
-  { id: "a-1", title: "Register Cattle", subtitle: "Add animal tag & breed", category: "actions", icon: Plus, href: "/dashboard/cattle?open=add", keywords: ["new cow","add cattle"], badge: "Create" },
-  { id: "a-2", title: "Log Weight Update", subtitle: "Batch weight measurement", category: "actions", icon: Scale, href: "/dashboard/cattle?open=bulk-weigh", keywords: ["weight","scale"], badge: "Action" },
-  { id: "a-3", title: "Receive Feed Stock", subtitle: "Record feed procurement", category: "actions", icon: Plus, href: "/dashboard/inventory?open=add", keywords: ["feed in","stock"], badge: "Create" },
-  { id: "a-4", title: "Daily Feed Deduction", subtitle: "Log ration consumption", category: "actions", icon: Zap, href: "/dashboard/inventory", keywords: ["daily feed","ration"], badge: "Action" },
-  { id: "a-5", title: "Record Expense", subtitle: "Log farm or medical cost", category: "actions", icon: DollarSign, href: "/dashboard/finance", keywords: ["expense","cost"], badge: "Finance" },
-];
+// every page from THE site map (so search never offers a page that doesn't exist), plus shortcuts
+function buildPages(locale: string | undefined): Entry[] {
+  const out: Entry[] = [];
+  for (const sec of SITE) {
+    const own = sec.pages.length ? sec.pages : [{ href: sec.href, label: sec.label, icon: sec.icon, keywords: [] as string[] }];
+    for (const p of own) {
+      if (out.some((e) => e.href === p.href)) continue;
+      const title = p.href === sec.href && sec.pages.length ? tr(sec.label, locale) : tr(p.label, locale);
+      out.push({
+        id: `p:${p.href}`, title, subtitle: p.href === sec.href ? undefined : tr(sec.label, locale),
+        category: "pages", icon: p.icon, href: p.href,
+        keywords: [p.label.bn, p.label.en, sec.label.bn, sec.label.en, ...(p.keywords ?? []), ...(sec.keywords ?? [])],
+      });
+    }
+  }
+  const act = (id: string, bn: string, en: string, icon: Entry["icon"], href: string, keywords: string[]): Entry =>
+    ({ id, title: locale === "bn" ? bn : en, category: "actions", icon, href, keywords: [bn, en, ...keywords], badge: locale === "bn" ? "নতুন" : "New" });
+  out.push(
+    act("a-cattle", "নতুন গরু", "Add animal", Plus, "/dashboard/cattle?open=add", ["new cow", "add cattle"]),
+    act("a-weigh", "ওজন লিখুন", "Record weights", Scale, "/dashboard/cattle?open=bulk-weigh", ["weight", "ওজন"]),
+    act("a-buy", "খাবার কেনা", "Buy feed", Package, "/dashboard/inventory/purchase", ["purchase", "memo", "কেনা"]),
+    act("a-mix", "মিক্স বানান", "Make a mix", Zap, "/dashboard/inventory/mix", ["mix", "মিক্স"]),
+    act("a-cost", "খরচ লিখুন", "Record expense", DollarSign, "/dashboard/finance", ["expense", "cost", "খরচ"]),
+  );
+  return out;
+}
 
 export function GlobalCommandSearch() {
   const { isCommandOpen, setCommandOpen } = useShell();
@@ -48,6 +53,8 @@ export function GlobalCommandSearch() {
   const [recent, setRecent] = useState<string[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const router = useRouter();
+  const { locale } = useTranslation();
+  const bn = locale === "bn";
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -62,15 +69,16 @@ export function GlobalCommandSearch() {
     if (!isCommandOpen) return;
     async function loadCattle() {
       try {
-        const { data } = await createClient().from("cattle").select("id, tag_id, status, breed").limit(20);
+        // every animal on the farm (it used to load only 20, deleted ones included)
+        const { data } = await createClient().from("cattle").select("id, tag_id, status, breed").is("deleted_at", null).order("tag_id").limit(1000);
         if (data) {
           setCattle(data.map((c) => ({
             id: `c-${c.id}`,
-            title: `Cattle #${c.tag_id}`,
+            title: `${bn ? "গরু" : "Cattle"} #${c.tag_id}`,
             subtitle: `${c.breed || "Cross"} • ${c.status || "active"}`,
             category: "livestock",
             icon: Beef,
-            href: `/dashboard/cattle?selected=${c.id}`,
+            href: `/dashboard/cattle/${c.id}`,
             keywords: [c.tag_id, c.breed || "", "cow"],
             badge: (c.status || "ACTIVE").toUpperCase(),
           })));
@@ -78,7 +86,7 @@ export function GlobalCommandSearch() {
       } catch {}
     }
     loadCattle();
-  }, [isCommandOpen]);
+  }, [isCommandOpen, bn]);
 
   useEffect(() => {
     if (isCommandOpen) {
@@ -89,7 +97,8 @@ export function GlobalCommandSearch() {
     }
   }, [isCommandOpen]);
 
-  const allItems = useMemo(() => [...PAGES, ...cattle], [cattle]);
+  const pages = useMemo(() => buildPages(locale), [locale]);
+  const allItems = useMemo(() => [...pages, ...cattle], [pages, cattle]);
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -139,7 +148,7 @@ export function GlobalCommandSearch() {
             type="text"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setSelectedIdx(0); }}
-            placeholder="Search pages, cattle tags, inventory, finances... (↑↓ to navigate)"
+            placeholder={bn ? "পাতা, গরুর ট্যাগ বা কাজ খুঁজুন…" : "Search pages, cattle tags or actions…"}
             className="flex-1 bg-transparent text-sm font-medium text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
           {query && <button onClick={() => setQuery("")} className="p-1 text-muted-foreground hover:bg-muted rounded"><X className="h-3.5 w-3.5" /></button>}
@@ -147,7 +156,7 @@ export function GlobalCommandSearch() {
 
         {!query && recent.length > 0 && (
           <div className="px-4 py-2 border-b border-border/40 bg-muted/10 flex items-center gap-2 overflow-x-auto text-xs">
-            <span className="text-muted-foreground/60 flex items-center gap-1 shrink-0"><Clock className="h-3 w-3" /> Recent:</span>
+            <span className="text-muted-foreground/60 flex items-center gap-1 shrink-0"><Clock className="h-3 w-3" /> {bn ? "সাম্প্রতিক:" : "Recent:"}</span>
             {recent.map((r, i) => (
               <button key={i} onClick={() => { setQuery(r); setSelectedIdx(0); }} className="px-2 py-0.5 rounded-full bg-muted text-foreground/80 hover:text-foreground text-xs font-medium shrink-0">
                 {r}
@@ -160,7 +169,7 @@ export function GlobalCommandSearch() {
           {items.length === 0 ? (
             <div className="py-10 text-center text-muted-foreground text-sm">
               <Sparkles className="h-6 w-6 mx-auto mb-1 opacity-40 animate-pulse" />
-              No results found for &ldquo;{query}&rdquo;
+              {bn ? "কিছু পাওয়া যায়নি" : "No results for"} &ldquo;{query}&rdquo;
             </div>
           ) : (
             items.map((it, idx) => {
@@ -194,7 +203,6 @@ export function GlobalCommandSearch() {
 
         <div className="px-4 py-2 bg-muted/30 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
           <span><kbd className="font-mono bg-background border px-1 py-0.5 rounded text-[10px]">↑↓</kbd> Move  <kbd className="font-mono bg-background border px-1 py-0.5 rounded text-[10px] ml-2">↵</kbd> Select  <kbd className="font-mono bg-background border px-1 py-0.5 rounded text-[10px] ml-2">Esc</kbd> Exit</span>
-          <span className="hidden sm:inline text-[11px]">Tanvir Agro Command</span>
         </div>
       </div>
     </div>

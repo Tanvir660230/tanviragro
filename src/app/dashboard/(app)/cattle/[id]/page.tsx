@@ -34,7 +34,6 @@ import { Cattle360OverviewTab } from "@/components/cattle/Cattle360OverviewTab";
 import { Health360Dashboard } from "@/components/cattle/Health360Dashboard";
 import { RelatedRecordsPanel } from "@/components/cattle/RelatedRecordsPanel";
 import { StickyActionPanel } from "@/components/cattle/StickyActionPanel";
-import { TrackCattleView } from "@/components/cattle/TrackCattleView";
 import { HealthWorkspace } from "@/components/cattle/HealthWorkspace";
 import { measuredGrowth, measuredLogs, weightTypeLabel } from "@/lib/growth/baseline";
 import { animalFeedShares, type AnimalPresence } from "@/lib/inventory/feed-costing";
@@ -755,8 +754,6 @@ async function ProfileSection({ id }: { id: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Track this cattle view for SearchBox recent history */}
-      <TrackCattleView id={c.id} tagId={c.tag_id} />
 
       <CattleProfileHero
         tp={t.cattle_profile}

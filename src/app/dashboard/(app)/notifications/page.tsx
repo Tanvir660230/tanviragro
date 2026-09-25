@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Bell } from "lucide-react";
 import { NotificationCenterClient } from "@/components/notifications/NotificationCenterClient";
 import { NotificationItem } from "@/lib/notifications/types";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 export const metadata: Metadata = { title: "Notifications & Automation" };
 
@@ -22,7 +23,7 @@ export default async function NotificationsPage() {
   const { data: bizData } = await supabase
     .from("businesses")
     .select("id")
-    .eq("owner_id", user.id)
+    .eq("id", (await getCachedBusinessId()) ?? "")
     .maybeSingle();
 
   const bizId = bizData?.id ?? "";

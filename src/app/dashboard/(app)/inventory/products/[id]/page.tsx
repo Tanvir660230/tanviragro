@@ -5,7 +5,6 @@ import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import { Package } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { ProductDetailView } from "@/components/inventory/ProductDetailView";
 import { CentralInventoryRepository } from "@/lib/inventory/inventory-repository";
 
@@ -41,10 +40,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         title={ledgerResult.item.name}
         subtitle={`${ledgerResult.item.category} · ${ledgerResult.item.unit} · managed inventory item`}
         icon={Package}
-        back="/dashboard/inventory/products"
+        back="/dashboard/inventory"
         badge={summary?.isDiscontinued ? "Archived" : "Active"}
       />
-      <InventorySubNav />
       <ProductDetailView
         item={ledgerResult.item}
         summary={summary}

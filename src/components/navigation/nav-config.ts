@@ -1,26 +1,13 @@
 import React from 'react';
-import {
-  LayoutDashboard,
-  Beef,
-  Package,
-  Landmark,
-  BookOpen,
-  Users,
-  Store,
-  FileText,
-  Settings,
-  ShoppingCart,
-  ShieldCheck,
-  Sparkles,
-  LifeBuoy,
-  HeartPulse,
-} from 'lucide-react';
-import { ExtendedUserRole, PERMISSIONS } from '@/constants/roles';
+import { ExtendedUserRole } from '@/constants/roles';
+import { SITE, GROUP_LABELS, tr, type Label } from './site-map';
 
 export interface NavItemDef {
   id: string;
   labelKey?: string;
   defaultLabel: string;
+  /** Bangla / English label from the site map */
+  label?: Label;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
@@ -36,175 +23,46 @@ export interface NavGroupDef {
   id: string;
   groupLabelKey?: string;
   defaultGroupLabel?: string;
+  groupLabel?: Label;
   collapsible?: boolean;
   defaultOpen?: boolean;
   isQuickAccess?: boolean;
   items: NavItemDef[];
 }
 
-export const ENTERPRISE_NAV_CONFIG: NavGroupDef[] = [
-  {
-    id: 'core',
-    defaultGroupLabel: 'Core',
-    collapsible: false,
-    defaultOpen: true,
-    items: [
-      {
-        id: 'dashboard',
-        labelKey: 'dashboard',
-        defaultLabel: 'Overview',
-        href: '/dashboard',
-        icon: LayoutDashboard,
-        keywords: ['home', 'stats', 'kpi', 'overview', 'analytics', 'summary'],
-      },
-    ],
-  },
-  {
-    id: 'operations',
-    defaultGroupLabel: 'Operations',
-    collapsible: true,
-    defaultOpen: true,
-    items: [
-      {
-        id: 'cattle',
-        labelKey: 'cattle',
-        defaultLabel: 'Cattle Management',
-        href: '/dashboard/cattle',
-        icon: Beef,
-        requiredPermission: PERMISSIONS.CATTLE_VIEW,
-        keywords: ['cow', 'bull', 'cattle', 'livestock', 'tag', 'weight', 'vaccine', 'breeding', 'qurbani'],
-      },
-      {
-        id: 'health',
-        labelKey: 'health_ehr',
-        defaultLabel: 'Health & Veterinary',
-        href: '/dashboard/health',
-        icon: HeartPulse,
-        requiredPermission: PERMISSIONS.CATTLE_VIEW,
-        keywords: ['health', 'ehr', 'vaccine', 'vaccination', 'disease', 'treatment', 'quarantine'],
-      },
-      {
-        id: 'breeding',
-        defaultLabel: 'Breeding & Reproduction',
-        href: '/dashboard/breeding',
-        icon: Users,
-        requiredPermission: PERMISSIONS.CATTLE_VIEW,
-      },
-      {
-        id: 'inventory',
-        labelKey: 'inventory',
-        defaultLabel: 'Feed & Inventory',
-        href: '/dashboard/inventory',
-        icon: Package,
-        requiredPermission: PERMISSIONS.INVENTORY_VIEW,
-      },
-    ],
-  },
-  {
-    id: 'commerce',
-    defaultGroupLabel: 'Commerce',
-    collapsible: true,
-    items: [
-      {
-        id: 'commerce',
-        defaultLabel: 'Commerce & Trading',
-        href: '/dashboard/commerce',
-        icon: ShoppingCart,
-      },
-      {
-        id: 'vendors',
-        defaultLabel: 'Vendors',
-        href: '/dashboard/vendors',
-        icon: Store,
-      },
-    ],
-  },
-  {
-    id: 'finance',
-    defaultGroupLabel: 'Finance',
-    collapsible: true,
-    items: [
-      {
-        id: 'finance',
-        defaultLabel: 'Finance & Analytics',
-        href: '/dashboard/finance',
-        icon: Landmark,
-      },
-      {
-        id: 'accounting',
-        defaultLabel: 'Accounting',
-        href: '/dashboard/accounting',
-        icon: BookOpen,
-      },
-      {
-        id: 'partners',
-        labelKey: 'partners',
-        defaultLabel: 'Partners & Equity',
-        href: '/dashboard/partners',
-        icon: Users,
-        keywords: ['investor', 'partner', 'equity', 'shares', 'dividend'],
-      },
-    ],
-  },
-  {
-    id: 'insights',
-    defaultGroupLabel: 'Insights',
-    collapsible: true,
-    items: [
-      {
-        id: 'reports',
-        defaultLabel: 'Reports',
-        href: '/dashboard/report',
-        icon: FileText,
-        requiredPermission: PERMISSIONS.REPORTS_VIEW,
-      },
-      {
-        id: 'ai',
-        defaultLabel: 'AI & Intelligence',
-        href: '/dashboard/ai',
-        icon: Sparkles,
-        adminOnly: true,
-      },
-    ],
-  },
-  {
-    id: 'administration',
-    defaultGroupLabel: 'Administration',
-    collapsible: true,
-    items: [
-      {
-        id: 'settings',
-        defaultLabel: 'Administration & Setup',
-        href: '/dashboard/settings',
-        icon: Settings,
-        adminOnly: true,
-      },
-      {
-        id: 'compliance',
-        defaultLabel: 'Compliance',
-        href: '/dashboard/compliance',
-        icon: ShieldCheck,
-      },
-    ],
-  },
-  {
-    id: 'support',
-    defaultGroupLabel: 'Support',
-    collapsible: true,
-    items: [
-      {
-        id: 'help',
-        defaultLabel: 'Support',
-        href: '/dashboard/help',
-        icon: LifeBuoy,
-      },
-    ],
-  },
-];
+/** The sidebar, built from THE site map (site-map.ts): the same sections everywhere. */
+export const ENTERPRISE_NAV_CONFIG: NavGroupDef[] = (["daily", "money", "system"] as const).map((g) => ({
+  id: g,
+  defaultGroupLabel: GROUP_LABELS[g].en,
+  groupLabel: GROUP_LABELS[g],
+  collapsible: false,
+  defaultOpen: true,
+  items: SITE.filter((s) => s.group === g).map((s) => ({
+    id: s.id,
+    defaultLabel: s.label.en,
+    label: s.label,
+    href: s.href,
+    icon: s.icon,
+    adminOnly: s.adminOnly,
+    requiredPermission: s.requiredPermission,
+    keywords: s.keywords,
+    children: s.pages.length > 1
+      ? s.pages.map((p) => ({ id: `${s.id}:${p.href}`, defaultLabel: p.label.en, label: p.label, href: p.href, icon: p.icon, keywords: p.keywords }))
+      : undefined,
+  })),
+}));
+
+/** Label in the viewer's language (site-map label first). */
+export function navLabel(item: Pick<NavItemDef, 'label' | 'defaultLabel'>, locale: string | undefined): string {
+  return item.label ? tr(item.label, locale) : item.defaultLabel;
+}
+export function navGroupLabel(group: Pick<NavGroupDef, 'groupLabel' | 'defaultGroupLabel'>, locale: string | undefined): string {
+  return group.groupLabel ? tr(group.groupLabel, locale) : group.defaultGroupLabel ?? '';
+}
 
 export function isNavActive(href: string, pathname: string): boolean {
   if (href === '/dashboard') return pathname === '/dashboard';
-  return pathname.startsWith(href);
+  return pathname === href || pathname.startsWith(href + '/');
 }
 
 export function getAllNavHrefs(groups: NavGroupDef[]): string[] {
@@ -221,4 +79,3 @@ export function canUserAccessNavItem(
   if (item.adminOnly && !isAdmin && role !== 'manager') return false;
   return true;
 }
-

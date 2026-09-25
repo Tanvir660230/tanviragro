@@ -58,9 +58,10 @@ describe("no asset purchase is counted twice (source guards)", () => {
     expect(src).toMatch(/dr\("1500", unlinkedFixedAssetCash\)/);
     expect(src).toMatch(/inPeriod\(a\.purchaseDate\) && !a\.sourceCostEntryId/);
   });
-  test("cash service, statement and repository skip fixed assets that have a payment record", () => {
+  test("the statement skips fixed assets that have a payment record", () => {
     expect(read("app/dashboard/(app)/finance/statement-action.ts")).toMatch(/\.is\("source_cost_entry_id", null\)/);
-    expect(read("lib/financial/financial-repository.ts")).toMatch(/!f\.source_cost_entry_id/);
+    // the old financial repository (a second cash calculation) was removed; the accounting engine is the source
+    expect(fs.existsSync(path.join(__dirname, "..", "lib/financial/financial-repository.ts"))).toBe(false);
   });
   test("asset lists show a linked purchase once", () => {
     expect(read("app/dashboard/(app)/finance/page.tsx")).toMatch(/allAssetEntries\.filter\(\(e\) => !linkedPaymentIds\.has\(e\.id\)\)/);

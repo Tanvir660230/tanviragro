@@ -31,6 +31,7 @@ import {
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
 export const metadata: Metadata = { title: "Settings & Administration" };
 
@@ -109,7 +110,7 @@ export default async function SettingsPage({
     ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : "—";
   const initials = getInitials(profileData?.full_name, email);
-  const businessName = bizData?.name ?? "Enterprise Farm";
+  const businessName = bizData?.name ?? "Tanvir Agro";
 
   const tabs: { key: Tab; label: string; icon: React.ElementType; badge?: string | number }[] = [
     { key: "profile",     label: "Organization & Profile", icon: Building2 },
@@ -127,31 +128,13 @@ export default async function SettingsPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
             <Settings2 className="h-6 w-6 text-primary" />
-            Enterprise Control Center
+            <SitePageTitle fallback="সেটিংস" />
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage enterprise parameters, user roles, security credentials, and system defaults.
+            খামারের তথ্য, টিম, নিরাপত্তা ও পছন্দ
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/operations"
-            className="hidden sm:inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3.5 py-1.5 text-xs font-semibold shadow-xs transition-colors"
-          >
-            <Activity className="h-3.5 w-3.5" />
-            Operations & Health
-          </Link>
-          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-1.5 shadow-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-            </span>
-            <span className="text-xs font-semibold text-foreground">Active Workspace</span>
-            <span className="text-muted-foreground text-xs">•</span>
-            <span className="text-xs text-muted-foreground font-mono">{businessName}</span>
-          </div>
-        </div>
       </div>
 
       {/* ── Tab Bar Navigation ── */}
@@ -252,7 +235,7 @@ export default async function SettingsPage({
                 </p>
               </div>
               <div className="p-5 sm:p-6">
-                <BusinessProfileForm initialData={bizData || { name: "Enterprise Farm" }} />
+                <BusinessProfileForm initialData={bizData || { name: "" }} />
               </div>
             </div>
           </div>

@@ -6,6 +6,7 @@ import {
 import { BudgetPeriodPicker } from "./BudgetPeriodPicker";
 import { getDictionary } from "@/i18n/getDictionary";
 import { cn } from "@/lib/utils";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 const DEFAULT_ADG = 1.0; // kg/day — conservative fallback when no farm data exists
 
@@ -27,7 +28,7 @@ export async function BudgetForecastPanel({ days = 90 }: { days?: number }) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const { data: bizData } = user
-    ? await supabase.from("businesses").select("id").eq("owner_id", user.id).maybeSingle()
+    ? await supabase.from("businesses").select("id").eq("id", (await getCachedBusinessId()) ?? "").maybeSingle()
     : { data: null };
   const businessId = bizData?.id;
   if (!businessId) {

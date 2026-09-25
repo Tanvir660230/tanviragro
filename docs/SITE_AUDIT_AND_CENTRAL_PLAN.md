@@ -105,3 +105,51 @@ Parallel engines that go: `lib/financial` (except the pieces the accounting engi
    - crawl all kept pages again: no errors, no console exceptions, no dead links;
    - the numbers agree across Home / Cattle / Finance / Feed;
    - tsc, jest, lint, build; local commit, **no deploy**.
+
+## 6. Phases 3–5: what was done and verified (2026-09-25)
+
+**One menu, from one file.** `src/components/navigation/site-map.ts` is the only list of sections and pages. Everything below is built from it:
+- the sidebar (desktop and collapsed);
+- the phone menu drawer;
+- the bottom bar and its "More" sheet;
+- each section's tab row (`SectionSubNav`);
+- the breadcrumb;
+- search (Ctrl+K);
+- page titles (`SitePageTitle`, in Bangla or English).
+
+**Bugs fixed while doing it**
+- **The phone menu drawer could never open.** It sat inside the desktop sidebar box, which is hidden on phones, and before that it rendered an empty layer that blocked the screen.
+- **Health could not be reached from the phone.** It was in neither the bottom bar nor "More".
+- **Search:** it loaded only 20 animals, deleted animals included, and linked to `?selected=`, which does nothing. It now finds every animal and opens its page. Its page list came from a hard-coded list with dead pages.
+- **The Create menu pointed to the wrong pages.** Health went to the cattle list, and "Receive feed" went to a dialog. Each item now opens the right form.
+- **Business looked up by `owner_id` only.** This affected report, partners (3 pages), notifications, the statement, market price, the budget panel and the top bar. A manager or team member would have seen empty pages. They now all use the central resolver (`getCachedBusinessId`). Settings stays owner-only on purpose.
+- **Health overview:**
+  - it used the server's UTC date, which is off by one day before 06:00 in Dhaka;
+  - it linked to 5 deleted pages;
+  - it showed an "Active diseases" card for data nothing can add.
+- **Desktop layout:** a blank strip about 90px wide sat between the sidebar and the page, because the sidebar did not fill its column.
+- **Titles:** 15 page titles were English in Bangla mode. "Enterprise" text was removed. The finance page had no title.
+
+**Deleted (junk):**
+- 93 more files that no page used. Only tests kept them: the old financial engines, analytics, growth, governance, monitoring, workflow-engine, the "Universal CRUD" and enterprise-ui kits, 8 unused hooks, and the layout templates.
+- 13 tests that exercised only that code.
+- The duplicate `SearchBox`, and the recent-cattle tracker nobody read.
+- The old breadcrumb label map (it still listed deleted pages).
+
+**Verified**
+- `tsc`: clean.
+- `eslint src`: clean.
+- `jest`: 41 suites, 358 tests pass. The new `site-map.test.ts` checks that every menu link has a real page.
+- Clean `next build`: succeeds.
+- Dead-link scan (every `/dashboard/...` string in `src` checked against real pages): 0.
+- Unreachable-code scan (tests excluded as users): 0, apart from the data-grid barrel that its tests import.
+- Crawl of all 36 kept pages plus old URLs in Bangla:
+  - no error screens;
+  - no console errors or exceptions;
+  - every title is Bangla;
+  - `/dashboard/vendors` and `/dashboard/help` redirect.
+- The same numbers on every page (local copy of production):
+  - cash ৳16,782 on Home, Finance, Report and the Balance Sheet;
+  - operating result −৳1,54,120 on Finance and Accounts;
+  - assets ৳6,75,017 on Report, the Balance Sheet and Accounts.
+- Phone screenshots: bottom bar, "More" sheet and menu drawer all work.

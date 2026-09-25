@@ -12,7 +12,6 @@ import {
   DataGridAdvancedFilters,
   DataGridSavedViews,
 } from "../components/data-grid";
-import { UniversalDataTable } from "../components/shared/UniversalDataTable";
 
 describe("Enterprise Data Grid Framework", () => {
   it("exports all core Data Grid components and subcomponents", () => {
@@ -50,10 +49,6 @@ describe("Enterprise Data Grid Framework", () => {
     expect(typeof DataGridSavedViews).toBe("function");
   });
 
-  it("exports backward-compatible UniversalDataTable adapter", () => {
-    expect(UniversalDataTable).toBeDefined();
-    expect(typeof UniversalDataTable).toBe("function");
-  });
 });
 
 

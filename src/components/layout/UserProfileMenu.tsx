@@ -141,14 +141,6 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
 
         <DropdownMenuItem
           className="gap-2.5 cursor-pointer rounded-xl py-2"
-          onClick={() => router.push("/dashboard/reports")}
-        >
-          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-xs">Help & Docs</span>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem
-          className="gap-2.5 cursor-pointer rounded-xl py-2"
           onClick={toggleLanguage}
           disabled={langPending}
         >

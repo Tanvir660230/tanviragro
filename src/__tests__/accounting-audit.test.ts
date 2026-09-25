@@ -8,7 +8,6 @@ import { summarizeInventoryLedger } from "@/lib/accounting/inventory-ledger";
 import { monthlyConsumptionRows, inventoryStatsRows } from "@/lib/inventory/consumption-stats";
 import { accountForLegacyCategory } from "@/lib/expenses/categories";
 import { computeFeedSnapshot, feedCostBetween, feedKgBetween, type Animal } from "@/lib/feed/usage-engine";
-import { CashEngine } from "@/lib/financial/cash-engine";
 
 const read = (p: string) => fs.readFileSync(path.join(__dirname, "..", p), "utf8");
 
@@ -50,17 +49,6 @@ describe("A3 cash: partner capital counted; no unknown enum value; purchase undo
     // one cash figure: the separate cash query (a second calculation) was removed; the engine is the source
     expect(fs.existsSync(path.join(__dirname, "..", "lib/supabase/queries/cash.ts"))).toBe(false);
     expect(read("lib/accounting/engine.ts")).not.toMatch(/"draw"\]/);
-  });
-  test("capital in − cattle − expenses (incl. treatment fees) − net stock bought", () => {
-    const pos = CashEngine.calculateCashPosition({
-      openingBalance: 0,
-      partnerTransactions: [{ amount: 1000, type: "investment" }],
-      sales: [], cattle: [{ purchase_price: 500 }],
-      inventoryPurchases: [{ qty: 10, unit_cost: 20 }, { qty: -2, unit_cost: 20 }],
-      operatingExpenses: [{ amount: 100 }, { amount: 50 }],   // cost entry + treatment fee
-      costEntryAssets: [], fixedAssets: [], loans: [], liabilities: [], asOfDate: "2026-09-24",
-    });
-    expect(pos.balance).toBe(1000 - 500 - 150 - 160);
   });
 });
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Wrench, Menu, Search, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShell } from "./ShellContext";
+import { useTranslation } from "@/i18n/I18nProvider";
 import { GlobalCommandSearch } from "./GlobalCommandSearch";
 import { QuickCreateMenu } from "./QuickCreateMenu";
 import { NotificationCenter } from "./NotificationCenter";
@@ -70,6 +71,7 @@ export function DashboardHeader({
   className,
   children,
 }: DashboardHeaderProps) {
+  const { locale } = useTranslation();
   const {
     setCommandOpen,
     setShortcutsModalOpen,
@@ -120,13 +122,6 @@ export function DashboardHeader({
             </span>
           </div>
 
-          <div className="hidden xl:flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-medium">
-            <span className="relative flex h-2 w-2 ml-1">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-            </span>
-            <span>Enterprise Online</span>
-          </div>
         </div>
 
         {/* CENTER: Global Search Trigger Bar */}
@@ -140,7 +135,7 @@ export function DashboardHeader({
             >
               <div className="flex items-center gap-2 min-w-0">
                 <Search className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                <span className="hidden sm:inline truncate">Search cattle, feed, financials, reports...</span>
+                <span className="hidden sm:inline truncate">{locale === "bn" ? "গরু, পাতা বা কাজ খুঁজুন…" : "Search cattle, pages or actions…"}</span>
               </div>
               <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-background border border-border/70 text-muted-foreground shrink-0 shadow-2xs">
                 ⌘K

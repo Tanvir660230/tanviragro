@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { CalendarRange } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { InventorySubNav } from "@/components/inventory/InventorySubNav";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
@@ -63,7 +62,6 @@ export default async function FeedUsagePage() {
 
   return (
     <div className="space-y-4 pb-12">
-      <InventorySubNav />
       <PageHeader
         title="Feed Usage"
         subtitle="Start a feed when you begin using it, end it when it finishes. The system works out daily use and cost — no daily entry needed."

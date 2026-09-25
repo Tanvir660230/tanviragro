@@ -1,5 +1,4 @@
 import { PartnerEngine } from "@/lib/partners/partner-engine";
-import { JournalEngine } from "@/lib/financial/journal";
 import type { Partner, PartnerTransaction } from "@/types/database";
 
 describe("Phase 6: Enterprise Partner, Investment & Equity Engine", () => {
@@ -154,25 +153,6 @@ describe("Phase 6: Enterprise Partner, Investment & Equity Engine", () => {
     });
     expect(settlement2.canExecute).toBe(false);
     expect(settlement2.blockReason).toContain("Insufficient farm cash");
-  });
-
-  test("builds balanced double-entry journals for partner distributions", () => {
-    const journal = JournalEngine.createPartnerDistributionJournal({
-      businessId: "biz-1",
-      distributionId: "dist-101",
-      totalAmount: 100000,
-      isLoss: false,
-      date: "2026-03-01",
-      entries: [
-        { partnerId: "p1", partnerName: "Tanvir Ahmed", amount: 60000 },
-        { partnerId: "p2", partnerName: "Rahim Chowdhury", amount: 40000 },
-      ],
-    });
-
-    expect(journal.isBalanced).toBe(true);
-    expect(journal.totalDebit).toBe(100000);
-    expect(journal.totalCredit).toBe(100000);
-    expect(journal.lines.find((l) => l.accountCode === "3100")?.debit).toBe(100000);
   });
 
   test("validates partner transactions rejecting negative amounts and excess drawings", () => {

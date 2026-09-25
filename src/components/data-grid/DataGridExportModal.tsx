@@ -25,7 +25,7 @@ export function DataGridExportModal<T extends Record<string, any>>({
   selectedRows,
   allDataset,
   columns,
-  title = "Enterprise Export",
+  title = "Export",
 }: DataGridExportModalProps<T>) {
   const [format, setFormat] = useState<"csv" | "excel" | "pdf" | "print">("csv");
   const [scope, setScope] = useState<"filtered" | "selected" | "all">("filtered");

@@ -8,6 +8,7 @@ import { RealtimeRefresher } from "@/components/shared/RealtimeRefresher";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { AppShell } from "@/components/layout/AppShell";
 import { FeedAutoSync } from "@/components/shared/FeedAutoSync";
+import { SectionSubNav } from "@/components/navigation/SectionSubNav";
 
 export const metadata: Metadata = {
   title: {
@@ -68,6 +69,8 @@ export default function DashboardLayout({
         >
           <Breadcrumb />
         </Suspense>
+        {/* the section's pages (from the site map) — the same on every page of a section */}
+        <SectionSubNav />
         {children}
       </div>
 

@@ -10,6 +10,8 @@ import { logout } from '@/app/(auth)/login/actions';
 import {
   ENTERPRISE_NAV_CONFIG,
   isNavActive,
+  navLabel,
+  navGroupLabel,
 } from './nav-config';
 import { ExtendedUserRole, ROLE_BADGE_STYLE } from '@/constants/roles';
 import { useShell } from '@/components/layout/ShellContext';
@@ -29,7 +31,7 @@ export function SidebarExpanded({
   userEmail,
   className,
 }: SidebarExpandedProps) {
-  const { t } = useTranslation();
+  const { locale } = useTranslation();
   const pathname = usePathname();
   const roleBadgeStyle = ROLE_BADGE_STYLE[role] || ROLE_BADGE_STYLE.viewer;
   const bizName = business?.name ?? 'Tanvir Agro';
@@ -37,15 +39,15 @@ export function SidebarExpanded({
   return (
     <aside className={cn('flex flex-col h-full bg-sidebar border-r border-sidebar-border', className)}>
       <div className="p-4 border-b border-sidebar-border">
-        <h1 className="text-sm font-bold text-sidebar-foreground">{bizName}</h1>
+        <p className="text-sm font-bold text-sidebar-foreground">{bizName}</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3 space-y-6">
         {ENTERPRISE_NAV_CONFIG.map((group) => (
           <div key={group.id} className="space-y-1">
-            {group.defaultGroupLabel && (
+            {navGroupLabel(group, locale) && (
               <h2 className="px-2 text-[10px] font-bold text-sidebar-foreground/50 uppercase tracking-wider">
-                {group.defaultGroupLabel}
+                {navGroupLabel(group, locale)}
               </h2>
             )}
             {group.items.map((item) => {
@@ -62,7 +64,7 @@ export function SidebarExpanded({
                   )}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.defaultLabel}
+                  {navLabel(item, locale)}
                 </Link>
               );
             })}

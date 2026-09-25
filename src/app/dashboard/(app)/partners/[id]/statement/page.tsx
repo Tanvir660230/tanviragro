@@ -12,6 +12,7 @@ import {
 import { PartnerEngine } from "@/lib/partners/partner-engine";
 import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { getCachedBusinessId } from "@/lib/supabase/cached";
 
 export const metadata: Metadata = { title: "Partner Statement" };
 
@@ -37,7 +38,7 @@ export default async function StatementPage({
   const { data: bizData } = await supabase
     .from("businesses")
     .select("id, name")
-    .eq("owner_id", user.id)
+    .eq("id", (await getCachedBusinessId()) ?? "")
     .maybeSingle();
 
   const businessId = bizData?.id ?? null;

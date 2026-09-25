@@ -2,6 +2,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { ShieldCheck, AlertTriangle } from "lucide-react";
 import { PrintButton } from "./PrintButton";
+import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
 export function fmtBDT(n: number, decimals: number = 0): string {
   if (!isFinite(n) || isNaN(n)) return "৳0";
@@ -151,7 +152,7 @@ export function StatementReportHeader({
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/60">
       <div>
         <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground"><SitePageTitle fallback={title} /></h1>
           {isAuditedBalanced ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
               <ShieldCheck className="h-3.5 w-3.5" />
