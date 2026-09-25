@@ -1,6 +1,5 @@
 import { Metadata } from "next";
 import { getServerClient } from "@/lib/supabase/cached";
-import { AnalyticsAggregationService } from "@/lib/analytics/aggregation-service";
 import { ReportHubClient } from "@/components/report/ReportHubClient";
 import { ReportEngine } from "@/lib/reports/report-engine";
 import { requirePagePermission } from "@/lib/auth/page-guard";
@@ -54,12 +53,11 @@ export default async function ReportPage() {
         totalLiabilities={0}
         netEquity={0}
         zakatAssets={0}
-        analyticsPayload={null}
       />
     );
   }
 
-  const [reportData, analyticsPayload] = await Promise.all([
+  const [reportData] = await Promise.all([
     ReportEngine.generateFinancialStatementReport(supabase, businessId, bizName).catch((err) => {
       console.error("ReportEngine.generateFinancialStatementReport error:", err);
       return {
@@ -85,12 +83,8 @@ export default async function ReportPage() {
         zakatAssets: 0,
       };
     }),
-    AnalyticsAggregationService.getExecutiveDashboardData(supabase, businessId, "ceo").catch((err) => {
-      console.error("AnalyticsAggregationService error:", err);
-      return null;
-    }),
   ]);
 
-  return <ReportHubClient {...reportData} analyticsPayload={analyticsPayload} />;
+  return <ReportHubClient {...reportData} />;
 }
 

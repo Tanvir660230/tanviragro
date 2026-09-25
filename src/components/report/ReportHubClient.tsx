@@ -12,7 +12,6 @@ import { PrintButton } from "@/components/ui/print-button";
 import { ZakatCalculator } from "@/components/finance/ZakatCalculator";
 import { cn } from "@/lib/utils";
 
-import { ExecutiveAnalyticsHub } from "./ExecutiveAnalyticsHub";
 
 export interface InventoryItemStock {
   name: string;
@@ -53,7 +52,7 @@ function fmt(n: number) {
 
 export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any }) | { data: ReportHubData & { analyticsPayload?: any } }) {
   const data = "data" in props && (props as { data: ReportHubData }).data ? (props as { data: ReportHubData }).data : (props as ReportHubData & { analyticsPayload?: any });
-  const [activeTab, setActiveTab] = useState<"analytics" | "summary" | "directory" | "zakat">("analytics");
+  const [activeTab, setActiveTab] = useState<"summary" | "directory" | "zakat">("summary");
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
@@ -167,18 +166,6 @@ export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any
       <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-3 print:hidden">
         <div className="flex items-center gap-1.5 p-1 bg-muted/50 rounded-xl border border-border/60">
           <button
-            onClick={() => setActiveTab("analytics")}
-            className={cn(
-              "px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-              activeTab === "analytics"
-                ? "bg-background text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Executive BI &amp; Analytics
-          </button>
-          <button
             onClick={() => setActiveTab("summary")}
             className={cn(
               "px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
@@ -221,13 +208,6 @@ export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any
           Report Date: <span className="font-semibold text-foreground">{reportDate}</span>
         </div>
       </div>
-      {/* ── Executive BI & Analytics Hub Tab ── */}
-      {activeTab === "analytics" && data.analyticsPayload && (
-        <div className="animate-fade-in print:hidden">
-          <ExecutiveAnalyticsHub initialData={data.analyticsPayload} />
-        </div>
-      )}
-
       {/* ── Directory Tab ── */}
       {activeTab === "directory" && (
         <div className="space-y-4 print:hidden animate-fade-in">

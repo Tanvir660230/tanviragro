@@ -107,7 +107,7 @@ describe("A6 cost per kg gain uses feed over the SAME days as the gain", () => {
   test("pages divide window cost by the measured gain", () => {
     expect(read("app/dashboard/(app)/inventory/usage/page.tsx")).toMatch(/feedCostBetween\(f, growth\.baseline\.date, growth\.latestDate\)/);
     expect(read("app/dashboard/(app)/cattle/[id]/page.tsx")).toMatch(/gainWindowCost \/ weightGain/);
-    expect(read("app/dashboard/(app)/cattle/analytics/page.tsx")).toMatch(/measuredGrowth\(/);
+    // the separate cattle analytics page was removed (docs/SITE_AUDIT_AND_CENTRAL_PLAN.md): one source, the home model
   });
 });
 

@@ -26,6 +26,32 @@ const nextConfig: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
   },
+  // Pages removed in the site audit (docs/SITE_AUDIT_AND_CENTRAL_PLAN.md) send old links and
+  // bookmarks to the page that now does the job, instead of a 404.
+  async redirects() {
+    const to = (source: string, destination: string) => ({ source, destination, permanent: false });
+    return [
+      to("/dashboard/breeding/:path*", "/dashboard/cattle"),
+      to("/dashboard/breeding", "/dashboard/cattle"),
+      to("/dashboard/cattle/breeding", "/dashboard/cattle"),
+      to("/dashboard/cattle/analytics", "/dashboard/cattle"),
+      to("/dashboard/cattle/growth", "/dashboard/cattle"),
+      to("/dashboard/cattle/pens", "/dashboard/cattle"),
+      to("/dashboard/cattle/feed", "/dashboard/inventory/feeding-chart"),
+      to("/dashboard/cattle/health", "/dashboard/health"),
+      to("/dashboard/cattle/vaccinations", "/dashboard/health/vaccinations"),
+      to("/dashboard/health/:page(ai|audit|diseases|mortality|quarantine|timeline|reports|records)", "/dashboard/health"),
+      to("/dashboard/inventory/:page(warehouse|reports|ai)", "/dashboard/inventory"),
+      to("/dashboard/inventory/products", "/dashboard/inventory"),
+      to("/dashboard/inventory/mix-feed", "/dashboard/inventory/mix"),
+      to("/dashboard/commerce", "/dashboard/finance"),
+      to("/dashboard/vendors", "/dashboard/inventory/purchase"),
+      to("/dashboard/operations", "/dashboard/settings"),
+      to("/dashboard/ai", "/dashboard"),
+      to("/dashboard/help", "/dashboard"),
+      to("/workflows", "/dashboard"),
+    ];
+  },
   async headers() {
     return [
       {

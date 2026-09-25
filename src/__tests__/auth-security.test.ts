@@ -9,7 +9,6 @@ import {
 } from "@/lib/auth/permissions";
 import { assertResourceOwnership, assertBatchResourceOwnership } from "@/lib/auth/ownership";
 import { PERMISSIONS, ROLE_PERMISSIONS, Permission } from "@/constants/roles";
-import { securityAuditEngine } from "@/lib/auth/security-audit";
 
 import { BusinessContext } from "@/types/context";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
@@ -160,39 +159,3 @@ describe("Phase 2: Multi-Tenant Resource Ownership Guard", () => {
   });
 });
 
-describe("Phase 10: Enterprise Security & Tenant Isolation Audit Engine", () => {
-  test("Passes isolation audit when all records match expected business ID", () => {
-    const records = [
-      { id: "c1", business_id: "biz_100", tag_number: "TAG-1" },
-      { id: "c2", business_id: "biz_100", tag_number: "TAG-2" },
-    ];
-
-    const audit = securityAuditEngine.auditTenantIsolation("biz_100", records, "cattle");
-    expect(audit.isCompliant).toBe(true);
-    expect(audit.violations.length).toBe(0);
-    expect(audit.passedChecks).toBe(2);
-  });
-
-  test("Detects cross-tenant leakage violation when record has foreign tenant ID", () => {
-    const records = [
-      { id: "c1", business_id: "biz_100", tag_number: "TAG-1" },
-      { id: "c2", business_id: "biz_999", tag_number: "TAG-LEAKED" },
-    ];
-
-    const audit = securityAuditEngine.auditTenantIsolation("biz_100", records, "cattle");
-    expect(audit.isCompliant).toBe(false);
-    expect(audit.violations.length).toBe(1);
-    expect(audit.violations[0].code).toBe("TENANT_LEAK");
-    expect(audit.violations[0].severity).toBe("critical");
-  });
-
-  test("Verifies RBAC integrity against standard role permissions", () => {
-    const managerCtx = createMockContext("manager");
-    const isCompliant = securityAuditEngine.verifyRbacIntegrity(managerCtx);
-    expect(isCompliant).toBe(true);
-
-    const corruptCtx = createMockContext("admin", []); // Admin missing required permissions
-    const isCorruptCompliant = securityAuditEngine.verifyRbacIntegrity(corruptCtx);
-    expect(isCorruptCompliant).toBe(false);
-  });
-});

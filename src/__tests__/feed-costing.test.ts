@@ -234,14 +234,10 @@ describe("source guards", () => {
     }
   });
 
-  test("the feed page shows real inventory, not placeholder feeds", () => {
-    const feed = read("app/dashboard/(app)/cattle/feed/page.tsx");
-    expect(feed).not.toMatch(/feed-mix-01|currentStockKg: 850|: 42\.0|: 8\.5,/);
-  });
-
-  test("feeding writes the ledger only (no parallel cost_entries for the same feed)", () => {
-    expect(read("app/dashboard/(app)/cattle/feed-session-actions.ts")).not.toMatch(/from\("cost_entries"\)/);
-    expect(read("app/dashboard/(app)/cattle/feed-waste-actions.ts")).not.toMatch(/from\("cost_entries"\)/);
+  test("the old feeding-session system (a second way to deduct feed) stays removed", () => {
+    for (const p of ["app/dashboard/(app)/cattle/feed/page.tsx", "app/dashboard/(app)/cattle/feed-session-actions.ts", "app/dashboard/(app)/cattle/feed-waste-actions.ts"]) {
+      expect(fs.existsSync(path.join(SRC, p))).toBe(false);
+    }
   });
 
   test("cash views count supplier purchases only", () => {
@@ -256,8 +252,6 @@ describe("source guards", () => {
     for (const f of [
       "app/dashboard/(app)/finance/page.tsx",
       "app/dashboard/(app)/partners/page.tsx",
-      "lib/supabase/queries/valuation.ts",
-      "lib/supabase/queries/dashboard.ts",
       "lib/accounting/engine.ts",
     ]) {
       expect(read(f)).not.toMatch(/calculateAlgorithmicFeedCost\(/);

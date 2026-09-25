@@ -1,9 +1,5 @@
-import { UnitConverter } from "@/lib/inventory/unit-converter";
 import { CostingEngine } from "@/lib/inventory/costing-engine";
-import { BatchEngine } from "@/lib/inventory/batch-engine";
 import { StockLedgerEngine } from "@/lib/inventory/stock-ledger";
-import { WarehouseEngine } from "@/lib/inventory/warehouse-engine";
-import { ReservationEngine } from "@/lib/inventory/reservation-engine";
 import { AdjustmentEngine } from "@/lib/inventory/adjustment-engine";
 import { InventoryEventBus } from "@/lib/inventory/events";
 import {
@@ -12,33 +8,6 @@ import {
   BatchExpiredError,
   ReservationConflictError,
 } from "@/lib/inventory/errors";
-
-describe("Phase 4: Multi-Unit Conversion Engine", () => {
-  test("Converts between agricultural mass units accurately", () => {
-    // 1 mon (maund) = 40 kg
-    expect(UnitConverter.convert(1, "mon", "kg")).toBe(40);
-    expect(UnitConverter.convert(80, "kg", "mon")).toBe(2);
-    expect(UnitConverter.convert(1, "ton", "kg")).toBe(1000);
-    expect(UnitConverter.convert(500, "gm", "kg")).toBe(0.5);
-  });
-
-  test("Handles Bengali and normalized unit terms", () => {
-    expect(UnitConverter.normalizeUnit("কেজি")).toBe("kg");
-    expect(UnitConverter.normalizeUnit("মণ")).toBe("mon");
-    expect(UnitConverter.normalizeUnit("গ্রাম")).toBe("gm");
-    expect(UnitConverter.normalizeUnit("লিটার")).toBe("ltr");
-    expect(UnitConverter.normalizeUnit("ব্যাগ")).toBe("bag");
-  });
-
-  test("Converts bag weights with custom bag sizes", () => {
-    expect(UnitConverter.convert(2, "bag", "kg", 25)).toBe(50);
-    expect(UnitConverter.convert(100, "kg", "bag", 50)).toBe(2);
-  });
-
-  test("Throws error on incompatible unit dimensions", () => {
-    expect(() => UnitConverter.convert(10, "kg", "ltr")).toThrow(UnitConversionError);
-  });
-});
 
 describe("Phase 4: Costing & Valuation Engine", () => {
   test("Computes exact FIFO consumption cost across multiple purchase batches", () => {
@@ -87,23 +56,6 @@ describe("Phase 4: Costing & Valuation Engine", () => {
     expect(val.unitCost).toBe(15);
     expect(val.activeBatches.length).toBe(1);
     expect(val.activeBatches[0].remainingQty).toBe(80);
-  });
-});
-
-describe("Phase 4: Batch & Lot Management Engine", () => {
-  test("Parses batch metadata from transaction notes memo", () => {
-    const memo = "Invoice Memo. Supplier: ACI Godrej | Batch: BATCH-202601-X9 | Exp: 2026-12-31 | Bags: 20";
-    const meta = BatchEngine.parseBatchFromNotes(memo);
-
-    expect(meta.supplierName).toBe("ACI Godrej");
-    expect(meta.batchNumber).toBe("BATCH-202601-X9");
-    expect(meta.expiryDate).toBe("2026-12-31");
-  });
-
-  test("Validates and throws error for expired batches", () => {
-    expect(() => {
-      BatchEngine.validateBatchExpiry("BATCH-OLD", "2025-01-01", "2026-01-01");
-    }).toThrow(BatchExpiredError);
   });
 });
 
@@ -170,31 +122,7 @@ describe("Phase 4: Stock Ledger & Portfolio Compiler", () => {
   });
 });
 
-describe("Phase 4: Warehouse, Reservation & Adjustment Engines", () => {
-  test("Validates warehouse transfers", () => {
-    const valid = WarehouseEngine.validateTransfer("wh-feed-store", "wh-silo-1", 50, 100);
-    expect(valid.isValid).toBe(true);
-
-    const sameLocation = WarehouseEngine.validateTransfer("wh-feed-store", "wh-feed-store", 50, 100);
-    expect(sameLocation.isValid).toBe(false);
-
-    const overStock = WarehouseEngine.validateTransfer("wh-feed-store", "wh-silo-1", 150, 100);
-    expect(overStock.isValid).toBe(false);
-  });
-
-  test("Reserves and releases stock cleanly", () => {
-    const res = ReservationEngine.reserveStock("biz-1", "item-10", "DCP", 20, "planned_ration", 50);
-    expect(res.reservedQty).toBe(20);
-    expect(ReservationEngine.getReservedQty("item-10")).toBe(20);
-
-    expect(() => {
-      ReservationEngine.reserveStock("biz-1", "item-10", "DCP", 40, "planned_ration", 30);
-    }).toThrow(ReservationConflictError);
-
-    ReservationEngine.releaseReservation("item-10", res.id);
-    expect(ReservationEngine.getReservedQty("item-10")).toBe(0);
-  });
-
+describe("Phase 4: Adjustment Engine", () => {
   test("AdjustmentEngine correctly calculates count reconciliation deltas", () => {
     // Current stock: 100. Physical count shows 90 (-10 spoilage)
     const adjOut = AdjustmentEngine.processAdjustment(
