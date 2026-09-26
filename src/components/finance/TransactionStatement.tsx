@@ -8,6 +8,8 @@ import { DataPagination } from "@/components/ui/data-pagination";
 import { useL } from "@/i18n/text";
 import { todayDhaka, startOfMonth } from "@/lib/dates";
 import { CASH_CATEGORY_LABEL } from "@/lib/accounting/cash-ledger";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { fmtDay } from "@/lib/format";
 
 const BADGE: Record<TxnRow["category"], string> = {
   "Capital In":      "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
@@ -21,6 +23,7 @@ const BADGE: Record<TxnRow["category"], string> = {
   "Profit Advance":  "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   "Partner Loan":    "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
   "Asset Purchase":  "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
+  "Asset Sale":      "bg-lime-100 text-lime-700 dark:bg-lime-950 dark:text-lime-300",
   "Loan Received":   "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
   "Loan Repayment":  "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300",
 };
@@ -32,9 +35,6 @@ function fmt(n: number) {
 // one list of category names for the statement and the Money page
 const CATEGORY_BN: Record<string, string> = Object.fromEntries(Object.entries(CASH_CATEGORY_LABEL).map(([k, v]) => [k, v.bn]));
 
-function fmtDate(d: string) {
-  return d.slice(0, 10);
-}
 
 // Dhaka calendar: the UTC date is still "yesterday" before 06:00, which hid today's entries
 function todayStr() {
@@ -47,6 +47,10 @@ function firstOfMonthStr() {
 
 export function TransactionStatement() {
   const L = useL();
+  const { locale } = useTranslation();
+  const fmtDate = (d: string) => fmtDay(d.slice(0, 10), locale);
+  const [cat, setCat] = useState("");        // a cash category, or "" for all
+  const [q, setQ]     = useState("");        // words in the description
   const [dateRange, setDateRange] = useState({
     from: firstOfMonthStr(),
     to: todayStr(),
@@ -80,6 +84,13 @@ export function TransactionStatement() {
   const totalIn = rows.filter((r) => r.direction === "in").reduce((s, r) => s + r.amount, 0);
   const totalOut = rows.filter((r) => r.direction === "out").reduce((s, r) => s + r.amount, 0);
   const closing = (result?.openingBalance ?? 0) + totalIn - totalOut;
+  // the filter only narrows what is shown: the balance column is still the running cash balance
+  const cats = [...new Set(rows.map((r) => r.category))].sort();
+  const needle = q.trim().toLowerCase();
+  const shown = rows.filter((r) => (!cat || r.category === cat) && (!needle || r.description.toLowerCase().includes(needle)));
+  const filtered = shown.length !== rows.length;
+  const shownIn = shown.filter((r) => r.direction === "in").reduce((s, r) => s + r.amount, 0);
+  const shownOut = shown.filter((r) => r.direction === "out").reduce((s, r) => s + r.amount, 0);
 
   return (
     <div className="stmt-print-root space-y-4">
@@ -122,6 +133,19 @@ export function TransactionStatement() {
           >
             {L("শুরু থেকে", "All time")}
           </button>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">{L("ধরন", "Category")}</label>
+            <select value={cat} onChange={(e) => { setCat(e.target.value); setPage(0); }}
+              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm">
+              <option value="">{L("সব", "All")}</option>
+              {cats.map((c) => <option key={c} value={c}>{L(CATEGORY_BN[c] ?? c, c)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">{L("খুঁজুন", "Search")}</label>
+            <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} placeholder={L("বিবরণে…", "In description…")}
+              className="w-40 rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+          </div>
           {isPending && (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground self-center" />
           )}
@@ -162,6 +186,12 @@ export function TransactionStatement() {
               </div>
             ))}
           </div>
+        )}
+
+        {result && filtered && (
+          <p className="rounded-lg bg-muted/40 px-4 py-2 text-xs text-muted-foreground stmt-print-hide">
+            {L(`বাছাই করা ${shown.length}টি লেনদেন · এসেছে ${fmt(shownIn)} · গেছে ${fmt(shownOut)} — ব্যালেন্স কলাম পুরো নগদের`, `${shown.length} matching · in ${fmt(shownIn)} · out ${fmt(shownOut)} — the balance column is the whole cash balance`)}
+          </p>
         )}
 
         {/* Initial loading */}
@@ -215,14 +245,14 @@ export function TransactionStatement() {
                   </td>
                 </tr>
 
-                {rows.length === 0 ? (
+                {shown.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
                       {L("এই সময়ে কোনো লেনদেন নেই", "No transactions in this period")}
                     </td>
                   </tr>
                 ) : (
-                  rows.slice(page * pageSize, (page + 1) * pageSize).map((row) => (
+                  shown.slice(page * pageSize, (page + 1) * pageSize).map((row) => (
                     <tr
                       key={row.id}
                       className="border-b border-border/40 hover:bg-muted/20 transition-colors print:table-row"
@@ -257,11 +287,11 @@ export function TransactionStatement() {
                 )}
 
                 {/* Pagination row */}
-                {rows.length > pageSize && (
+                {shown.length > pageSize && (
                   <tr className="stmt-print-hide">
                     <td colSpan={6} className="px-4 py-3">
                       <DataPagination
-                        total={rows.length}
+                        total={shown.length}
                         page={page}
                         pageSize={pageSize}
                         onPageChange={setPage}

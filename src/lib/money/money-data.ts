@@ -35,7 +35,7 @@ export async function loadMoneyData(supabase: SupabaseClient<any>, businessId: s
 
   return buildMoneyModel({
     today, period: { from: period.from, to }, all, inPeriod, thisMonth, lastMonth: prevMonth, lastMonthSameDays: prevSameDays, months: monthData,
-    farm: partner.farm, home: partner.home,
+    farm: partner.farm, home: partner.home, accountsCheck: partner.accountsCheck,
     marketPrice: price && Number(price.price_per_kg) > 0 ? { perKg: Number(price.price_per_kg), date: String(price.date).slice(0, 10) } : null,
   });
 }

@@ -116,4 +116,21 @@ describe("accounting engine — one cash figure", () => {
     const before = (await getAccountingData(db())).cashLedger.filter((r) => r.category === "Operating Cost").length;
     expect(before).toBe(1500);
   });
+  it("a sold asset leaves the books: its money comes into cash, its value goes, the books still balance", async () => {
+    const before = await getAccountingData(db());
+    const f2 = before.fixedAssets.find((a) => a.id === "f2")!;
+    (tables.fixed_assets as Record<string, unknown>[])[1] = { ...(tables.fixed_assets as Record<string, unknown>[])[1], is_active: false, disposed_at: "2026-09-01", disposal_value: 9000 };
+    const acc = await getAccountingData(db());
+    const sold = acc.fixedAssets.find((a) => a.id === "f2")!;
+    const bookThen = sold.purchaseCost - sold.accumulatedDepreciation;
+    expect(acc.balanceSheet.cashAndBank).toBeCloseTo(before.balanceSheet.cashAndBank + 9000, 6);
+    expect(acc.cashLedger.some((r) => r.category === "Asset Sale" && r.amount === 9000 && r.date === "2026-09-01")).toBe(true);
+    expect(acc.balanceSheet.netFixedAssets).toBeCloseTo(before.balanceSheet.netFixedAssets - (f2.purchaseCost - f2.accumulatedDepreciation), 0);
+    expect(acc.balanceSheet.isBalanced).toBe(true);
+    expect(acc.trialBalance.isBalanced).toBe(true);
+    expect(acc.trialBalance.lines.find((l) => l.code === "1100")!.balance).toBeCloseTo(acc.balanceSheet.cashAndBank, 6);
+    const sep = await getAccountingData(db(), "2026-09-01", "2026-09-30");
+    expect(sep.incomeStatement.assetDisposalGain).toBeCloseTo(9000 - bookThen, 6);
+    expect(sep.cashFlow.assetSaleProceeds).toBe(9000);
+  });
 });

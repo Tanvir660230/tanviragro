@@ -6,9 +6,9 @@ import { ExportCostCSV } from "./ExportCostCSV";
 import { CostEntryActions } from "./CostEntryActions";
 import { Receipt, Tag, Building2, Package, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
-import { DataPagination, DateRangeFilter } from "@/components/ui/data-pagination";
+import { DataPagination } from "@/components/ui/data-pagination";
 import { useL } from "@/i18n/text";
-import { costCategoryLabel, costTypeLabel } from "@/lib/expenses/labels";
+import { costCategoryLabel } from "@/lib/expenses/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { fmtDay } from "@/lib/format";
 
@@ -52,8 +52,6 @@ const INV_CATEGORY_STYLE: Record<string, string> = {
   roughage: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
   other: "bg-muted text-muted-foreground",
 };
-
-type Filter = "all" | "fixed" | "variable";
 
 const CATEGORY_COLORS: string[] = [
   "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400",
@@ -111,16 +109,6 @@ function extractPersonTag(desc: string | null): string | null {
   return null;
 }
 
-const TYPE_STYLE = {
-  fixed:    "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
-  variable: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400",
-};
-
-const TABS: { value: Filter; label: string; bn: string }[] = [
-  { value: "all",      label: "All", bn: "সব" },
-  { value: "fixed",    label: "Fixed", bn: "নির্দিষ্ট" },
-  { value: "variable", label: "Variable", bn: "পরিবর্তনশীল" },
-];
 
 function fmt(n: number) {
   return `৳${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -227,7 +215,7 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
   );
 }
 
-interface Props { entries: CostEntry[]; inventoryPurchases?: InventoryPurchaseEntry[]; treatmentFees?: TreatmentFeeEntry[]; }
+interface Props { entries: CostEntry[]; inventoryPurchases?: InventoryPurchaseEntry[]; treatmentFees?: TreatmentFeeEntry[]; cattleTags?: Record<string, string>; }
 
 function TreatmentFeesSection({ fees }: { fees: TreatmentFeeEntry[] }) {
   const L = useL();
@@ -383,11 +371,10 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
 
 // ── Main CostList ──────────────────────────────────────────────────
 
-export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] }: Props) {
+export function CostList({ entries, inventoryPurchases = [], treatmentFees = [], cattleTags = {} }: Props) {
   const L = useL();
   const { locale } = useTranslation();
   const expenses = useMemo(() => entries.filter((e) => (e.entry_class ?? "expense") === "expense"), [entries]);
-  const assets   = useMemo(() => entries.filter((e) => e.entry_class === "asset"), [entries]);
 
   // the period is chosen once, above the tabs (the page passes only its rows)
   const [filter, setFilter]             = useState<string>("all");   // a category, or "all"
@@ -415,8 +402,6 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
     return list;
   }, [expenses, filter, personFilter]);
 
-  const filteredInventoryPurchases = inventoryPurchases;
-  const filteredTreatmentFees = treatmentFees;
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(0); }, [filter, personFilter]);
@@ -424,22 +409,36 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
   const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   const totalEntered  = expenses.reduce((s, e) => s + Number(e.amount), 0);
-  const totalVetFees  = filteredTreatmentFees.reduce((s, f) => s + f.amount, 0);   // on the treatment rows
+  // an expense put on one animal (variable + an animal) is that animal's cost, not a shared running cost
+  const onAnimal      = (e: CostEntry) => !!e.cattle_id && e.type === "variable";
+  const totalOnAnimal = expenses.filter(onAnimal).reduce((s, e) => s + Number(e.amount), 0);
+  const totalVetFees  = treatmentFees.reduce((s, f) => s + f.amount, 0);   // on the treatment rows
+  const totalBought   = inventoryPurchases.reduce((s, x) => s + x.amount, 0);
+  const animalCell = (e: CostEntry) => onAnimal(e)
+    ? <Link href={`/dashboard/cattle/${e.cattle_id}`} className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 hover:underline dark:bg-amber-950/60 dark:text-amber-300">#{cattleTags[e.cattle_id!] ?? "?"}</Link>
+    : <span className="text-xs text-muted-foreground">{L("সব গরুর", "shared")}</span>;
 
   return (
     <div className="space-y-5">
       {/* one line of totals for the period (the running costs by kind are on the Overview) */}
-      <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-muted/40 px-4 py-3 text-sm">
-        <span>{L("লেখা খরচ", "Expenses entered")}: <b className="tabular-nums">{fmt(totalEntered)}</b> <span className="text-xs text-muted-foreground">({expenses.length})</span></span>
-        {inventoryPurchases.length > 0 && <span>{L("খাবার/স্টক কেনা", "Feed & stock bought")}: <b className="tabular-nums">{fmt(inventoryPurchases.reduce((s2, x) => s2 + x.amount, 0))}</b></span>}
-        {totalVetFees > 0 && <span>{L("ডাক্তারের খরচ", "Vet fees")}: <b className="tabular-nums">{fmt(totalVetFees)}</b></span>}
+      <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm">
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          <span>{L("লেখা খরচ", "Expenses entered")}: <b className="tabular-nums">{fmt(totalEntered)}</b> <span className="text-xs text-muted-foreground">({expenses.length})</span></span>
+          {totalOnAnimal > 0.5 && <span>{L("এর মধ্যে নির্দিষ্ট গরুর", "of it on one animal")}: <b className="tabular-nums">{fmt(totalOnAnimal)}</b></span>}
+          {totalBought > 0.5 && <span>{L("খাবার/স্টক কেনা", "Feed & stock bought")}: <b className="tabular-nums">{fmt(totalBought)}</b></span>}
+          {totalVetFees > 0.5 && <span>{L("চিকিৎসার খরচ", "Treatment costs")}: <b className="tabular-nums">{fmt(totalVetFees)}</b></span>}
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {L("সারসংক্ষেপের \"চলতি খরচ\" এর সাথে এই অঙ্ক এক নয়: খাবারের খরচ ধরা হয় যেদিন খাওয়ানো হয় (কেনার দিনে নয়), আর নির্দিষ্ট গরুর খরচ সেই গরুর হিসাবে যায়।",
+             "This is not the Overview's running costs: feed is a cost on the day it is fed (not bought), and a cost put on one animal goes to that animal.")}
+        </p>
       </div>
 
       {/* Feed & inventory purchases */}
-      <InventoryPurchasesSection purchases={filteredInventoryPurchases} />
+      <InventoryPurchasesSection purchases={inventoryPurchases} />
 
       {/* Vet fees (treatment records) */}
-      <TreatmentFeesSection fees={filteredTreatmentFees} />
+      <TreatmentFeesSection fees={treatmentFees} />
 
       {/* Type tabs + person filter + export */}
       <div className="flex flex-wrap items-center gap-3">
@@ -515,7 +514,7 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
               <thead>
                 <tr className="border-b border-border/60 bg-muted/30">
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("তারিখ", "Date")}</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("প্রকার", "Type")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("কার খরচ", "For")}</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("ধরন", "Category")}</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("বিবরণ", "Description")}</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">{L("টাকা", "Amount")}</th>
@@ -529,11 +528,7 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
                   return (
                     <tr key={e.id} className={cn("border-l-2 hover:bg-muted/20 transition-colors", catStyle.border)}>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(e.recorded_at, locale)}</td>
-                      <td className="px-4 py-3">
-                        <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", TYPE_STYLE[e.type])}>
-                          {costTypeLabel(e.type, locale)}
-                        </span>
-                      </td>
+                      <td className="px-4 py-3">{animalCell(e)}</td>
                       <td className="px-4 py-3">
                         <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", catStyle.badge)}>
                           {costCategoryLabel(e.category, locale)}
@@ -571,9 +566,7 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
                 <div key={e.id} className={cn("rounded-xl bg-card p-4 shadow-card ring-1 ring-black/5 border-l-2", catStyle.border)}>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", TYPE_STYLE[e.type])}>
-                        {costTypeLabel(e.type, locale)}
-                      </span>
+                      {animalCell(e)}
                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", catStyle.badge)}>
                         {costCategoryLabel(e.category, locale)}
                       </span>

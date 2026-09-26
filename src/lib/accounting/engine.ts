@@ -70,6 +70,7 @@ export interface IncomeStatement {
   depreciation: number;
   interestExpense: number;
   livestockLoss: number;  // write-off for cattle that died (non-cash)
+  assetDisposalGain: number;   // money got for a sold/scrapped asset minus its value then (− = a loss)
   generalExpenses: number;
   totalExpenses: number;
   grossProfit: number;
@@ -83,6 +84,7 @@ export interface CashFlowStatement {
   cashPaidInventory: number;
   netOperating: number;
   fixedAssetPurchases: number;
+  assetSaleProceeds: number;
   netInvesting: number;
   partnerInvestments: number;
   partnerWithdrawals: number;
@@ -406,7 +408,16 @@ export async function getAccountingData(
 
   // Fixed asset totals (all-time for balance sheet)
   const totalFixedAssetCost = fixedAssets.reduce((s, a) => s + a.purchaseCost, 0);                 // value (gross)
-  const totalAccumDep = fixedAssets.reduce((s, a) => s + a.accumulatedDepreciation, 0);
+  const totalAccumDep = fixedAssets.reduce((s, a) => s + a.accumulatedDepreciation, 0);           // all depreciation ever charged
+  // A sold or scrapped asset leaves the books on its disposal date: its value goes, the money got for
+  // it comes into cash (cash ledger "Asset Sale"), and the difference is a gain or a loss. Before,
+  // it stayed on the balance sheet and the money never reached cash.
+  const disposedAssets = fixedAssets.filter((a) => !a.isActive && a.disposedAt);
+  const disposalGain = (a: FixedAssetRow) => (a.disposalValue ?? 0) - (a.purchaseCost - a.accumulatedDepreciation);
+  const disposedCost = disposedAssets.reduce((s, a) => s + a.purchaseCost, 0);
+  const disposedAccumDep = disposedAssets.reduce((s, a) => s + a.accumulatedDepreciation, 0);
+  const disposedProceeds = disposedAssets.reduce((s, a) => s + (a.disposalValue ?? 0), 0);
+  const allTimeDisposalGain = disposedAssets.reduce((s, a) => s + disposalGain(a), 0);
   // Register assets WITHOUT a payment record are paid here; linked ones were paid by their cost entry.
   const unlinkedFixedAssetCash = fixedAssets.filter((a) => !a.sourceCostEntryId).reduce((s, a) => s + a.purchaseCost, 0);
 
@@ -473,7 +484,8 @@ export async function getAccountingData(
 
   const retainedEarnings =
     allTimeSalesRevenue - allTimeCogs - allTimeTotalOpCosts
-    - totalAccumDep - allTimeInterestExpense - allPartnerProfitDistributions - deceasedCattleLoss - allTimeUnallocatedInv;
+    - totalAccumDep - allTimeInterestExpense - allPartnerProfitDistributions - deceasedCattleLoss - allTimeUnallocatedInv
+    + allTimeDisposalGain;
 
   // ── PERIOD aggregates (income statement + cash flow) ──────────
 
@@ -605,7 +617,10 @@ export async function getAccountingData(
     transport + repairsMaintenance + totalDepreciationExpense + periodInterestExpense + generalExpenses + periodDeceasedCattleLoss;
 
   const grossProfit = totalSalesRevenue - purchaseCogs - directCattleCogs;
-  const netIncome = totalSalesRevenue - totalExpenses;
+  const periodDisposed = disposedAssets.filter((a) => inPeriod(a.disposedAt!));
+  const assetDisposalGain = periodDisposed.reduce((s, a) => s + disposalGain(a), 0);
+  const assetSaleProceeds = periodDisposed.reduce((s, a) => s + (a.disposalValue ?? 0), 0);
+  const netIncome = totalSalesRevenue - totalExpenses + assetDisposalGain;
 
   const incomeStatement: IncomeStatement = {
     cattleSales: totalSalesRevenue,
@@ -622,6 +637,7 @@ export async function getAccountingData(
     depreciation: totalDepreciationExpense,
     interestExpense: periodInterestExpense,
     livestockLoss: periodDeceasedCattleLoss,
+    assetDisposalGain,
     generalExpenses,
     totalExpenses,
     grossProfit,
@@ -635,7 +651,7 @@ export async function getAccountingData(
   const netOperating = cashFromSales - cashPaidCattle - cashPaidCosts - cashPaidInventory;
 
   const fixedAssetPurchases = periodFixedAssetPurchases + periodCostEntryAssetTotal;
-  const netInvesting = -fixedAssetPurchases;
+  const netInvesting = -fixedAssetPurchases + assetSaleProceeds;
 
   const netFinancing = partnerInvestments - partnerWithdrawals;
   const netCashFlow = netOperating + netInvesting + netFinancing;
@@ -647,6 +663,7 @@ export async function getAccountingData(
     cashPaidInventory,
     netOperating,
     fixedAssetPurchases,
+    assetSaleProceeds,
     netInvesting,
     partnerInvestments,
     partnerWithdrawals,
@@ -657,7 +674,7 @@ export async function getAccountingData(
   // ── BALANCE SHEET (always all-time) ───────────────────────────
   const cashAndBank = allTimeNetCashFlow + openingCash;
   const livestock = activeCattleCost + capitalizedActiveCosts;
-  const netFixedAssets = totalFixedAssetCost - totalAccumDep + unlinkedAssetCostValue;
+  const netFixedAssets = (totalFixedAssetCost - disposedCost) - (totalAccumDep - disposedAccumDep) + unlinkedAssetCostValue;
   const totalAssets = cashAndBank + feedInventoryValue + livestock + netFixedAssets;
 
   // Partner Capital = contributed capital only (investments minus capital returns).
@@ -672,8 +689,8 @@ export async function getAccountingData(
     cashAndBank,
     feedInventory: feedInventoryValue,
     livestock,
-    fixedAssets: totalFixedAssetCost + unlinkedAssetCostValue,   // gross cost of everything net of depreciation below
-    accumulatedDepreciation: totalAccumDep,
+    fixedAssets: totalFixedAssetCost - disposedCost + unlinkedAssetCostValue,   // gross cost of what is still owned
+    accumulatedDepreciation: totalAccumDep - disposedAccumDep,
     netFixedAssets,
     totalAssets,
     totalLiabilities,
@@ -702,6 +719,7 @@ export async function getAccountingData(
     "3100": { code: "3100", name: "Partner Capital", section: "equity", normalBalance: "credit", debit: 0, credit: 0, balance: 0 },
     "3200": { code: "3200", name: "Partner Withdrawals", section: "equity", normalBalance: "debit", debit: 0, credit: 0, balance: 0 },
     "4100": { code: "4100", name: "Cattle Sales Revenue", section: "revenue", normalBalance: "credit", debit: 0, credit: 0, balance: 0 },
+    "4200": { code: "4200", name: "Gain/Loss on Asset Disposal", section: "revenue", normalBalance: "credit", debit: 0, credit: 0, balance: 0 },
     "5100": { code: "5100", name: "Cost of Goods Sold", section: "expenses", normalBalance: "debit", debit: 0, credit: 0, balance: 0 },
     "5200": { code: "5200", name: "Feed Expenses", section: "expenses", normalBalance: "debit", debit: 0, credit: 0, balance: 0 },
     "6100": { code: "6100", name: "Veterinary & Medical", section: "expenses", normalBalance: "debit", debit: 0, credit: 0, balance: 0 },
@@ -803,6 +821,13 @@ export async function getAccountingData(
   // Depreciation (all-time accumulated): DR Depreciation Expense, CR Accumulated Depreciation
   dr("6500", totalAccumDep);
   cr("1600", totalAccumDep);
+
+  // Disposals: DR Cash (money got), DR Accumulated Depreciation, CR Fixed Assets (cost);
+  // the difference is a gain (CR 4200) or a loss (DR 4200)
+  dr("1100", disposedProceeds);
+  dr("1600", disposedAccumDep);
+  cr("1500", disposedCost);
+  if (allTimeDisposalGain >= 0) cr("4200", allTimeDisposalGain); else dr("4200", -allTimeDisposalGain);
 
   // Interest expense (accrued, all-time): DR Interest Expense, CR Accrued Interest Payable
   dr("6900", allTimeInterestExpense);

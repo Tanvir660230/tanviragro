@@ -5,6 +5,7 @@ import { Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useL } from "@/i18n/text";
 import type { MoneyModel } from "@/lib/money/money-model";
+import { WEIGH_EVERY_DAYS } from "@/lib/home/home-model";   // the same weighing rule as the homepage
 import { signed, taka, tone } from "./MoneyToday";
 
 /**
@@ -28,7 +29,10 @@ export function SellPlanner({ animals, costPerHeadDay, defaultPrice }: { animals
     return { ...a, weight, value, cost, result: value != null ? value - cost : null, projected: d > 0 && a.adgKg != null && a.adgKg > 0 };
   }), [animals, d, p, costPerHeadDay]);
   const chosen = rows.filter((r) => picked.has(r.id));
-  const total = chosen.reduce((s, r) => ({ value: s.value + (r.value ?? 0), cost: s.cost + r.cost, result: s.result + (r.result ?? 0) }), { value: 0, cost: 0, result: 0 });
+  // only animals with a value count: an animal without a weight (or with no price set) would add its cost with no price
+  const priced = chosen.filter((r) => r.value != null);
+  const unpriced = chosen.length - priced.length;
+  const total = priced.reduce((s, r) => ({ value: s.value + r.value!, cost: s.cost + r.cost, result: s.result + r.result! }), { value: 0, cost: 0, result: 0 });
   const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   return (
@@ -48,8 +52,11 @@ export function SellPlanner({ animals, costPerHeadDay, defaultPrice }: { animals
           <input type="number" min={0} step={1} value={days} onChange={(e) => setDays(e.target.value)} className="h-9 w-24 rounded-lg border border-input bg-background px-3 text-sm" />
         </label>
         <div className="ml-auto text-right">
-          <p className="text-[11px] text-muted-foreground">{L(`${chosen.length}টি গরু · দাম ${taka(total.value)} · খরচ ${taka(total.cost)}`, `${chosen.length} animals · value ${taka(total.value)} · cost ${taka(total.cost)}`)}</p>
-          <p className={cn("text-lg font-bold tabular-nums", tone(total.result))}>{signed(total.result)}</p>
+          <p className="text-[11px] text-muted-foreground">{L(`${priced.length}টি গরু · দাম ${taka(total.value)} · খরচ ${taka(total.cost)}`, `${priced.length} animals · value ${taka(total.value)} · cost ${taka(total.cost)}`)}</p>
+          {p > 0
+            ? <p className={cn("text-lg font-bold tabular-nums", tone(total.result))}>{signed(total.result)}</p>
+            : <p className="text-sm font-medium text-amber-700 dark:text-amber-400">{L("দাম দিন", "Enter a price")}</p>}
+          {p > 0 && unpriced > 0 && <p className="text-[10px] text-amber-700 dark:text-amber-400">{L(`${unpriced}টির ওজন নেই — হিসাবে ধরা হয়নি`, `${unpriced} without a weight — not counted`)}</p>}
         </div>
       </div>
       <div className="overflow-x-auto border-t border-border/60">
@@ -71,6 +78,11 @@ export function SellPlanner({ animals, costPerHeadDay, defaultPrice }: { animals
                 <td className="px-3 py-2 font-medium">{r.tag}</td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {r.weight != null ? `${Math.round(r.weight)} ${L("কেজি", "kg")}` : "—"}
+                  {r.weight != null && (r.daysSinceWeighed == null || r.daysSinceWeighed > WEIGH_EVERY_DAYS) && (
+                    <span className="block text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                      {r.daysSinceWeighed == null ? L("কখনো মাপা হয়নি", "never weighed") : L(`${r.daysSinceWeighed} দিন আগে মাপা`, `weighed ${r.daysSinceWeighed} days ago`)}
+                    </span>
+                  )}
                   {r.weight != null && <span className="block text-[10px] text-muted-foreground">{r.projected ? L("মাপা হারে বাড়বে", "at measured growth") : r.weightBasis === "measured" ? L("মাপা", "measured") : r.weightBasis === "projected" ? L("মাপা + বৃদ্ধি", "measured + growth") : L("আনুমানিক", "estimated")}</span>}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.value != null ? taka(r.value) : "—"}</td>

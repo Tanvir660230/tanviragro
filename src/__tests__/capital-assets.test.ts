@@ -55,8 +55,8 @@ describe("no asset purchase is counted twice (source guards)", () => {
     const src = read("lib/accounting/engine.ts");
     // cash comes from the one cash ledger (tested in cash-ledger.test.ts)
     expect(src).toMatch(/allTimeNetCashFlow = cashNet\(cashLedger\)/);
-    expect(read("lib/accounting/cash-ledger.ts")).toMatch(/if \(a\.source_cost_entry_id\) continue;/);
-    expect(src).toMatch(/netFixedAssets = totalFixedAssetCost - totalAccumDep \+ unlinkedAssetCostValue/);
+    expect(read("lib/accounting/cash-ledger.ts")).toMatch(/if \(!a\.source_cost_entry_id\)\s*push\(\{ id: `fa-\$\{a\.id\}`/);
+    expect(src).toMatch(/netFixedAssets = \(totalFixedAssetCost - disposedCost\) - \(totalAccumDep - disposedAccumDep\) \+ unlinkedAssetCostValue/);
     expect(src).toMatch(/dr\("1500", unlinkedFixedAssetCash\)/);
     expect(src).toMatch(/inPeriod\(a\.purchaseDate\) && !a\.sourceCostEntryId/);
   });

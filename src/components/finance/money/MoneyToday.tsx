@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useL } from "@/i18n/text";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { fmtDay } from "@/lib/format";
-import type { MoneyModel } from "@/lib/money/money-model";
+import { PRICE_STALE_DAYS, type MoneyModel } from "@/lib/money/money-model";
 
 export const taka = (n: number) => `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
 export const signed = (n: number) => (Math.round(n) === 0 ? "৳0" : `${n > 0 ? "+" : "−"}${taka(n)}`);
@@ -19,7 +19,7 @@ export function MoneyToday({ m }: { m: MoneyModel }) {
   // against the same days of last month: a month half gone always looks cheaper than a whole one
   const change = m.monthExpenses - m.lastMonthSameDays;
   const day = Number(m.today.slice(8, 10));
-  const oldPrice = m.marketPriceAgeDays != null && m.marketPriceAgeDays > 30;
+  const oldPrice = m.marketPriceAgeDays != null && m.marketPriceAgeDays > PRICE_STALE_DAYS;
   const w = m.netWorth;
 
   return (
@@ -51,7 +51,6 @@ export function MoneyToday({ m }: { m: MoneyModel }) {
           {m.marketPrice
             ? L(`গরুর দাম ধরা হয়েছে ৳${m.marketPrice.perKg}/কেজি (${fmtDay(m.marketPrice.date, locale)})`, `Cattle valued at ৳${m.marketPrice.perKg}/kg (${fmtDay(m.marketPrice.date, locale)})`)
             : L("বাজারদর দেওয়া নেই — গরু খরচে ধরা হয়েছে", "No market price — cattle counted at cost")}
-          {oldPrice && L(` — ${m.marketPriceAgeDays} দিন পুরনো, নতুন দাম দিন`, ` — ${m.marketPriceAgeDays} days old, set today's price`)}
         </span>
         <Link href="#market-price" className="font-medium text-primary hover:underline">{L("বাজারদর বদলান", "Update the price")}</Link>
       </div>

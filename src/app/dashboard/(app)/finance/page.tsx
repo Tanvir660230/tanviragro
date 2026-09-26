@@ -7,6 +7,7 @@ import { AssetTabPanel, type SimpleFixedAsset } from "@/components/finance/Asset
 import { TransactionStatement } from "@/components/finance/TransactionStatement";
 import { MarketPriceCard } from "@/components/finance/MarketPriceCard";
 import { MoneyToday } from "@/components/finance/money/MoneyToday";
+import { MoneyChecks } from "@/components/finance/money/MoneyChecks";
 import { PeriodOverview } from "@/components/finance/money/PeriodOverview";
 import { MonthlyTrend } from "@/components/finance/money/MonthlyTrend";
 import { SellPlanner } from "@/components/finance/money/SellPlanner";
@@ -79,6 +80,7 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
     <div className="space-y-5">
       <PageHeader title="Money" icon={Landmark} actions={<AddCostDialog payers={payers} />} className="mb-0" />
       <MoneyToday m={m} />
+      <MoneyChecks checks={m.checks} />
       <Suspense fallback={null}>
         <PeriodBar from={m.period.from} to={m.period.to} />
       </Suspense>
@@ -92,7 +94,8 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
             </div>
           ) },
           { value: "costs", bn: "খরচের তালিকা", en: "Expenses", icon: <Receipt />, count: expenseEntries.length,
-            content: <CostList entries={expenseEntries} inventoryPurchases={purchases} treatmentFees={treatmentFees} /> },
+            content: <CostList entries={expenseEntries} inventoryPurchases={purchases} treatmentFees={treatmentFees}
+              cattleTags={Object.fromEntries(partner.farm.animals.map((a) => [a.id, a.tag]))} /> },
           { value: "cash", bn: "নগদ বিবরণী", en: "Cash statement", icon: <History />, content: <TransactionStatement /> },
           { value: "cattle", bn: "প্রতি গরু", en: "Per animal", icon: <Beef />, count: m.animals.length, content: (
             <div className="space-y-4">

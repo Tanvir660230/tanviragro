@@ -201,6 +201,11 @@ export default async function IncomeStatementPage() {
             {is.generalExpenses > 0 && <Row label={L("অন্যান্য খরচ", "General Administration & Other Costs")} value={is.generalExpenses} indent negative />}
           </div>
           <Row label={L("মোট চলতি খরচ", "TOTAL OPERATING EXPENSES")} value={is.totalExpenses} bold border highlight negative />
+          {/* a sold asset: money got minus its value then — part of the net result, not an expense */}
+          {Math.abs(is.assetDisposalGain) >= 0.5 && (
+            <Row label={is.assetDisposalGain >= 0 ? L("সম্পদ বিক্রিতে লাভ", "Gain on asset sale") : L("সম্পদ বিক্রিতে ক্ষতি", "Loss on asset sale")}
+              value={Math.abs(is.assetDisposalGain)} negative={is.assetDisposalGain < 0} />
+          )}
         </div>
       </div>
 

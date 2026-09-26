@@ -14,6 +14,7 @@ import type { CashRow } from "@/lib/accounting/cash-ledger";
 import type { FarmPosition } from "@/lib/partners/position";
 import type { HomeModel } from "@/lib/home/home-model";
 import { capitalSummary } from "@/lib/money/summary";
+import { WEIGH_EVERY_DAYS } from "@/lib/home/home-model";
 
 export type ExpenseKey = "feed" | "vet" | "labour" | "utilities" | "rent" | "transport" | "repairs" | "general";
 export const EXPENSE_LABEL: Record<ExpenseKey, { bn: string; en: string }> = {
@@ -42,7 +43,14 @@ export type MoneyInput = {
   farm: FarmPosition;
   home: HomeModel;
   marketPrice: { perKg: number; date: string } | null;
+  /** the accounts' "if sold today" result (lib/partners/load-positions.ts) — must equal farm.total */
+  accountsCheck: number;
 };
+
+/** A market price older than this is flagged: every cattle value leans on it. */
+export const PRICE_STALE_DAYS = 7;
+
+export type MoneyCheck = { key: "books" | "engines" | "price" | "weights" | "stock" | "cash"; ok: boolean; amount?: number; count?: number };
 
 export type MoneyModel = ReturnType<typeof buildMoneyModel>;
 
@@ -123,11 +131,26 @@ export function buildMoneyModel(input: MoneyInput) {
     return {
       id: a.id, tag: a.tag, days: a.days, fullCost: a.fullCost, valueToday: a.valueToday,
       weightKg: h?.weightKg ?? null, weightBasis: h?.weightBasis ?? "none", adgKg: h?.adgKg ?? null,
+      daysSinceWeighed: h?.daysSinceWeighed ?? null,
     };
   });
 
+  // ── checks: what would make a figure on this page wrong, found before anyone notices ──
+  const marketPriceAgeDays = input.marketPrice ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${input.marketPrice.date}T00:00:00Z`)) / DAY) : null;
+  const unweighed = animals.filter((a) => a.daysSinceWeighed == null || a.daysSinceWeighed > WEIGH_EVERY_DAYS).length;
+  const enginesGap = input.accountsCheck - farm.total;
+  const checks: MoneyCheck[] = [
+    { key: "books", ok: bs.isBalanced, amount: bs.discrepancy },                         // assets = dues + capital + profit
+    { key: "engines", ok: Math.abs(enginesGap) < 10, amount: enginesGap },               // accounts and partner engine agree
+    { key: "price", ok: marketPriceAgeDays != null && marketPriceAgeDays <= PRICE_STALE_DAYS, count: marketPriceAgeDays ?? undefined },
+    { key: "weights", ok: unweighed === 0, count: unweighed },
+    { key: "stock", ok: bs.feedInventory > -0.5, amount: bs.feedInventory },            // below zero: more fed than bought
+    { key: "cash", ok: bs.cashAndBank > -0.5, amount: bs.cashAndBank },                 // below zero: money in not entered
+  ];
+
   return {
     today,
+    checks,
     cash: bs.cashAndBank,
     avgDailySpend,
     runwayDays,
@@ -138,7 +161,7 @@ export function buildMoneyModel(input: MoneyInput) {
     netWorth,
     marketPrice: input.marketPrice,
     /** days since the market price was set — cattle values and every "if sold" figure lean on it */
-    marketPriceAgeDays: input.marketPrice ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${input.marketPrice.date}T00:00:00Z`)) / DAY) : null,
+    marketPriceAgeDays,
     period: {
       ...period,
       expenseLines: lines,

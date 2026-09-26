@@ -21,7 +21,10 @@ export function financePeriod(
   };
 
   if (fp === "all") return { start: null, end: null };
-  if (!fp && fs)    return { start: fs, end: fe ?? todayStr };
+  // a custom range from the URL: only real dates, never past today, and "from" before "to"
+  const valid = (d: string | undefined) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)) ? (d > todayStr ? todayStr : d) : null);
+  const cs = valid(fs), ce = valid(fe) ?? todayStr;
+  if (!fp && cs) return cs <= ce ? { start: cs, end: ce } : { start: ce, end: cs };
 
   const preset = fp ?? "this-month";
 

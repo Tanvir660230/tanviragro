@@ -25,6 +25,7 @@ export type CashCategory =
   | "Operating Cost"
   | "Vet Fee"
   | "Asset Purchase"
+  | "Asset Sale"
   | "Supplier Due"
   | "Profit Advance"
   | "Partner Loan"
@@ -48,7 +49,8 @@ export type CashLedgerInput = {
   costs: { id: string; amount: number | string; recorded_at: string; description?: string | null; category: string; entry_class: string | null }[];
   treatments: { id?: string | null; cattle_id: string; vet_fee: number | string | null; additional_medical_cost: number | string | null; treated_at: string; diagnosis?: string | null; tag?: string | null }[];
   invTx: { id: string | number; type: string; movement_type: string | null; qty: number | string; unit_cost: number | string | null; recorded_at: string; cattle_id: string | null; item_name?: string | null }[];
-  fixedAssets: { id: string; name: string; category: string; purchase_date: string; purchase_cost: number | string; source_cost_entry_id?: string | null }[];
+  fixedAssets: { id: string; name: string; category: string; purchase_date: string; purchase_cost: number | string; source_cost_entry_id?: string | null;
+    is_active?: boolean | null; disposed_at?: string | null; disposal_value?: number | string | null }[];
   liabilities: { id: string; outstanding: number | string; settled_at: string | null; recorded_at?: string | null; lender?: string | null; name?: string | null; notes?: string | null }[];
   loans: { id: string; principal_amount: number | string; loan_date: string; lender_name?: string | null; loan_payments: { id?: string | null; amount: number | string; paid_at: string }[] | null }[];
 };
@@ -108,8 +110,11 @@ export function buildCashLedger(input: CashLedgerInput): CashRow[] {
 
   // assets bought with a cost entry (source_cost_entry_id) were paid by that entry
   for (const a of input.fixedAssets) {
-    if (a.source_cost_entry_id) continue;
-    push({ id: `fa-${a.id}`, date: day(a.purchase_date), description: `${a.name} (${a.category})`, category: "Asset Purchase", signed: -Number(a.purchase_cost) });
+    if (!a.source_cost_entry_id)
+      push({ id: `fa-${a.id}`, date: day(a.purchase_date), description: `${a.name} (${a.category})`, category: "Asset Purchase", signed: -Number(a.purchase_cost) });
+    // money got for a sold asset comes in on its disposal day
+    if (a.is_active === false && a.disposed_at && Number(a.disposal_value ?? 0) > 0)
+      push({ id: `fa-sale-${a.id}`, date: day(a.disposed_at), description: `Asset sold — ${a.name}`, category: "Asset Sale", signed: Number(a.disposal_value) });
   }
 
   // a purchase memo books the whole bill above; what was owed to the shop had not left then.
@@ -168,6 +173,7 @@ export const CASH_CATEGORY_LABEL: Record<CashCategory, { bn: string; en: string 
   "Operating Cost": { bn: "খরচ", en: "Expenses" },
   "Vet Fee": { bn: "ডাক্তার/চিকিৎসা", en: "Vet & treatment" },
   "Asset Purchase": { bn: "সম্পদ কেনা", en: "Assets bought" },
+  "Asset Sale": { bn: "সম্পদ বিক্রি", en: "Assets sold" },
   "Supplier Due": { bn: "দোকানে বাকি", en: "Supplier dues" },
   "Profit Advance": { bn: "লাভের অগ্রিম", en: "Profit advances" },
   "Partner Loan": { bn: "অংশীদারের ধার", en: "Partner loans" },

@@ -494,3 +494,49 @@ As a result, cash, the running costs, "if sold today" and the farm's worth are t
 - in CostList: the second date filter, the asset register, the fixed/variable chips
 
 **Tests:** `__tests__/money-model.test.ts`. The asset source guard now checks the new page.
+
+## 15. Money page: every module checked, and the page checks itself (2026-09-27)
+
+**Where each module gets its figures (one source each)**
+
+| Module | Source |
+|---|---|
+| Money today (4 tiles) | `buildMoneyModel` ← engine balance sheet + cash ledger, `farm` (partner engine), home model |
+| Checks strip | `buildMoneyModel().checks` |
+| Period bar | `financePeriod` (URL) — shown on Overview and Expenses only |
+| Overview | engine income statement for the period + cash ledger; animals sold/dead from `farm.animals` |
+| Six months | engine per month + cash ledger |
+| Expenses list | raw rows for the list; the totals line says why it differs from running costs |
+| Cash statement | the same cash ledger (`cashStatement`), closing = cash on hand |
+| Per animal | `farm.animals` + home weights/ADG; weighing rule `WEIGH_EVERY_DAYS` |
+| Assets | engine register; the headline equals "assets" in the farm's worth |
+
+**Bugs found and fixed**
+- **A sold asset** (`disposeFixedAsset`) never brought its money into cash, and it stayed in the farm's worth. Now:
+  - the money comes in as cash ledger "Asset Sale";
+  - the asset leaves the balance sheet;
+  - the gain or loss goes into retained earnings, the income statement (`assetDisposalGain`) and trial balance account 4200;
+  - the books still balance (test in `accounting-cash.test.ts`).
+
+  Production has no sold asset, so no figure changed.
+- **The sale planner total** counted the cost of an animal with no weight but not its value. It now counts only animals that have a value, and says how many were left out.
+- **A custom period in the URL** could be reversed, in the future, or not a date. It is now cleaned.
+
+**Improvements**
+- **Checks strip** (`MoneyChecks`), from six checks in the model:
+  - the books balance;
+  - the partner engine and the accounts give the same "if sold today" result (`accountsCheck` = `farm.total`);
+  - the market price is at most 7 days old;
+  - every animal was weighed within 14 days;
+  - stock is not below zero;
+  - cash is not below zero.
+
+  On the production snapshot, the two engines agree to the paisa. The only gap was ৳36.66 of feed recorded against an animal, which the snapshot generator had left out.
+- **Expenses list:** the "For" column shows the animal an expense was put on, in place of fixed/variable.
+- **Cash statement:** category filter and search; the balance column stays the running cash balance.
+- **Sale planner:** a weight older than 14 days is flagged.
+
+**Still open (by design, or needs the owner)**
+- **The partner engine does not see an asset sale's gain or loss.** When an asset is sold, the checks strip will show the difference until the partner engine learns it.
+- **Only entered money counts.** A weekly cash count (enter the counted cash, see the gap) would catch unrecorded spending.
+- **List rows load all-time and are filtered in the page.** This is fine for a few thousand rows; later, filter in the query.

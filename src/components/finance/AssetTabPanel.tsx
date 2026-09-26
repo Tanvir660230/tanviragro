@@ -83,9 +83,12 @@ export async function AssetTabPanel({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {
-            label: L("সম্পদ হিসেবে লেখা খরচ", "Capital entries"),
-            value: fmt(totalCostEntryValue),
-            sub: L(`${costAssets.length}টি`, `${costAssets.length} item${costAssets.length !== 1 ? "s" : ""}`),
+            // the same figure as "assets" in the farm's worth (engine: book value + payments with no register entry)
+            label: L("সম্পদের মোট মূল্য আজ", "Assets worth today"),
+            value: fmt(totalFixedBookValue + totalCostEntryValue),
+            sub: totalCostEntryValue > 0.5
+              ? L(`রেজিস্টারে নেই এমন ${costAssets.length}টি খরচ ${fmt(totalCostEntryValue)} সহ`, `incl. ${costAssets.length} payment(s) not in the register, ${fmt(totalCostEntryValue)}`)
+              : L("খামারের মোট মূল্যে এটাই ধরা", "the figure in the farm's worth"),
             ring: "ring-amber-500/10", grad: "from-amber-500/[0.05]",
             text: "text-amber-700 dark:text-amber-400",
           },

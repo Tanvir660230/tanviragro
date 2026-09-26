@@ -1,4 +1,6 @@
 import { buildMoneyModel, monthEnd, type MoneyInput } from "@/lib/money/money-model";
+import { financePeriod } from "@/lib/money/period";
+import { todayDhaka } from "@/lib/dates";
 import type { AccountingData } from "@/lib/accounting/engine";
 import type { CashRow } from "@/lib/accounting/cash-ledger";
 import type { FarmPosition } from "@/lib/partners/position";
@@ -6,7 +8,7 @@ import type { HomeModel } from "@/lib/home/home-model";
 
 const is = (over: Partial<AccountingData["incomeStatement"]> = {}): AccountingData["incomeStatement"] => ({
   cattleSales: 0, totalRevenue: 0, cogs: 0, directCattleCosts: 0, feedExpenses: 0, vetMedical: 0, laborWages: 0, utilities: 0, rentLease: 0,
-  transport: 0, repairsMaintenance: 0, depreciation: 0, interestExpense: 0, livestockLoss: 0, generalExpenses: 0, totalExpenses: 0, grossProfit: 0, netIncome: 0, ...over,
+  transport: 0, repairsMaintenance: 0, depreciation: 0, interestExpense: 0, livestockLoss: 0, assetDisposalGain: 0, generalExpenses: 0, totalExpenses: 0, grossProfit: 0, netIncome: 0, ...over,
 });
 const acc = (o: { is?: Partial<AccountingData["incomeStatement"]>; cash?: number; ledger?: CashRow[] } = {}) => ({
   incomeStatement: is(o.is),
@@ -29,7 +31,7 @@ function input(over: Partial<MoneyInput> = {}): MoneyInput {
     all: acc({ ledger }), inPeriod: acc({ is: { feedExpenses: 8000, laborWages: 1500, utilities: 1600, depreciation: 1100 }, ledger }),
     thisMonth: acc({ is: { feedExpenses: 8000, laborWages: 1500, utilities: 1600 } }), lastMonth: acc({ is: { feedExpenses: 9000 } }), lastMonthSameDays: acc({ is: { feedExpenses: 7000 } }),
     months: [{ month: "2026-08", data: acc({ is: { feedExpenses: 9000 } }) }, { month: "2026-09", data: acc({ is: { feedExpenses: 8000, laborWages: 1500 } }) }],
-    farm, home, marketPrice: { perKg: 420, date: "2026-09-24" }, ...over,
+    farm, home, marketPrice: { perKg: 420, date: "2026-09-24" }, accountsCheck: 27711, ...over,
   };
 }
 
@@ -85,5 +87,26 @@ describe("money model", () => {
     expect(monthEnd("2026-02")).toBe("2026-02-28");
     expect(monthEnd("2028-02")).toBe("2028-02-29");
     expect(monthEnd("2026-12")).toBe("2026-12-31");
+  });
+  it("a custom period from the URL is cleaned: bad dates ignored, reversed ranges swapped, no future", () => {
+    const today = todayDhaka();
+    expect(financePeriod(undefined, "2026-09-20", "2026-09-10")).toEqual({ start: "2026-09-10", end: "2026-09-20" });
+    expect(financePeriod(undefined, "2026-09-01", "3000-01-01")).toEqual({ start: "2026-09-01", end: today });
+    expect(financePeriod(undefined, "garbage", undefined).start).toBe(`${today.slice(0, 7)}-01`);   // falls back to this month
+  });
+  it("checks: the page says what would make its figures wrong", () => {
+    const ok = (m: ReturnType<typeof buildMoneyModel>, k: string) => m.checks.find((c) => c.key === k)!.ok;
+    const bal = { ...acc(), balanceSheet: { ...acc().balanceSheet, isBalanced: true, discrepancy: 0 } } as AccountingData;
+    const m = buildMoneyModel(input({ all: bal }));
+    expect(ok(m, "books")).toBe(true);
+    expect(ok(m, "engines")).toBe(true);                       // 27711 = farm.total
+    expect(ok(m, "price")).toBe(true);                         // 3 days old
+    expect(ok(buildMoneyModel(input({ all: bal, accountsCheck: 30000 })), "engines")).toBe(false);
+    expect(ok(buildMoneyModel(input({ all: bal, marketPrice: { perKg: 420, date: "2026-09-01" } })), "price")).toBe(false);
+    expect(ok(buildMoneyModel(input({ all: bal, marketPrice: null })), "price")).toBe(false);
+    const neg = { ...bal, balanceSheet: { ...bal.balanceSheet, feedInventory: -500, cashAndBank: -10 } } as AccountingData;
+    const n = buildMoneyModel(input({ all: neg }));
+    expect(ok(n, "stock")).toBe(false);
+    expect(ok(n, "cash")).toBe(false);
   });
 });
