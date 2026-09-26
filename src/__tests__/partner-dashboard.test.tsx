@@ -58,7 +58,7 @@ test("the profile shows the same position (capital, share, estimate, account val
   const html = renderToString(
     <I18nProvider dictionary={bn as never} locale="bn">
       <PartnerProfileClient partner={rows[0]} transactions={[]} position={tanvir}
-        farm={{ realized: farm.realized, estimate: farm.estimate, total: farm.total, soldCount: 0, marketPricePerKg: 420, herdValued: true }}
+        farm={{ realized: farm.realized, estimate: farm.estimate, total: farm.total, soldCount: 0, marketPricePerKg: 420, herdValued: true, cycles: [] }}
         money={{ cash: 16782, moneyTypesEnabled: true }}
         shareRules={{ partner: pp[0], partners: pp, rules: [{ id: "r1", partnerId: "t", from: "2026-06-01", shareMode: "auto", fixedPct: 0, bearsLoss: true, note: null }],
           lockedUntil: null, rulesEnabled: true, canManage: true }} />

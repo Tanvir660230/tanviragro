@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { fmtDay } from "@/lib/format";
 import { deleteShareRule, retirePartner, saveShareRule } from "@/app/dashboard/(app)/partners/actions";
 import { checkRule, termsOn, type PositionPartner, type ShareRule } from "@/lib/partners/position";
 
@@ -33,6 +35,8 @@ const addDay = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).
  */
 export function ShareRulesPanel({ partner, partners, rules, today, lockedUntil, rulesEnabled, canManage }: Props) {
   const L = useL();
+  const { locale } = useTranslation();
+  const d = (x: string | null) => fmtDay(x, locale);
   const router = useRouter();
   const [pending, start] = useTransition();
   const mine = useMemo(() => rules.filter((r) => r.partnerId === partner.id).sort((a, b) => a.from.localeCompare(b.from)), [rules, partner.id]);
@@ -51,7 +55,7 @@ export function ShareRulesPanel({ partner, partners, rules, today, lockedUntil, 
 
   const planned: ShareRule = { partnerId: partner.id, from, shareMode: mode, fixedPct: mode === "manual" ? Number(pct) || 0 : 0, bearsLoss: isLabor ? false : bearsLoss };
   const problem = from < minDate
-    ? (lockedUntil && from <= lockedUntil ? L(`হিসাব ${lockedUntil} পর্যন্ত বন্ধ — এর পরের তারিখ দিন।`, `Books are locked up to ${lockedUntil} — pick a later date.`) : L(`যোগ দিয়েছেন ${partner.joinedAt}-এ — এর আগে নয়।`, `Joined on ${partner.joinedAt} — not before.`))
+    ? (lockedUntil && from <= lockedUntil ? L(`হিসাব ${d(lockedUntil)} পর্যন্ত বন্ধ — এর পরের তারিখ দিন।`, `Books are locked up to ${d(lockedUntil)} — pick a later date.`) : L(`যোগ দিয়েছেন ${d(partner.joinedAt)}-এ — এর আগে নয়।`, `Joined on ${d(partner.joinedAt)} — not before.`))
     : checkRule(partners, rules, planned);
   const nextRule = mine.find((r) => r.from > from);
   const describe = (r: Pick<ShareRule, "shareMode" | "fixedPct" | "bearsLoss">) =>
@@ -61,7 +65,7 @@ export function ShareRulesPanel({ partner, partners, rules, today, lockedUntil, 
     start(async () => {
       const res = await saveShareRule({ partnerId: partner.id, effectiveFrom: from, shareMode: mode, fixedPct: Number(pct) || 0, bearsLoss, note });
       if (res.error) { toast.error(res.error); return; }
-      toast.success(L(`নিয়ম সেভ হলো — ${from} থেকে`, `Rule saved — from ${from}`));
+      toast.success(L(`নিয়ম সেভ হলো — ${d(from)} থেকে`, `Rule saved — from ${d(from)}`));
       setOpen(false); setNote(""); router.refresh();
     });
   }
@@ -74,7 +78,7 @@ export function ShareRulesPanel({ partner, partners, rules, today, lockedUntil, 
   function retire(date: string | null) {
     start(async () => {
       const res = await retirePartner(partner.id, date);
-      if (res.error) toast.error(res.error); else { toast.success(date ? L(`${date} থেকে অবসর`, `Retired from ${date}`) : L("আবার সক্রিয়", "Active again")); router.refresh(); }
+      if (res.error) toast.error(res.error); else { toast.success(date ? L(`${d(date)} থেকে অবসর`, `Retired from ${d(date)}`) : L("আবার সক্রিয়", "Active again")); router.refresh(); }
     });
   }
 
@@ -110,7 +114,7 @@ export function ShareRulesPanel({ partner, partners, rules, today, lockedUntil, 
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium">
-                    {L(`${r.from} থেকে`, `From ${r.from}`)}
+                    {L(`${d(r.from)} থেকে`, `From ${d(r.from)}`)}
                     {isCurrent && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-px text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{L("চলছে", "in force")}</span>}
                     {future && <span className="ml-2 rounded-full bg-sky-100 px-2 py-px text-[11px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">{L("আসছে", "upcoming")}</span>}
                     {locked && <span className="ml-2 rounded-full bg-muted px-2 py-px text-[11px] text-muted-foreground">{L("বন্ধ হিসাব", "locked")}</span>}
@@ -170,11 +174,11 @@ export function ShareRulesPanel({ partner, partners, rules, today, lockedUntil, 
           <div className={cn("rounded-lg px-3 py-2.5 text-xs leading-relaxed", problem ? "bg-destructive/10 text-destructive" : "bg-primary/[0.06] text-foreground")}>
             {problem ?? (
               <>
-                <p className="font-medium">{L(`${from} থেকে ${nextRule ? `${nextRule.from}-এর আগ পর্যন্ত` : "পরবর্তী বদল পর্যন্ত"}: ${describe(planned)}।`,
-                  `From ${from} ${nextRule ? `until ${nextRule.from}` : "until the next change"}: ${describe(planned)}.`)}</p>
+                <p className="font-medium">{L(`${d(from)} থেকে ${nextRule ? `${d(nextRule.from)}-এর আগ পর্যন্ত` : "পরবর্তী বদল পর্যন্ত"}: ${describe(planned)}।`,
+                  `From ${d(from)} ${nextRule ? `until ${d(nextRule.from)}` : "until the next change"}: ${describe(planned)}.`)}</p>
                 <p className="mt-1 text-muted-foreground">
-                  {L(`${from}-এর আগের দিনগুলো আগের নিয়মেই থাকবে। যে গরু এই তারিখের আগে কেনা আর পরে বিক্রি হবে, তার লাভ-ক্ষতি দিন হিসেবে ভাগ হবে — আগের দিনগুলো আগের নিয়মে, পরের দিনগুলো নতুন নিয়মে।`,
-                     `Days before ${from} keep the earlier rule. An animal bought before this date and sold after it is split by days — the days before at the earlier rule, the days after at the new one.`)}
+                  {L(`${d(from)}-এর আগের দিনগুলো আগের নিয়মেই থাকবে। যে গরু এই তারিখের আগে কেনা আর পরে বিক্রি হবে, তার লাভ-ক্ষতি দিন হিসেবে ভাগ হবে — আগের দিনগুলো আগের নিয়মে, পরের দিনগুলো নতুন নিয়মে।`,
+                     `Days before ${d(from)} keep the earlier rule. An animal bought before this date and sold after it is split by days — the days before at the earlier rule, the days after at the new one.`)}
                   {mode === "manual" && L(" বাকি লাভ অন্য মূলধনীরা টাকা × দিন অনুপাতে পাবেন।", " The rest of the profit goes to the other money partners by taka × days.")}
                 </p>
               </>
@@ -195,7 +199,7 @@ export function ShareRulesPanel({ partner, partners, rules, today, lockedUntil, 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-5 py-3 text-xs">
           {partner.leftAt ? (
             <>
-              <span className="flex items-center gap-1.5 text-muted-foreground"><CalendarClock className="h-3.5 w-3.5" />{L(`${partner.leftAt} থেকে অবসর — এর পরে কোনো ভাগ নেই, আগের হিসাব থাকছে।`, `Retired from ${partner.leftAt} — no share after it; the history stays.`)}</span>
+              <span className="flex items-center gap-1.5 text-muted-foreground"><CalendarClock className="h-3.5 w-3.5" />{L(`${d(partner.leftAt)} থেকে অবসর — এর পরে কোনো ভাগ নেই, আগের হিসাব থাকছে।`, `Retired from ${d(partner.leftAt)} — no share after it; the history stays.`)}</span>
               <Button size="sm" variant="outline" disabled={pending} onClick={() => retire(null)} className="gap-1.5"><Undo2 className="h-3.5 w-3.5" />{L("আবার সক্রিয় করুন", "Make active again")}</Button>
             </>
           ) : (

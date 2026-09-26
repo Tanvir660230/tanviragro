@@ -40,6 +40,7 @@ export default async function PartnerProfilePage({ params }: { params: Promise<{
           realized: data.farm.realized, estimate: data.farm.estimate, total: data.farm.total,
           soldCount: data.farm.animals.filter((a) => a.status !== "active").length,
           marketPricePerKg: data.farm.marketPricePerKg, herdValued: data.farm.herdValued,
+          cycles: data.farm.cycles.map((c) => ({ closedOn: c.closedOn, from: c.from, share: c.shares[id] ?? 0 })),
         }}
         money={{ cash: data.cash, moneyTypesEnabled: data.cyclesEnabled }}
         shareRules={{

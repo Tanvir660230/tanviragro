@@ -17,6 +17,7 @@ import { AddPartnerDialog } from "./modals/AddPartnerDialog";
 import { AddTransactionDialog } from "./modals/AddTransactionDialog";
 import { DeclareDistributionModal } from "./modals/DeclareDistributionModal";
 import { CyclesPanel } from "./CyclesPanel";
+import { AnimalResultsTable } from "./AnimalResultsTable";
 
 // ── formatting ────────────────────────────────────────────────────────────────
 const taka = (n: number) => `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
@@ -88,7 +89,8 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
               <Tile icon={Scale} label={L("গরুর আজকের দাম", "Cattle value today")} value={taka(farm.herdValue)}
                 note={farm.marketPricePerKg ? L(`ওজন × ৳${farm.marketPricePerKg}/কেজি (আনুমানিক)`, `weight × ৳${farm.marketPricePerKg}/kg (estimate)`) : L("বাজারদর নেই — খরচ ধরা হয়েছে", "no market price — counted at cost")} />
               <Tile icon={farm.total >= 0 ? TrendingUp : TrendingDown} label={L("আজ বিক্রি করলে ফল", "Result if sold today")} value={signed(farm.total)} valueCls={tone(farm.total)}
-                note={L(`পাকা ${signed(farm.realized)} · আনুমানিক ${signed(farm.estimate)}`, `final ${signed(farm.realized)} · estimate ${signed(farm.estimate)}`)} />
+                note={L(`পাকা ${signed(farm.realized)} · আনুমানিক ${signed(farm.estimate)}${farm.marketPricePerKg ? ` · দাম ±১০% হলে ${signed(farm.realized + farm.estimateRange.low)} থেকে ${signed(farm.realized + farm.estimateRange.high)}` : ""}`,
+                         `final ${signed(farm.realized)} · estimate ${signed(farm.estimate)}${farm.marketPricePerKg ? ` · at price ±10%: ${signed(farm.realized + farm.estimateRange.low)} to ${signed(farm.realized + farm.estimateRange.high)}` : ""}`)} />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-5 py-2.5 text-xs text-muted-foreground">
               <span>{L(`চলতি খরচ মোট ${taka(farm.runningCosts)} — প্রতি গরু প্রতি দিন ${taka(farm.costPerHeadDay)}, যত দিন খামারে তত ভাগ`,
@@ -97,44 +99,7 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
                 {showAnimals ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}{L("প্রতিটি গরুর হিসাব", "Each animal")}
               </button>
             </div>
-            {showAnimals && (
-              <div className="overflow-x-auto border-t border-border/60">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/30 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium">{L("গরু", "Animal")}</th>
-                      <th className="px-4 py-2 text-right font-medium">{L("দিন", "Days")}</th>
-                      <th className="px-4 py-2 text-right font-medium">{L("কেনা", "Bought")}</th>
-                      <th className="px-4 py-2 text-right font-medium">{L("নিজের খরচ", "Own costs")}</th>
-                      <th className="px-4 py-2 text-right font-medium">{L("চলতি খরচের ভাগ", "Running share")}</th>
-                      <th className="px-4 py-2 text-right font-medium">{L("দাম", "Value")}</th>
-                      <th className="px-4 py-2 text-right font-medium">{L("ফল", "Result")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40">
-                    {farm.animals.map((a) => (
-                      <tr key={a.id}>
-                        <td className="px-4 py-2 font-medium">
-                          <Link href={`/dashboard/cattle/${a.id}`} className="hover:underline">{a.tag}</Link>
-                          <span className="ml-1.5 text-[11px] text-muted-foreground">
-                            {a.status === "active" ? L("খামারে", "on farm") : a.status === "sold" ? L(`বিক্রি ${a.endDate}`, `sold ${a.endDate}`) : L(`মারা গেছে ${a.endDate}`, `died ${a.endDate}`)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums">{a.days}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{taka(a.purchasePrice)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{taka(a.ownCost)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{taka(a.runningShare)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">
-                          {a.status === "active" ? (a.valueToday != null ? taka(a.valueToday) : "—") : taka(a.salePrice ?? 0)}
-                          {a.status === "active" && a.valueToday != null && <span className="ml-1 text-[10px] text-muted-foreground">{L("আনু.", "est.")}</span>}
-                        </td>
-                        <td className={cn("px-4 py-2 text-right font-semibold tabular-nums", tone(a.result))}>{signed(a.result)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {showAnimals && <AnimalResultsTable animals={farm.animals} />}
           </section>
 
           {/* ── cycles ── */}

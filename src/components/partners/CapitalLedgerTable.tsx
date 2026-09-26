@@ -6,18 +6,13 @@ import type { CapitalTxn } from "./capital-types";
 import { useL } from "@/i18n/text";
 import { partnerTxnLabel } from "@/lib/partners/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { fmtDay } from "@/lib/format";
+import { DataPagination } from "@/components/ui/data-pagination";
 
 function fmt(n: number) {
   return `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
 }
 
-function fmtDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 export function CapitalLedgerTable({
   displayed,
@@ -28,6 +23,10 @@ export function CapitalLedgerTable({
   const { locale } = useTranslation();
   const SHOW_LIMIT = 5;
   const [showAllTxns, setShowAllTxns] = useState(false);
+  const [who, setWho] = useState("");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const names = [...new Set(displayed.map((t) => t.partner_name))].sort();
 
   if (displayed.length === 0) {
     return (
@@ -37,10 +36,21 @@ export function CapitalLedgerTable({
     );
   }
 
-  const rows = showAllTxns ? displayed : displayed.slice(0, SHOW_LIMIT);
+  // first a glance (the latest few); then every entry, by partner, a page at a time
+  const chosen = who ? displayed.filter((t) => t.partner_name === who) : displayed;
+  const rows = showAllTxns ? chosen.slice(page * pageSize, (page + 1) * pageSize) : displayed.slice(0, SHOW_LIMIT);
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden shadow-card">
+      {showAllTxns && names.length > 1 && (
+        <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2 text-xs">
+          <span className="text-muted-foreground">{L("অংশীদার", "Partner")}</span>
+          <select value={who} onChange={(e) => { setWho(e.target.value); setPage(0); }} className="rounded-md border border-border bg-card px-2 py-1">
+            <option value="">{L("সবাই", "Everyone")}</option>
+            {names.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -69,7 +79,7 @@ export function CapitalLedgerTable({
             {rows.map((txn, i) => (
               <tr key={txn.id} className={i === 0 ? "bg-card" : "bg-card/50"}>
                 <td className="px-4 py-3 whitespace-nowrap text-xs text-muted-foreground">
-                  {fmtDate(txn.recorded_at)}
+                  {fmtDay(txn.recorded_at, locale)}
                 </td>
                 <td className="px-4 py-3 font-medium">{txn.partner_name}</td>
                 <td className="px-4 py-3">
@@ -114,6 +124,10 @@ export function CapitalLedgerTable({
           </tbody>
         </table>
       </div>
+      {showAllTxns && chosen.length > 25 && (
+        <DataPagination total={chosen.length} page={page} pageSize={pageSize} onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(0); }} className="border-t border-border/60 px-4 py-2" />
+      )}
       {!showAllTxns && displayed.length > SHOW_LIMIT && (
         <div className="border-t border-border/60 px-4 py-3 text-center">
           <button

@@ -32,3 +32,14 @@ export function fmtDate(
 export function fmtPct(n: number, decimals = 1): string {
   return `${n.toFixed(decimals)}%`;
 }
+
+/**
+ * A calendar day (YYYY-MM-DD) the same way everywhere: "26 Sep 2026" in English,
+ * "২৬ সেপ্টেম্বর ২০২৬" in Bangla. Read as a date, not a moment, so no time zone can move it.
+ */
+export function fmtDay(date: string | null | undefined, locale: string | undefined): string {
+  if (!date) return "—";
+  const d = new Date(`${String(date).slice(0, 10)}T00:00:00Z`);
+  if (isNaN(d.getTime())) return String(date);
+  return new Intl.DateTimeFormat(locale === "bn" ? "bn-BD" : "en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+}

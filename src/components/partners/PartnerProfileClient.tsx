@@ -57,13 +57,21 @@ import { todayDhaka } from "@/lib/dates";
 import type { PartnerPosition } from "@/lib/partners/position";
 import { ShareRulesPanel } from "@/components/partners/ShareRulesPanel";
 import { AddTransactionDialog } from "@/components/partners/modals/AddTransactionDialog";
+import { DataPagination, DateRangeFilter } from "@/components/ui/data-pagination";
+import { fmtDay } from "@/lib/format";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TxnFilter = "all" | "investment" | "withdrawal" | "profit" | "loss_allocation";
+type TxnFilter = "all" | "investment" | "withdrawal" | "profit" | "loan" | "loss_allocation";
+const PROFIT_TYPES = new Set(["profit", "advance", "loss_allocation"]);
+const LOAN_TYPES = new Set(["loan_in", "loan_repay"]);
 
 /** The farm figures this partner's shares come from (lib/partners/position.ts). */
-export type ProfileFarm = { realized: number; estimate: number; total: number; soldCount: number; marketPricePerKg: number | null; herdValued: boolean };
+export type ProfileFarm = {
+  realized: number; estimate: number; total: number; soldCount: number; marketPricePerKg: number | null; herdValued: boolean;
+  /** this partner's share of each closed cycle, oldest first */
+  cycles: { closedOn: string; from: string | null; share: number }[];
+};
 
 interface Props {
   partner: Partner;
@@ -82,9 +90,7 @@ function bdt(n: number) {
   return `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
 }
 
-function fmtDate(d: string) {
-  return d.slice(0, 10);
-}
+const fmtDate = (d: string, locale?: string) => fmtDay(d, locale);
 
 const AVATAR_COLORS = [
   "bg-blue-500",
@@ -210,6 +216,10 @@ export function PartnerProfileClient({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deletingTxnId, setDeletingTxnId] = useState<string | null>(null);
   const [confirmTxnId, setConfirmTxnId] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const [isDeleting, startDeleteTransition] = useTransition();
 
 
@@ -234,9 +244,8 @@ export function PartnerProfileClient({
     all: transactions.length,
     investment: transactions.filter((t) => t.type === "investment").length,
     withdrawal: transactions.filter((t) => t.type === "withdrawal").length,
-    profit: transactions.filter(
-      (t) => t.type === "profit" || t.type === "loss_allocation"
-    ).length,
+    profit: transactions.filter((t) => PROFIT_TYPES.has(t.type)).length,
+    loan: transactions.filter((t) => LOAN_TYPES.has(t.type)).length,
     loss_allocation: 0,
   };
 
@@ -254,19 +263,19 @@ export function PartnerProfileClient({
     },
     {
       key: "profit",
-      label: L("লাভ/ক্ষতির ভাগ", "Distributions"),
+      label: L("লাভ ও অগ্রিম", "Profit & advances"),
       count: filterCounts.profit,
     },
+    ...(filterCounts.loan > 0 ? [{ key: "loan" as const, label: L("ধার", "Loans"), count: filterCounts.loan }] : []),
   ];
 
-  const filtered =
-    filter === "all"
-      ? allDisplayed
-      : filter === "profit"
-      ? allDisplayed.filter(
-          (t) => t.type === "profit" || t.type === "loss_allocation"
-        )
+  const byType =
+    filter === "all" ? allDisplayed
+      : filter === "profit" ? allDisplayed.filter((t) => PROFIT_TYPES.has(t.type))
+      : filter === "loan" ? allDisplayed.filter((t) => LOAN_TYPES.has(t.type))
       : allDisplayed.filter((t) => t.type === filter);
+  const filtered = byType.filter((t) => (!dateFrom || t.recorded_at >= dateFrom) && (!dateTo || t.recorded_at <= dateTo));
+  const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   const typeCfg = TYPE_CFG[p.partner_type ?? "capital"] ?? TYPE_CFG.capital;
   const avColor = avatarColor(p.name);
@@ -374,7 +383,7 @@ export function PartnerProfileClient({
               </div>
 
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm text-muted-foreground">
-                <span>{L("যোগ দিয়েছেন", "Joined")} {fmtDate(p.joined_at)}</span>
+                <span>{L("যোগ দিয়েছেন", "Joined")} {fmtDate(p.joined_at, locale)}</span>
                 <span>·</span>
                 <span>{L(`${months} মাস ধরে`, `${months} month${months !== 1 ? "s" : ""} active`)}</span>
                 {pos.leftAt && (
@@ -423,9 +432,15 @@ export function PartnerProfileClient({
           <Line label={L("জমা", "Put in")} value={`+${bdt(pos.capitalIn)}`} />
           {pos.capitalOut > 0 && <Line label={L("তোলা", "Taken out")} value={`−${bdt(pos.capitalOut)}`} />}
           {pos.laborValue > 0 && <Line label={L("শ্রমের মূল্য", "Labour value")} value={`+${bdt(pos.laborValue)}`} />}
-          <Line label={L("পাকা লাভ/ক্ষতির ভাগ (বিক্রি হওয়া গরু)", "Share of final result (animals sold)")} value={`${pos.realizedShare >= 0 ? "+" : "−"}${bdt(pos.realizedShare)}`} />
+          {farm.cycles.map((c) => (
+            <Line key={c.closedOn} label={L(`বন্ধ চক্র ${c.from ? `${fmtDate(c.from, locale)} – ` : ""}${fmtDate(c.closedOn, locale)}`, `Closed cycle ${c.from ? `${fmtDate(c.from, locale)} – ` : ""}${fmtDate(c.closedOn, locale)}`)}
+              value={`${c.share >= 0 ? "+" : "−"}${bdt(c.share)}`} />
+          ))}
+          <Line label={L("চলতি চক্রে পাকা ফলের ভাগ (বিক্রি / মৃত গরু)", "Open cycle, final results (animals sold or dead)")} value={`${pos.realizedShare - pos.closedShare >= 0 ? "+" : "−"}${bdt(pos.realizedShare - pos.closedShare)}`} />
           <Line label={L("আনুমানিক ভাগ (খামারে থাকা গরু)", "Estimated share (animals on the farm)")} value={`${pos.estimateShare >= 0 ? "+" : "−"}${bdt(pos.estimateShare)}`} />
-          {pos.profitReceived > 0 && <Line label={L("লাভ পেয়ে গেছেন", "Profit already paid")} value={`−${bdt(pos.profitReceived)}`} />}
+          {pos.profitPaid > 0 && <Line label={L("লাভ পেয়ে গেছেন", "Profit already paid")} value={`−${bdt(pos.profitPaid)}`} />}
+          {pos.advances > 0 && <Line label={L("অগ্রিম নিয়েছেন", "Advances taken")} value={`−${bdt(pos.advances)}`} />}
+          {pos.loanBalance > 0 && <Line label={L("খামারের কাছে ধার (আলাদা, ফেরত পাবেন)", "Lent to the farm (separate, to be repaid)")} value={bdt(pos.loanBalance)} />}
           <Line label={L("মোট পাওনা", "Account value")} value={bdt(pos.balance)} strong />
         </div>
         <p className="text-xs text-muted-foreground">
@@ -499,7 +514,7 @@ export function PartnerProfileClient({
           {filterTabs.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setFilter(tab.key)}
+              onClick={() => { setFilter(tab.key); setPage(0); }}
               className={cn(
                 "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full transition-colors",
                 filter === tab.key
@@ -523,6 +538,17 @@ export function PartnerProfileClient({
             </button>
           ))}
         </div>
+
+        {transactions.length > 10 && (
+          <DateRangeFilter
+            from={dateFrom} to={dateTo}
+            onFromChange={(v) => { setDateFrom(v); setPage(0); }}
+            onToChange={(v) => { setDateTo(v); setPage(0); }}
+            onClear={() => { setDateFrom(""); setDateTo(""); setPage(0); }}
+            filteredCount={filtered.length} totalCount={byType.length}
+            className="px-5 py-2.5 border-b border-border/40"
+          />
+        )}
 
         {/* Table */}
         {filtered.length === 0 ? (
@@ -554,7 +580,7 @@ export function PartnerProfileClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
-                {filtered.map((txn, idx) => {
+                {paged.map((txn, idx) => {
                   const meta = TXN_META[txn.type];
                   const Icon = TXN_ICON[txn.type];
                   return (
@@ -566,7 +592,7 @@ export function PartnerProfileClient({
                       )}
                     >
                       <td className="px-5 py-3.5 whitespace-nowrap text-xs text-muted-foreground">
-                        {fmtDate(txn.recorded_at)}
+                        {fmtDate(txn.recorded_at, locale)}
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
@@ -649,10 +675,7 @@ export function PartnerProfileClient({
                         +
                         {bdt(
                           transactions
-                            .filter(
-                              (t) =>
-                                t.type === "investment" || t.type === "profit"
-                            )
+                            .filter((t) => t.type === "investment" || t.type === "loan_in")
                             .reduce((s, t) => s + t.amount, 0)
                         )}
                       </div>
@@ -660,11 +683,7 @@ export function PartnerProfileClient({
                         −
                         {bdt(
                           transactions
-                            .filter(
-                              (t) =>
-                                t.type === "withdrawal" ||
-                                t.type === "loss_allocation"
-                            )
+                            .filter((t) => t.type === "withdrawal" || t.type === "profit" || t.type === "advance" || t.type === "loan_repay")
                             .reduce((s, t) => s + t.amount, 0)
                         )}
                       </div>
@@ -688,6 +707,10 @@ export function PartnerProfileClient({
                 </tr>
               </tfoot>
             </table>
+            {filtered.length > 25 && (
+              <DataPagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage}
+                onPageSizeChange={(n) => { setPageSize(n); setPage(0); }} className="px-5 py-2.5 border-t border-border/40" />
+            )}
           </div>
         )}
       </div>

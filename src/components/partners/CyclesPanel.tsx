@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { fmtDay } from "@/lib/format";
 import { closeCycle, previewCycleClose, reopenLastCycle, type CyclePreview } from "@/app/dashboard/(app)/partners/actions";
 import type { CycleResult } from "@/lib/partners/position";
 
@@ -34,6 +36,8 @@ const tone = (n: number) => (Math.round(n) > 0 ? "text-emerald-600 dark:text-eme
  */
 export function CyclesPanel({ cycles, notes, names, openCycleFrom, openRealized, estimate, today, enabled, canManage }: Props) {
   const L = useL();
+  const { locale } = useTranslation();
+  const d = (x: string | null) => fmtDay(x, locale);
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
@@ -55,7 +59,7 @@ export function CyclesPanel({ cycles, notes, names, openCycleFrom, openRealized,
     start(async () => {
       const res = await closeCycle(date, note);
       if (res.error) { toast.error(res.error); return; }
-      toast.success(L(`চক্র ${date}-এ বন্ধ হলো`, `Cycle closed on ${date}`));
+      toast.success(L(`চক্র ${d(date)}-এ বন্ধ হলো`, `Cycle closed on ${d(date)}`));
       setOpen(false); setPreview(null); setNote(""); router.refresh();
     });
   }
@@ -91,7 +95,7 @@ export function CyclesPanel({ cycles, notes, names, openCycleFrom, openRealized,
       <div className="grid gap-3 px-5 py-4 text-sm sm:grid-cols-3">
         <div>
           <p className="text-xs text-muted-foreground">{L("চলতি চক্র", "Open cycle")}</p>
-          <p className="font-semibold">{openCycleFrom ? L(`${openCycleFrom} থেকে`, `from ${openCycleFrom}`) : L("শুরু থেকে", "since the start")}</p>
+          <p className="font-semibold">{openCycleFrom ? L(`${d(openCycleFrom)} থেকে`, `from ${d(openCycleFrom)}`) : L("শুরু থেকে", "since the start")}</p>
         </div>
         <div>
           <p className="text-xs text-muted-foreground">{L("এই চক্রে পাকা ফল", "Final so far")}</p>
@@ -121,7 +125,7 @@ export function CyclesPanel({ cycles, notes, names, openCycleFrom, openRealized,
           {preview && (
             <div className="rounded-lg border bg-card px-4 py-3 text-sm">
               <p className="font-medium">
-                {L(`${preview.from ? `${preview.from} থেকে ` : ""}${preview.closedOn} পর্যন্ত: ${preview.items}টি পাকা ফল, নিট `, `${preview.from ? `${preview.from} – ` : "Up to "}${preview.closedOn}: ${preview.items} final result(s), net `)}
+                {L(`${preview.from ? `${d(preview.from)} থেকে ` : ""}${d(preview.closedOn)} পর্যন্ত: ${preview.items}টি পাকা ফল, নিট `, `${preview.from ? `${d(preview.from)} – ` : "Up to "}${d(preview.closedOn)}: ${preview.items} final result(s), net `)}
                 <span className={tone(preview.net)}>{signed(preview.net)}</span>
                 {preview.fee > 0 && L(` (ফি ${taka(preview.fee)})`, ` (fee ${taka(preview.fee)})`)}
               </p>
@@ -132,8 +136,8 @@ export function CyclesPanel({ cycles, notes, names, openCycleFrom, openRealized,
                 ))}
               </ul>
               <p className="mt-2 text-xs text-muted-foreground">
-                {L(`${preview.stillOnFarm}টি গরু পরের চক্রে যাবে। বন্ধ করলে ${preview.closedOn} পর্যন্ত হিসাব lock হবে — সেই দিন বা আগের তারিখে আর কিছু লেখা যাবে না।`,
-                   `${preview.stillOnFarm} animal(s) roll into the next cycle. Closing locks the books up to ${preview.closedOn} — nothing can be entered on or before it.`)}
+                {L(`${preview.stillOnFarm}টি গরু পরের চক্রে যাবে। বন্ধ করলে ${d(preview.closedOn)} পর্যন্ত হিসাব lock হবে — সেই দিন বা আগের তারিখে আর কিছু লেখা যাবে না।`,
+                   `${preview.stillOnFarm} animal(s) roll into the next cycle. Closing locks the books up to ${d(preview.closedOn)} — nothing can be entered on or before it.`)}
               </p>
             </div>
           )}
@@ -153,7 +157,7 @@ export function CyclesPanel({ cycles, notes, names, openCycleFrom, openRealized,
               <button type="button" onClick={() => setShowId(showId === c.id ? null : c.id)} className="flex w-full flex-wrap items-center justify-between gap-2 px-5 py-3 text-left text-sm hover:bg-muted/30">
                 <span className="flex items-center gap-1.5 font-medium">
                   {showId === c.id ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                  {L(`${c.from ? `${c.from} – ` : "শুরু – "}${c.closedOn}`, `${c.from ? `${c.from} – ` : "Start – "}${c.closedOn}`)}
+                  {L(`${c.from ? `${d(c.from)} – ` : "শুরু – "}${d(c.closedOn)}`, `${c.from ? `${d(c.from)} – ` : "Start – "}${d(c.closedOn)}`)}
                   {notes[c.id] && <span className="font-normal text-muted-foreground">· {notes[c.id]}</span>}
                 </span>
                 <span className="text-xs text-muted-foreground">{L(`${c.items}টি ফল`, `${c.items} result(s)`)} · <span className={cn("font-semibold", tone(c.net))}>{signed(c.net)}</span></span>

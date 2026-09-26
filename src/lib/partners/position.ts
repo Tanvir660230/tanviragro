@@ -116,6 +116,8 @@ export type FarmPosition = {
   realized: number;              // every final result (closed cycles + open cycle)
   openRealized: number;          // final results in the open cycle
   estimate: number;
+  /** the estimate if the market price were 10% lower / higher (animals without a value stay at cost) */
+  estimateRange: { low: number; high: number };
   total: number;
   fee: number;
   feePctToday: number;
@@ -182,17 +184,59 @@ export function termsOn(partners: PositionPartner[], rules: ShareRule[], d: stri
 }
 
 /** Taka × days of each partner's money in the farm between `from` and `to` (both included). */
-export function capitalDays(partners: PositionPartner[], txns: PositionTxn[], from: string, to: string, asOf = to): Record<string, number> {
-  const w: Record<string, number> = Object.fromEntries(partners.map((p) => [p.id, 0]));
-  const a = dayNum(from), b = dayNum(to);
-  const overlap = (date: string) => Math.max(0, b - Math.max(a, dayNum(date)) + 1);
+/**
+ * Each partner's capital movements as a day-sorted list with running sums, built once per
+ * (partners, txns, asOf) — so the taka × days of any window is two binary searches, however many
+ * entries and animals there are.
+ */
+type CapitalIndex = Map<string, { day: number[]; amt: number[]; cumAmt: number[]; cumAmtDay: number[] }>;
+const indexCache = new WeakMap<PositionTxn[], Map<string, { partners: PositionPartner[]; index: CapitalIndex }>>();
+
+function capitalIndex(partners: PositionPartner[], txns: PositionTxn[], asOf: string): CapitalIndex {
+  let byAsOf = indexCache.get(txns);
+  if (!byAsOf) { byAsOf = new Map(); indexCache.set(txns, byAsOf); }
+  const hit = byAsOf.get(asOf);
+  if (hit && hit.partners === partners) return hit.index;
+  const events = new Map<string, { day: number; amt: number }[]>(partners.map((p) => [p.id, []]));
   for (const t of txns) {
-    if (!(t.partnerId in w) || t.date > to) continue;
-    if (t.type === "investment") w[t.partnerId] += t.amount * overlap(t.date);
-    else if (t.type === "withdrawal") w[t.partnerId] -= t.amount * overlap(t.date);
+    const list = events.get(t.partnerId);
+    if (!list) continue;
+    if (t.type === "investment") list.push({ day: dayNum(t.date), amt: t.amount });
+    else if (t.type === "withdrawal") list.push({ day: dayNum(t.date), amt: -t.amount });
   }
-  for (const p of partners) for (const c of laborContributions(p, asOf)) if (c.date <= to) w[p.id] += c.amount * overlap(c.date);
-  for (const k of Object.keys(w)) w[k] = Math.max(0, w[k]);
+  for (const p of partners) for (const c of laborContributions(p, asOf)) events.get(p.id)!.push({ day: dayNum(c.date), amt: c.amount });
+  const index: CapitalIndex = new Map();
+  for (const [id, list] of events) {
+    list.sort((x, y) => x.day - y.day);
+    const cumAmt: number[] = [0], cumAmtDay: number[] = [0];
+    for (const e of list) { cumAmt.push(cumAmt.at(-1)! + e.amt); cumAmtDay.push(cumAmtDay.at(-1)! + e.amt * e.day); }
+    index.set(id, { day: list.map((e) => e.day), amt: list.map((e) => e.amt), cumAmt, cumAmtDay });
+  }
+  byAsOf.set(asOf, { partners, index });
+  return index;
+}
+
+/** number of entries with day ≤ d (entries sorted by day) */
+function countUpTo(days: number[], d: number): number {
+  let lo = 0, hi = days.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (days[mid] <= d) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
+/** Taka × days of each partner's money in the farm between `from` and `to` (both included). */
+export function capitalDays(partners: PositionPartner[], txns: PositionTxn[], from: string, to: string, asOf = to): Record<string, number> {
+  const a = dayNum(from), b = dayNum(to);
+  const index = capitalIndex(partners, txns, asOf);
+  const w: Record<string, number> = {};
+  for (const p of partners) {
+    const ix = index.get(p.id)!;
+    // money in before the window counts every day of it; money that came in during it counts from its day
+    const before = countUpTo(ix.day, a - 1);
+    const upTo = countUpTo(ix.day, b);
+    const early = ix.cumAmt[before] * (b - a + 1);
+    const inside = (ix.cumAmt[upTo] - ix.cumAmt[before]) * (b + 1) - (ix.cumAmtDay[upTo] - ix.cumAmtDay[before]);
+    w[p.id] = Math.max(0, early + inside);
+  }
   return w;
 }
 
@@ -419,6 +463,10 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
       realized: r2(realized),
       openRealized: r2(A.net),
       estimate: r2(estimate),
+      estimateRange: {
+        low: r2(active.reduce((s, a) => s + (a.valueToday != null ? a.valueToday * 0.9 - a.fullCost : 0), 0)),
+        high: r2(active.reduce((s, a) => s + (a.valueToday != null ? a.valueToday * 1.1 - a.fullCost : 0), 0)),
+      },
       total: r2(realized + estimate),
       fee: r2(fee),
       feePctToday: feeOn(feeRates, asOf),

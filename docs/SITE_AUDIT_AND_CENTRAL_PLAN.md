@@ -377,3 +377,56 @@ Both migrations were dry-run together on production and rolled back. They create
 - **The expense form** has "Paid by" (the farm's cash, or a partner as capital or as a loan).
 
 **CSV:** one helper (`lib/csv.ts`, a Blob with a BOM). A "#" in a note no longer cuts the file, and Bangla opens correctly in Excel.
+
+## 12. Finished before the next deploy (2026-09-27)
+
+**Speed**
+- Taka × days is read from a per-partner running sum (two binary searches per window) instead of adding every entry.
+- 500 animals, 2,000 entries, 2 years of daily costs and 3 cycles take about 0.2 s (`partner-scale.test.ts`). The same test checks the result against adding every entry by hand.
+
+**Partners page**
+- **Result tile:** also shows the result at a market price ±10%.
+- **Animal table** (`AnimalResultsTable`):
+  - tabs: on the farm / sold / died / all;
+  - sort: losses first, longest on the farm, or by tag;
+  - 25 per page, with a total;
+  - an animal at a loss says "weigh again to check".
+
+**Profile**
+- "How it is worked out" lists the partner's share of every closed cycle, the open cycle's final results and the estimate. Profit paid, advances and a loan to the farm are listed separately.
+- **Entries list:**
+  - tabs: profit and advances, and loans;
+  - a date range;
+  - 25 per page;
+  - money in and out totals.
+
+**Capital ledger:** the latest five, then every entry, with a partner filter and 25 per page.
+
+**Dates:** the same everywhere on partner pages ("২৬ সেপ্টেম্বর ২০২৬" / "26 Sep 2026", `fmtDay`).
+
+**Team access**
+- Production never ran 20260924120000. Even with it, every core table stays owner-only, because it covered only the 026 tables. So managers and workers saw empty pages.
+- Migration **20260927110000_team_member_access** adds one "team members" policy per table next to the owner's:
+  - business tables: by business;
+  - child tables: through their parent.
+
+  Nothing is dropped. Role limits stay in the app.
+- Dry-run on production with the other migrations, rolled back: the owner sees everything as before, a stranger sees nothing, and a test manager sees the farm's rows.
+
+### Deploy runbook (when the owner says so)
+1. **Read-only check before:**
+   - cash ৳16,782 (or later);
+   - 5 partners, 25+ partner entries;
+   - no rows in `partner_share_rules` / `partner_cycles`.
+2. **Apply the migrations in this order.** They were dry-run together on 2026-09-27.
+   1. `20260924120000_phase1_rls_hardening`
+   2. `20260927090000_partner_share_rules`
+   3. `20260927100000_partner_cycles_money_types`: the three `alter type … add value` lines run before its `begin`.
+   4. `20260927110000_team_member_access`
+3. **Push `main`** (fast-forward) and wait for Netlify.
+4. **Read-only check after:**
+   - 5 share rules, with Mohiuddin manual 50% and no loss;
+   - `is_business_member` exists;
+   - the home cash tile and the partners page load;
+   - the estimate is about +৳27,711 at the current price.
+5. **Rollback files** for each migration are in `supabase/rollback/`.
