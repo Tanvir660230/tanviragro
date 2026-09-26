@@ -81,7 +81,7 @@ export function CyclesPanel({ cycles, notes, names, openCycleFrom, openRealized,
           </p>
         </div>
         {enabled && canManage && !open && (
-          <Button size="sm" onClick={() => { setOpen(true); setDate(today < minDate ? minDate : today); }}>{L("চক্র বন্ধ করুন", "Close a cycle")}</Button>
+          <Button size="sm" variant={Math.abs(openRealized) >= 1 ? "default" : "outline"} onClick={() => { setOpen(true); setDate(today < minDate ? minDate : today); }}>{L("চক্র বন্ধ করুন", "Close a cycle")}</Button>
         )}
       </div>
 

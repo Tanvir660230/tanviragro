@@ -18,6 +18,7 @@ import { AddTransactionDialog } from "./modals/AddTransactionDialog";
 import { DeclareDistributionModal } from "./modals/DeclareDistributionModal";
 import { CyclesPanel } from "./CyclesPanel";
 import { AnimalResultsTable } from "./AnimalResultsTable";
+import { fmtDay } from "@/lib/format";
 
 // ── formatting ────────────────────────────────────────────────────────────────
 const taka = (n: number) => `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
@@ -89,8 +90,10 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
               <Tile icon={Scale} label={L("গরুর আজকের দাম", "Cattle value today")} value={taka(farm.herdValue)}
                 note={farm.marketPricePerKg ? L(`ওজন × ৳${farm.marketPricePerKg}/কেজি (আনুমানিক)`, `weight × ৳${farm.marketPricePerKg}/kg (estimate)`) : L("বাজারদর নেই — খরচ ধরা হয়েছে", "no market price — counted at cost")} />
               <Tile icon={farm.total >= 0 ? TrendingUp : TrendingDown} label={L("আজ বিক্রি করলে ফল", "Result if sold today")} value={signed(farm.total)} valueCls={tone(farm.total)}
-                note={L(`পাকা ${signed(farm.realized)} · আনুমানিক ${signed(farm.estimate)}${farm.marketPricePerKg ? ` · দাম ±১০% হলে ${signed(farm.realized + farm.estimateRange.low)} থেকে ${signed(farm.realized + farm.estimateRange.high)}` : ""}`,
-                         `final ${signed(farm.realized)} · estimate ${signed(farm.estimate)}${farm.marketPricePerKg ? ` · at price ±10%: ${signed(farm.realized + farm.estimateRange.low)} to ${signed(farm.realized + farm.estimateRange.high)}` : ""}`)} />
+                note={<>
+                  {L(`পাকা ${signed(farm.realized)} · আনুমানিক ${signed(farm.estimate)}`, `final ${signed(farm.realized)} · estimate ${signed(farm.estimate)}`)}
+                  {farm.marketPricePerKg ? <span className="block">{L(`দাম ±১০%: ${signed(farm.realized + farm.estimateRange.low)} … ${signed(farm.realized + farm.estimateRange.high)}`, `price ±10%: ${signed(farm.realized + farm.estimateRange.low)} … ${signed(farm.realized + farm.estimateRange.high)}`)}</span> : null}
+                </>} />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-5 py-2.5 text-xs text-muted-foreground">
               <span>{L(`চলতি খরচ মোট ${taka(farm.runningCosts)} — প্রতি গরু প্রতি দিন ${taka(farm.costPerHeadDay)}, যত দিন খামারে তত ভাগ`,
@@ -102,33 +105,7 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
             {showAnimals && <AnimalResultsTable animals={farm.animals} />}
           </section>
 
-          {/* ── cycles ── */}
-          <CyclesPanel cycles={farm.cycles} notes={cycleNotes} names={Object.fromEntries(positions.map((p) => [p.id, p.name]))}
-            openCycleFrom={farm.openCycleFrom} openRealized={farm.openRealized} estimate={farm.estimate} today={today} enabled={cyclesEnabled} canManage={canManage} />
-
-          {/* ── 2. how it is split ── */}
-          <section className="rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-4 text-sm" aria-label={L("ভাগের নিয়ম", "How it is split")}>
-            <p className="flex items-center gap-1.5 font-semibold"><Info className="h-4 w-4 text-primary" aria-hidden />{L("ভাগের নিয়ম", "How it is split")}</p>
-            <ul className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
-              {feePct > 0 && <li>• {L(`লাভ থেকে আগে ${feePct}% ম্যানেজমেন্ট ফি।`, `A ${feePct}% management fee comes off profit first.`)}</li>}
-              {fixed.map((p) => <li key={p.id}>• {L(`${p.name} লাভের নির্দিষ্ট ${pct(p.terms.fixedPct)} পান${p.terms.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`, `${p.name} takes a fixed ${pct(p.terms.fixedPct)} of profit${p.terms.bearsLoss ? "" : " and bears no loss"}.`)}</li>)}
-              <li>• {L("বাকি লাভ মূলধনীদের মধ্যে টাকা × দিন অনুপাতে — যার টাকা যত বেশি দিন খামারে, তার ভাগ তত বেশি। পরে যোগ দিলে, টাকা আসার দিন থেকে ভাগ শুরু।",
-                       "The rest of the profit goes to the money partners by taka × days — money in the farm longer earns more; a later partner shares from the day their money came in.")}</li>
-              <li>• {L(`ক্ষতি হলে পুরো ক্ষতি বহন করেন ক্ষতির ভাগীদাররা, একই টাকা × দিন অনুপাতে${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} ক্ষতি বহন করেন না)` : ""}।`,
-                       `A loss is carried in full by the partners who bear loss, by the same taka × days${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} bear no loss)` : ""}.`)}</li>
-              <li>• {L("বিক্রি হওয়া গরুর লাভ পাকা — শুধু সেটাই বণ্টন করা যায়। খামারে থাকা গরুর ফল আনুমানিক, বাজারদর ও ওজনের সাথে বদলায়।",
-                       "Profit from animals sold is final — only that can be paid out. The result on animals still on the farm is an estimate and moves with price and weight.")}</li>
-              <li>• {L("নিয়ম বদলালে (যেমন ৫০% → ৪০%) বদলের তারিখের আগের দিনগুলো আগের নিয়মে, পরের দিনগুলো নতুন নিয়মে ভাগ হয় — অংশীদারের প্রোফাইলে “ভাগের নিয়ম”।",
-                       "When a rule changes (e.g. 50% → 40%) the days before the change keep the old rule and the days after use the new one — “Share rules” on the partner's profile.")}</li>
-              {upcoming.map((p) => p.nextChange && (
-                <li key={`next-${p.id}`} className="font-medium text-sky-700 dark:text-sky-400">• {L(
-                  `${p.name}: ${p.nextChange.from} থেকে ${p.nextChange.shareMode === "manual" ? `লাভের ${pct(p.nextChange.fixedPct)}` : "টাকা × দিন"}${p.nextChange.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`,
-                  `${p.name}: from ${p.nextChange.from} ${p.nextChange.shareMode === "manual" ? `${pct(p.nextChange.fixedPct)} of profit` : "taka × days"}${p.nextChange.bearsLoss ? "" : ", no loss"}.`)}</li>
-              ))}
-            </ul>
-          </section>
-
-          {/* ── 3. each partner ── */}
+          {/* ── 2. each partner ── */}
           <section className="rounded-xl border border-border bg-card shadow-card" aria-label={L("অংশীদারদের হিসাব", "Partners")}>
             <div className="border-b border-border/60 px-5 py-4">
               <h2 className="text-sm font-semibold">{L("অংশীদারদের হিসাব", "Partners")}</h2>
@@ -151,8 +128,8 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
                             {partnerTypeLabel(p.partnerType, locale)}
                             {p.terms.shareMode === "manual" ? L(` · নির্দিষ্ট ${pct(p.terms.fixedPct)}`, ` · fixed ${pct(p.terms.fixedPct)}`) : ""}
                             {!p.terms.bearsLoss ? L(" · ক্ষতি নেই", " · no loss") : ""}
-                            {p.leftAt ? L(` · ${p.leftAt} থেকে অবসর`, ` · retired ${p.leftAt}`) : ""}
-                            {p.nextChange ? L(` · ${p.nextChange.from} থেকে বদল`, ` · changes ${p.nextChange.from}`) : ""}
+                            {p.leftAt ? L(` · ${fmtDay(p.leftAt, locale)} থেকে অবসর`, ` · retired ${fmtDay(p.leftAt, locale)}`) : ""}
+                            {p.nextChange ? L(` · ${fmtDay(p.nextChange.from, locale)} থেকে বদল`, ` · changes ${p.nextChange.from}`) : ""}
                           </p>
                         </div>
                       </div>
@@ -164,7 +141,9 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
                         sub={[
                           p.balance < 0 ? L("খামারের কাছে দেনা", "owes the farm") : null,
                           p.advanceOutstanding > 0.5 ? L(`অগ্রিম বাকি ${taka(p.advanceOutstanding)} (পরের লাভ থেকে কাটা যাবে)`, `advance ${taka(p.advanceOutstanding)} (off the next profit)`) : null,
-                          p.advanceOutstanding <= 0.5 && p.profitReceived > 0 ? L(`লাভ পেয়েছেন ${taka(p.profitReceived)}`, `profit paid ${taka(p.profitReceived)}`) : null,
+                          p.advanceOutstanding <= 0.5 && p.advances > 0 ? L(`অগ্রিম নিয়েছেন ${taka(p.advances)}`, `advances ${taka(p.advances)}`) : null,
+                          p.profitPaid > 0 ? L(`লাভ পেয়েছেন ${taka(p.profitPaid)}`, `profit paid ${taka(p.profitPaid)}`) : null,
+                          p.distributable > 0.5 ? L(`এখন দেওয়া যায় ${taka(p.distributable)}`, `can be paid now ${taka(p.distributable)}`) : null,
                           p.loanBalance > 0.5 ? L(`খামারের কাছে ধার ${taka(p.loanBalance)}`, `lent to the farm ${taka(p.loanBalance)}`) : null,
                         ].filter(Boolean).join(" · ") || undefined} />
                       <ChevronRight className="hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden />
@@ -182,6 +161,39 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
               </p>
             )}
           </section>
+
+          {/* ── 3. cycles ── */}
+          <CyclesPanel cycles={farm.cycles} notes={cycleNotes} names={Object.fromEntries(positions.map((p) => [p.id, p.name]))}
+            openCycleFrom={farm.openCycleFrom} openRealized={farm.openRealized} estimate={farm.estimate} today={today} enabled={cyclesEnabled} canManage={canManage} />
+
+          {/* ── 4. how it is split ── */}
+          <details className="group rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-4 text-sm" aria-label={L("ভাগের নিয়ম", "How it is split")}>
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-1.5 font-semibold"><Info className="h-4 w-4 text-primary" aria-hidden />{L("ভাগের নিয়ম", "How it is split")}</span>
+              <span className="text-xs text-muted-foreground">
+                {[...fixed.map((p) => `${p.name} ${pct(p.terms.fixedPct)}`), L("বাকি টাকা × দিন", "the rest by taka × days"), L("ক্ষতি শুধু ক্ষতির ভাগীদারদের", "loss only to loss bearers")].join(" · ")}
+              </span>
+              {upcoming.length > 0 && <span className="rounded-full bg-sky-100 px-2 py-px text-[11px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">{L("নিয়ম বদল আসছে", "a change is coming")}</span>}
+              <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+            </summary>
+            <ul className="mt-3 space-y-1 text-xs leading-relaxed text-muted-foreground">
+              {feePct > 0 && <li>• {L(`লাভ থেকে আগে ${feePct}% ম্যানেজমেন্ট ফি।`, `A ${feePct}% management fee comes off profit first.`)}</li>}
+              {fixed.map((p) => <li key={p.id}>• {L(`${p.name} লাভের নির্দিষ্ট ${pct(p.terms.fixedPct)} পান${p.terms.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`, `${p.name} takes a fixed ${pct(p.terms.fixedPct)} of profit${p.terms.bearsLoss ? "" : " and bears no loss"}.`)}</li>)}
+              <li>• {L("বাকি লাভ মূলধনীদের মধ্যে টাকা × দিন অনুপাতে — যার টাকা যত বেশি দিন খামারে, তার ভাগ তত বেশি। পরে যোগ দিলে, টাকা আসার দিন থেকে ভাগ শুরু।",
+                       "The rest of the profit goes to the money partners by taka × days — money in the farm longer earns more; a later partner shares from the day their money came in.")}</li>
+              <li>• {L(`ক্ষতি হলে পুরো ক্ষতি বহন করেন ক্ষতির ভাগীদাররা, একই টাকা × দিন অনুপাতে${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} ক্ষতি বহন করেন না)` : ""}।`,
+                       `A loss is carried in full by the partners who bear loss, by the same taka × days${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} bear no loss)` : ""}.`)}</li>
+              <li>• {L("বিক্রি হওয়া গরুর লাভ পাকা — শুধু সেটাই বণ্টন করা যায়। খামারে থাকা গরুর ফল আনুমানিক, বাজারদর ও ওজনের সাথে বদলায়।",
+                       "Profit from animals sold is final — only that can be paid out. The result on animals still on the farm is an estimate and moves with price and weight.")}</li>
+              <li>• {L("নিয়ম বদলালে (যেমন ৫০% → ৪০%) বদলের তারিখের আগের দিনগুলো আগের নিয়মে, পরের দিনগুলো নতুন নিয়মে ভাগ হয় — অংশীদারের প্রোফাইলে “ভাগের নিয়ম”।",
+                       "When a rule changes (e.g. 50% → 40%) the days before the change keep the old rule and the days after use the new one — “Share rules” on the partner's profile.")}</li>
+              {upcoming.map((p) => p.nextChange && (
+                <li key={`next-${p.id}`} className="font-medium text-sky-700 dark:text-sky-400">• {L(
+                  `${p.name}: ${fmtDay(p.nextChange.from, locale)} থেকে ${p.nextChange.shareMode === "manual" ? `লাভের ${pct(p.nextChange.fixedPct)}` : "টাকা × দিন"}${p.nextChange.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`,
+                  `${p.name}: from ${fmtDay(p.nextChange.from, locale)} ${p.nextChange.shareMode === "manual" ? `${pct(p.nextChange.fixedPct)} of profit` : "taka × days"}${p.nextChange.bearsLoss ? "" : ", no loss"}.`)}</li>
+              ))}
+            </ul>
+          </details>
 
           {!farm.herdValued && onFarm.length > 0 && (
             <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
@@ -205,7 +217,7 @@ export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnable
   );
 }
 
-function Tile({ icon: Icon, label, value, note, valueCls }: { icon: React.ElementType; label: string; value: string; note: string; valueCls?: string }) {
+function Tile({ icon: Icon, label, value, note, valueCls }: { icon: React.ElementType; label: string; value: string; note: React.ReactNode; valueCls?: string }) {
   return (
     <div className="bg-card px-5 py-4">
       <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Icon className="h-3.5 w-3.5" aria-hidden />{label}</p>

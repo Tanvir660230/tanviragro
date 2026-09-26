@@ -432,3 +432,27 @@ Both migrations were dry-run together on production and rolled back. They create
    - the home cash tile and the partners page load;
    - the estimate is about +৳27,711 at the current price.
 5. **Rollback files** for each migration are in `supabase/rollback/`.
+
+## 13. UI polish after a visual check (2026-09-27)
+
+The partners page and profile were rendered with the production numbers and a demo set: a sold animal, a closed cycle, an advance, a loan and an upcoming rule. They were checked at 1440 px and 390 px through a temporary local preview, since removed.
+
+**Partners page**
+- **Order:** the farm → the partners → cycles → the rules.
+- **Result tile:** the price ±10% range is on its own line.
+- **The rules** are a one-line summary that opens, with an "a change is coming" badge.
+- **"Close a cycle"** is quiet (outline) while the open cycle has nothing final.
+- **Dates** use `fmtDay`.
+- **Each partner's account line** shows advances, profit paid and "can be paid now" separately (an advance was shown as profit paid).
+
+**Profile**
+- On a phone the name no longer truncates; the actions wrap under it.
+- A labour partner without capital sees "Advances taken" instead of "Capital in ৳0", and no "Put in +৳0" line.
+- "How it is worked out" is one ordered column, amounts do not break over two lines, and the loan is a note under the total.
+- The capital chart is hidden when there never was capital.
+- The capital column shows "—" on advance and loan rows.
+- The record count is in Bangla.
+
+**Bug found during the check**
+- The session proxy sent `/sw.js`, `/manifest.webmanifest`, `/icon` and `/apple-icon` to `/login` for signed-out browsers. So the service worker could not register and the install icon broke.
+- They are now excluded by exact name. `/dashboard` and every other path still require a session.

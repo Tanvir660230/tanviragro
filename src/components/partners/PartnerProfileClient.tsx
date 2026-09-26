@@ -322,9 +322,9 @@ export function PartnerProfileClient({
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <h2 className="text-xl font-bold tracking-tight text-foreground truncate">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground break-words">
                     {p.name}
                   </h2>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -410,9 +410,15 @@ export function PartnerProfileClient({
 
       {/* ── Position (lib/partners/position.ts — the same figures as the partners page) ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <ProfileStatCard icon={Banknote} label={L("খাটানো মূলধন", "Capital in")} value={bdt(pos.netCapital + pos.laborValue)}
-          iconCls="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
-          sub={pos.capitalOut > 0 ? L(`জমা ${bdt(pos.capitalIn)} − তোলা ${bdt(pos.capitalOut)}`, `in ${bdt(pos.capitalIn)} − out ${bdt(pos.capitalOut)}`) : undefined} />
+        {pos.capitalIn === 0 && pos.laborValue === 0 ? (
+          <ProfileStatCard icon={Wallet} label={L("অগ্রিম নিয়েছেন", "Advances taken")} value={bdt(pos.advances)}
+            iconCls="text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30"
+            sub={pos.advanceOutstanding > 0.5 ? L(`${bdt(pos.advanceOutstanding)} পরের লাভ থেকে কাটা যাবে`, `${bdt(pos.advanceOutstanding)} comes off the next profit`) : L("মূলধন নেই — শ্রমের ভাগীদার", "no capital — a labour share")} />
+        ) : (
+          <ProfileStatCard icon={Banknote} label={L("খাটানো মূলধন", "Capital in")} value={bdt(pos.netCapital + pos.laborValue)}
+            iconCls="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
+            sub={pos.capitalOut > 0 ? L(`জমা ${bdt(pos.capitalIn)} − তোলা ${bdt(pos.capitalOut)}`, `in ${bdt(pos.capitalIn)} − out ${bdt(pos.capitalOut)}`) : undefined} />
+        )}
         <ProfileStatCard icon={Layers} label={L("লাভের ভাগ", "Share of profit")} value={`${pos.profitPct.toFixed(1)}%`}
           iconCls="text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-900/30"
           sub={pos.terms.bearsLoss ? L(`ক্ষতির ভাগ ${pos.lossPct.toFixed(1)}%`, `loss share ${pos.lossPct.toFixed(1)}%`) : L("ক্ষতির ভাগ নেই", "bears no loss")} />
@@ -423,13 +429,14 @@ export function PartnerProfileClient({
                  `final ${pos.realizedShare >= 0 ? "+" : "−"}${bdt(pos.realizedShare)} · estimate ${pos.estimateShare >= 0 ? "+" : "−"}${bdt(pos.estimateShare)}`)} />
         <ProfileStatCard icon={Wallet} label={L("মোট পাওনা", "Account value")} value={bdt(pos.balance)}
           iconCls="text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30"
-          sub={pos.profitReceived > 0 ? L(`লাভ পেয়েছেন ${bdt(pos.profitReceived)}`, `profit paid ${bdt(pos.profitReceived)}`) : undefined} />
+          sub={pos.distributable > 0.5 ? L(`এখন দেওয়া যায় ${bdt(pos.distributable)}`, `can be paid now ${bdt(pos.distributable)}`)
+            : pos.profitPaid > 0 ? L(`লাভ পেয়েছেন ${bdt(pos.profitPaid)}`, `profit paid ${bdt(pos.profitPaid)}`) : undefined} />
       </div>
 
       <div className="rounded-xl bg-card border border-border shadow-card p-5 space-y-3 text-sm">
         <h3 className="text-sm font-semibold flex items-center gap-2"><Wallet className="h-4 w-4 text-muted-foreground" />{L("হিসাব কীভাবে", "How it is worked out")}</h3>
-        <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-          <Line label={L("জমা", "Put in")} value={`+${bdt(pos.capitalIn)}`} />
+        <div className="max-w-xl space-y-1.5">
+          {pos.capitalIn > 0 && <Line label={L("জমা", "Put in")} value={`+${bdt(pos.capitalIn)}`} />}
           {pos.capitalOut > 0 && <Line label={L("তোলা", "Taken out")} value={`−${bdt(pos.capitalOut)}`} />}
           {pos.laborValue > 0 && <Line label={L("শ্রমের মূল্য", "Labour value")} value={`+${bdt(pos.laborValue)}`} />}
           {farm.cycles.map((c) => (
@@ -440,8 +447,8 @@ export function PartnerProfileClient({
           <Line label={L("আনুমানিক ভাগ (খামারে থাকা গরু)", "Estimated share (animals on the farm)")} value={`${pos.estimateShare >= 0 ? "+" : "−"}${bdt(pos.estimateShare)}`} />
           {pos.profitPaid > 0 && <Line label={L("লাভ পেয়ে গেছেন", "Profit already paid")} value={`−${bdt(pos.profitPaid)}`} />}
           {pos.advances > 0 && <Line label={L("অগ্রিম নিয়েছেন", "Advances taken")} value={`−${bdt(pos.advances)}`} />}
-          {pos.loanBalance > 0 && <Line label={L("খামারের কাছে ধার (আলাদা, ফেরত পাবেন)", "Lent to the farm (separate, to be repaid)")} value={bdt(pos.loanBalance)} />}
           <Line label={L("মোট পাওনা", "Account value")} value={bdt(pos.balance)} strong />
+          {pos.loanBalance > 0 && <Line label={L("এর বাইরে — খামারের কাছে ধার (ফেরত পাবেন)", "Besides this — lent to the farm (to be repaid)")} value={bdt(pos.loanBalance)} />}
         </div>
         <p className="text-xs text-muted-foreground">
           {farm.soldCount === 0
@@ -467,7 +474,7 @@ export function PartnerProfileClient({
       <ShareRulesPanel {...shareRules} today={today} />
 
       {/* ── Capital Timeline Chart ───────────────────────────────────── */}
-      {withBalance.length >= 2 && (
+      {withBalance.length >= 2 && withBalance.some((t) => Math.abs(t.balance) > 0.5) && (
         <div className="rounded-xl bg-card border border-border shadow-card p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -505,7 +512,7 @@ export function PartnerProfileClient({
             </Link>
           </div>
           <span className="text-xs text-muted-foreground tabular-nums">
-            {transactions.length} record{transactions.length !== 1 ? "s" : ""}
+            {L(`${transactions.length}টি লেনদেন`, `${transactions.length} record${transactions.length !== 1 ? "s" : ""}`)}
           </span>
         </div>
 
@@ -571,7 +578,7 @@ export function PartnerProfileClient({
                     {L("টাকা", "Amount")}
                   </th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">
-                    {L("ব্যালেন্স", "Balance")}
+                    {L("মূলধন", "Capital")}
                   </th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">
                     {L("নোট", "Notes")}
@@ -623,8 +630,9 @@ export function PartnerProfileClient({
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-right font-bold tabular-nums whitespace-nowrap hidden sm:table-cell">
-                        {txn.balance >= 0 ? "" : "−"}
-                        {bdt(txn.balance)}
+                        {txn.type === "investment" || txn.type === "withdrawal"
+                          ? <>{txn.balance >= 0 ? "" : "−"}{bdt(txn.balance)}</>
+                          : <span className="font-normal text-muted-foreground" title={L("মূলধনের বাইরে", "not capital")}>—</span>}
                       </td>
                       <td className="px-5 py-3.5 text-xs text-muted-foreground hidden md:table-cell max-w-[200px] truncate">
                         {txn.notes ?? "—"}
@@ -748,7 +756,7 @@ export function PartnerProfileClient({
 function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className={cn("flex items-baseline justify-between gap-3", strong && "border-t border-border/60 pt-1.5 font-semibold sm:col-span-2")}>
-      <span className="text-muted-foreground">{label}</span><span className="tabular-nums">{value}</span>
+      <span className="text-muted-foreground">{label}</span><span className="shrink-0 whitespace-nowrap tabular-nums">{value}</span>
     </div>
   );
 }
