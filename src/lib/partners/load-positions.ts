@@ -27,6 +27,11 @@ export type PartnerData = {
   accountsCheck: number;
   /** last day the books are locked (financial lock) — rules and entries cannot start on or before it */
   lockedUntil: string | null;
+  /** migration 20260927100000 applied: cycles, advances, partner loans, expenses paid by a partner */
+  cyclesEnabled: boolean;
+  cycleRows: { id: string; closedOn: string; note: string | null; createdAt: string }[];
+  /** the farm's cash now (for checking a withdrawal) */
+  cash: number;
 };
 
 const DAY = 86400000;
@@ -48,9 +53,12 @@ function spread(out: { date: string; amount: number }[], amount: number, from: s
  * (running costs day by day, costs per animal, sales), the home model (each animal's value
  * today) and the partner share rules. Once per request.
  */
-export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, businessId: string): Promise<PartnerData> => {
+export const PREVIEW_CYCLE_ID = "preview";
+
+/** `previewClose`: also close a cycle on that day (not saved) — what closing it would settle. */
+export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, businessId: string, previewClose?: string): Promise<PartnerData> => {
   const today = todayDhaka();
-  const [acc, db, home, partnersRes, txnsRes, feeRes, rulesRes, deathRes, lockRes] = await Promise.all([
+  const [acc, db, home, partnersRes, txnsRes, feeRes, rulesRes, deathRes, lockRes, cyclesRes] = await Promise.all([
     getAccountingData(supabase),
     getCachedDbData(supabase, businessId),
     loadHomeInputs(supabase, businessId, today, { money: false }),
@@ -60,7 +68,12 @@ export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, busin
     supabase.from("partner_share_rules").select("id, partner_id, effective_from, share_mode, fixed_pct, bears_loss, note, created_at").eq("business_id", businessId).is("deleted_at", null),
     supabase.from("cattle_death_records").select("cattle_id, death_date").eq("business_id", businessId),
     supabase.from("financial_locks").select("locked_until").eq("business_id", businessId).order("locked_until", { ascending: false }).limit(1),
+    supabase.from("partner_cycles").select("id, closed_on, note, created_at").eq("business_id", businessId).is("deleted_at", null).order("closed_on", { ascending: true }),
   ]);
+  if (cyclesRes.error && !missingTable(cyclesRes.error)) throw new Error(`cycles: ${cyclesRes.error.message}`);
+  const cyclesEnabled = !cyclesRes.error;
+  const cycleRows = ((cyclesRes.data ?? []) as { id: string; closed_on: string; note: string | null; created_at: string }[])
+    .map((c) => ({ id: c.id, closedOn: String(c.closed_on).slice(0, 10), note: c.note, createdAt: c.created_at }));
   if (partnersRes.error) throw new Error(`partners: ${partnersRes.error.message}`);
   if (txnsRes.error) throw new Error(`partner entries: ${txnsRes.error.message}`);
   if (rulesRes.error && !missingTable(rulesRes.error)) throw new Error(`share rules: ${rulesRes.error.message}`);
@@ -136,9 +149,11 @@ export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, busin
     asOf: today, partners: positionPartners, rules, feeRates,
     txns: txns.map((t) => ({ partnerId: t.partner_id, type: t.type, amount: Number(t.amount), date: String(t.recorded_at).slice(0, 10) })),
     dailyCosts, animals, marketPricePerKg: home.input.marketPricePerKg,
+    cycles: [...cycleRows.map((c) => ({ id: c.id, closedOn: c.closedOn })), ...(previewClose ? [{ id: PREVIEW_CYCLE_ID, closedOn: previewClose }] : [])],
   });
 
   const accountsCheck = acc.balanceSheet.retainedEarnings + farm.profitPaid + (farm.herdValue - acc.balanceSheet.livestock);
   const lockedUntil = ((lockRes.data ?? []) as { locked_until: string }[])[0]?.locked_until?.slice(0, 10) ?? null;
-  return { farm, positions, partners, positionPartners, rules, rulesEnabled, feeRates, txnsByPartner, accountsCheck, lockedUntil };
+  return { farm, positions, partners, positionPartners, rules, rulesEnabled, feeRates, txnsByPartner, accountsCheck, lockedUntil,
+    cyclesEnabled, cycleRows, cash: acc.balanceSheet.cashAndBank };
 });

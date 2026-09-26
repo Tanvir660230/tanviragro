@@ -9,6 +9,8 @@ import { requirePagePermission } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { getCachedBusinessId, getServerClient } from "@/lib/supabase/cached";
 import { loadPartnerData } from "@/lib/partners/load-positions";
+import { getBusinessContext } from "@/lib/context/business-context";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export const metadata: Metadata = { title: "অংশীদার" };
 
@@ -20,7 +22,9 @@ export default async function PartnersPage() {
   const businessId = (await getCachedBusinessId()) ?? "";
 
   // one calculation for every partner page (lib/partners/position.ts)
-  const { farm, positions, partners, txnsByPartner } = await loadPartnerData(supabase, businessId);
+  const [{ farm, positions, partners, txnsByPartner, cash, cyclesEnabled, cycleRows }, ctx] = await Promise.all([
+    loadPartnerData(supabase, businessId), getBusinessContext(supabase),
+  ]);
 
   const nameById = Object.fromEntries(partners.map((p) => [p.id, p.name]));
   const capitalTxns: CapitalTxn[] = Object.values(txnsByPartner).flat()
@@ -33,7 +37,8 @@ export default async function PartnersPage() {
   return (
     <div className="space-y-5">
       <PageHeader title={dict.partners.title} subtitle={dict.partners.subtitle} icon={Users} />
-      <PartnerDashboard farm={farm} positions={positions} partners={partners} />
+      <PartnerDashboard farm={farm} positions={positions} partners={partners} cash={cash} cyclesEnabled={cyclesEnabled}
+        cycleNotes={Object.fromEntries(cycleRows.map((c) => [c.id, c.note]))} canManage={hasPermission(ctx, PERMISSIONS.PARTNERS_MANAGE)} />
       {capitalTxns.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-card px-6 py-5 shadow-card">
           <CapitalLedger transactions={capitalTxns} />

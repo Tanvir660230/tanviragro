@@ -27,6 +27,9 @@ export async function createCostEntry(
     const amount = parseFloat(formData.get("amount") as string);
     const recorded_at = formData.get("recorded_at") as string;
     const description = (formData.get("description") as string)?.trim() || null;
+    // paid from a partner's own pocket: the partner is credited (capital or a loan to the farm)
+    const paidBy = ((formData.get("paid_by_partner_id") as string) || "").trim() || null;
+    const paidAs = formData.get("paid_as") === "loan" ? "loan_in" : "investment";
 
     if (!type || !["fixed", "variable"].includes(type))
       return { error: "Select a cost type" };
@@ -56,6 +59,21 @@ export async function createCostEntry(
       .single();
 
     if (error) return { error: "Failed to save cost entry" };
+
+    if (paidBy && inserted?.id) {
+      const { data: partner } = await supabase.from("partners").select("id, business_id, name").eq("id", paidBy).is("deleted_at", null).maybeSingle();
+      const credit = partner && partner.business_id === ctx.businessId
+        ? await supabase.from("partner_transactions").insert({
+            partner_id: paidBy, amount, type: paidAs, recorded_at,
+            notes: `খরচ নিজে দিয়েছেন: ${category}${description ? ` — ${description}` : ""}`, cost_entry_id: inserted.id,
+          })
+        : { error: { message: "partner not found" } };
+      if (credit.error) {
+        // the expense and the partner's credit are one pair: without the credit the cash would be wrong
+        await supabase.from("cost_entries").delete().eq("id", inserted.id);
+        return { error: /cost_entry_id|enum/i.test(credit.error.message ?? "") ? "অংশীদারের দেওয়া খরচ লেখা যাবে database আপডেটের পরে (migration 20260927100000)।" : "অংশীদারের নামে টাকা লেখা যায়নি — খরচ সেভ হয়নি।" };
+      }
+    }
 
     await FinancialEventBus.publish(
       "ExpenseCreated",
@@ -121,6 +139,13 @@ export async function updateCostEntry(
       .eq("id", id);
     if (error) return { error: "Failed to update entry" };
 
+    // a partner who paid this expense is credited the same amount on the same day
+    if (updates.amount !== undefined || updates.recorded_at) {
+      await supabase.from("partner_transactions")
+        .update({ ...(updates.amount !== undefined ? { amount: updates.amount } : {}), ...(updates.recorded_at ? { recorded_at: updates.recorded_at } : {}) })
+        .eq("cost_entry_id", id).is("deleted_at", null);   // no-op before migration 20260927100000
+    }
+
     revalidatePath("/dashboard/finance");
     revalidatePath("/dashboard");
     revalidateTag("accounting", { expire: 0 });
@@ -148,11 +173,14 @@ export async function deleteCostEntry(
     const delLockErr = await verifyFinancialLock(supabase, ctx.businessId, entry.recorded_at);
     if (delLockErr) return { error: delLockErr };
 
+    const deletedAt = new Date().toISOString();
     const { error } = await supabase
       .from("cost_entries")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ deleted_at: deletedAt })
       .eq("id", id);
     if (error) return { error: "Failed to delete entry" };
+    // the partner's credit for this expense goes with it (and comes back if it is restored)
+    await supabase.from("partner_transactions").update({ deleted_at: deletedAt }).eq("cost_entry_id", id).is("deleted_at", null);
 
     revalidatePath("/dashboard/finance");
     revalidatePath("/dashboard");

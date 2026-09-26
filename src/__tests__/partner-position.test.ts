@@ -145,7 +145,7 @@ describe("split", () => {
     // bought 1 Jun, sold 30 Sep: 61 days at 50%, 61 days at 40% → 45% of the profit
     const sold = A("s", { status: "sold", purchaseDate: "2026-06-01", endDate: "2026-09-30", purchasePrice: 100000, salePrice: 222000, valueToday: null });
     const { partners: ps } = buildPartnerPositions(input({ asOf: "2026-10-05", rules, dailyCosts: [], animals: [sold] }));
-    expect(byId(ps).mohiuddin.realizedShare).toBeCloseTo(122000 * (61 * 0.5 + 61 * 0.4) / 122, 2);
+    expect(byId(ps).mohiuddin.realizedShare).toBeCloseTo(122000 * (61 * 0.5 + 61 * 0.4) / 122, 1);   // to the paisa
     expect(byId(ps).mohiuddin.terms.fixedPct).toBe(40);
   });
 
@@ -175,6 +175,57 @@ describe("split", () => {
     const { loss } = splitPercents(ps, termsOn(ps, [], "2026-06-01"), { x: 1, y: 3 });
     expect(loss.x).toBeCloseTo(25);
     expect(loss.y).toBeCloseTo(75);
+  });
+});
+
+describe("advances, loans and cycles", () => {
+  const sold = (id: string, end: string, price: number) => A(id, { status: "sold", purchaseDate: "2026-06-01", endDate: end, purchasePrice: 100000, salePrice: price, valueToday: null });
+
+  it("a profit advance comes off the partner's settled profit; taken beyond it, it waits for the next profit", () => {
+    const t = [...txns, { partnerId: "mohiuddin", type: "advance", amount: 3000, date: "2026-07-01" }];
+    const before = byId(buildPartnerPositions(input({ txns: t, dailyCosts: [], animals: [A("a", { valueToday: 260000 })] })).partners).mohiuddin;
+    expect(before.distributable).toBe(0);                // nothing sold yet
+    expect(before.advanceOutstanding).toBe(3000);
+    expect(before.withdrawable).toBe(0);
+    const after = byId(buildPartnerPositions(input({ txns: t, dailyCosts: [], animals: [sold("s", "2026-08-01", 120000)] })).partners).mohiuddin;
+    expect(after.realizedShare).toBeCloseTo(10000, 2);   // 50% of 20,000
+    expect(after.distributable).toBeCloseTo(7000, 2);    // 10,000 − 3,000 advance
+    expect(after.advanceOutstanding).toBe(0);
+  });
+
+  it("a partner's loan to the farm earns no share and is kept apart from capital", () => {
+    const t = [...txns, { partnerId: "nanu", type: "loan_in", amount: 50000, date: "2026-06-10" }, { partnerId: "nanu", type: "loan_repay", amount: 20000, date: "2026-08-01" }];
+    const withLoan = byId(buildPartnerPositions(input({ txns: t })).partners).nanu;
+    const without = byId(buildPartnerPositions(input()).partners).nanu;
+    expect(withLoan.loanBalance).toBe(30000);
+    expect(withLoan.estimateShare).toBeCloseTo(without.estimateShare, 6);
+    expect(withLoan.netCapital).toBe(160000);
+  });
+
+  it("a closed cycle is settled on its own net; the open cycle starts fresh", () => {
+    const animals = [sold("s1", "2026-07-10", 130000), sold("s2", "2026-07-20", 90000), sold("s3", "2026-09-10", 115000)];
+    const { farm } = buildPartnerPositions(input({ dailyCosts: [], animals, cycles: [{ id: "c1", closedOn: "2026-07-31" }] }));
+    expect(farm.cycles).toHaveLength(1);
+    expect(farm.cycles[0].net).toBeCloseTo(20000, 2);    // +30,000 − 10,000
+    expect(farm.cycles[0].items).toBe(2);
+    expect(farm.openRealized).toBeCloseTo(15000, 2);
+    expect(farm.openCycleFrom).toBe("2026-08-01");
+    // the labour partner's 50% of each cycle's net, not of the winners alone
+    expect(farm.cycles[0].shares.mohiuddin).toBeCloseTo(10000, 2);
+  });
+
+  it("the open cycle pays out only what the animals still on the farm cannot take back", () => {
+    // sold for +20,000 profit, but the herd on the farm is 15,000 down today
+    const { partners: ps } = buildPartnerPositions(input({ dailyCosts: [], animals: [sold("s", "2026-08-01", 120000), A("h", { valueToday: 185000 })] }));
+    const m = byId(ps).mohiuddin;
+    expect(m.realizedShare).toBeCloseTo(10000, 2);       // 50% of the sale alone
+    expect(m.distributable).toBeCloseTo(2500, 2);        // 50% of the net 5,000 — the smaller
+  });
+
+  it("shares add up to the paisa", () => {
+    const { farm, partners: ps } = buildPartnerPositions(input({ dailyCosts: everyDay(333.33, "2026-06-01", "2026-09-26") }));
+    const shares = ps.reduce((s, p) => s + p.realizedShare + p.estimateShare, 0);
+    expect(Math.abs(shares + farm.fee + farm.unallocated - farm.total)).toBeLessThan(0.011);
   });
 });
 

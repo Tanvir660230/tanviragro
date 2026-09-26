@@ -116,6 +116,16 @@ describe("cash ledger", () => {
   });
 });
 
+describe("partner money types", () => {
+  it("an advance goes out, a partner's loan comes in and its repayment goes out", () => {
+    const f = empty();
+    f.partnerTx.push({ id: "a", amount: 500, type: "advance", recorded_at: "2026-09-01" }, { id: "l", amount: 2000, type: "loan_in", recorded_at: "2026-09-02" }, { id: "r", amount: 700, type: "loan_repay", recorded_at: "2026-09-03" });
+    const rows = buildCashLedger(f);
+    expect(rows.map((x) => [x.id, x.direction, x.category])).toEqual([["a", "out", "Profit Advance"], ["l", "in", "Partner Loan"], ["r", "out", "Partner Loan"]]);
+    expect(cashNet(rows)).toBe(800);
+  });
+});
+
 describe("paying a supplier due", () => {
   const bill = { id: 1, type: "purchase", movement_type: "purchase", qty: 20, unit_cost: 50, recorded_at: "2026-09-20", cattle_id: null };   // ৳1,000, all on credit
   it("the payment leaves cash on the day it was paid", () => {

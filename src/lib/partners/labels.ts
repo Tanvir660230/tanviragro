@@ -4,6 +4,9 @@ const TXN: Record<string, { bn: string; en: string }> = {
   withdrawal: { bn: "টাকা তোলা", en: "Withdrawal" },
   profit: { bn: "লাভের ভাগ", en: "Profit distribution" },
   loss_allocation: { bn: "ক্ষতির ভাগ", en: "Loss allocation" },
+  advance: { bn: "লাভের অগ্রিম", en: "Profit advance" },
+  loan_in: { bn: "খামারকে ধার", en: "Loan to the farm" },
+  loan_repay: { bn: "ধার ফেরত", en: "Loan repaid" },
 };
 const PARTNER: Record<string, { bn: string; en: string }> = {
   capital: { bn: "মূলধন অংশীদার", en: "Capital partner" },

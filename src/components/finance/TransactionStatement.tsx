@@ -17,6 +17,8 @@ const BADGE: Record<TxnRow["category"], string> = {
   "Operating Cost":  "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400",
   "Vet Fee":         "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
   "Supplier Due":    "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
+  "Profit Advance":  "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  "Partner Loan":    "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
   "Asset Purchase":  "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
   "Loan Received":   "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
   "Loan Repayment":  "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300",
@@ -29,7 +31,7 @@ function fmt(n: number) {
 const CATEGORY_BN: Record<string, string> = {
   "Capital In": "মূলধন জমা", "Capital Out": "মূলধন তোলা", "Cattle Sale": "গরু বিক্রি", "Cattle Purchase": "গরু কেনা",
   "Inventory": "খাবার/স্টক", "Operating Cost": "খরচ", "Vet Fee": "ডাক্তার/চিকিৎসা",
-  "Supplier Due": "দোকানে বাকি (এখনো দেওয়া হয়নি)", "Asset Purchase": "সম্পদ কেনা", "Loan Received": "ঋণ নেওয়া", "Loan Repayment": "ঋণ শোধ",
+  "Supplier Due": "দোকানে বাকি (এখনো দেওয়া হয়নি)", "Profit Advance": "লাভের অগ্রিম", "Partner Loan": "অংশীদারের ধার", "Asset Purchase": "সম্পদ কেনা", "Loan Received": "ঋণ নেওয়া", "Loan Repayment": "ঋণ শোধ",
 };
 
 function fmtDate(d: string) {

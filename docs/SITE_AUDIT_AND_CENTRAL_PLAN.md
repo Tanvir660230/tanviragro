@@ -322,3 +322,58 @@ Realized + estimate equals the accounts' figure: retained earnings + profit paid
 **Found:** production does not have migration 20260924120000 (`is_business_member`); every policy is owner-only. The new migration works either way.
 
 **To deploy:** apply migration 20260927090000. Until then the pages use each partner's current setting and the rule panel says the update is needed.
+
+## 11. Partner money types, expenses paid by a partner, cycles (2026-09-27)
+
+These are the owner's answers:
+- cycles are closed by the owner on a date;
+- the labour partner takes money whenever needed. That is a **profit advance**, not a salary.
+
+**Migration 20260927100000 (needs 20260927090000)**
+- **New transaction types:**
+  - `advance` (a profit advance);
+  - `loan_in` / `loan_repay` (a partner's loan to the farm: repayable, no share of profit).
+- **`partner_transactions.cost_entry_id`:** links a partner's credit to an expense they paid from their own pocket.
+- **The `partner_cycles` table.**
+
+Both migrations were dry-run together on production and rolled back. They create the 5 rules, the table, the column and the new types; nothing stayed.
+
+**The calculation**
+- **Cycles.** Every final result (a sale, a death, a day's cost with no animal) falls in the cycle of the day it happened. Each closed cycle is settled on its own net and stored.
+- **The open cycle** is settled twice:
+  - its final results alone;
+  - together with the herd valued today.
+
+  Only the smaller share is paid out, so a profit on sales can never be paid while the herd is down.
+- **Advances** come off the partner's settled profit. An advance taken beyond it is shown as "comes off the next profit".
+- **Partner loans** are liabilities in the accounts. They are kept apart from capital and earn no share.
+- **Shares are rounded to the paisa** by largest remainder, so they add up exactly.
+
+**The accounts**
+- The cash ledger has "Profit advance" and "Partner loan" rows.
+- The engine counts advances as drawings and partner loans as liabilities. The balance sheet and trial balance stay balanced (`accounting-cash.test.ts`).
+
+**Safety checks**
+- The entry form takes only: capital in/out, advance, loan in/repay. Profit goes out only through a payout.
+- **Dates:**
+  - no capital or loan before joining;
+  - after retiring, only money going back.
+- **Going beyond the account or the cash:**
+  - a withdrawal above what can be taken out (capital + settled profit − paid), or any payout above the farm's cash, needs a confirmation and a note;
+  - a loan repayment cannot exceed the loan.
+- **Expenses paid by a partner:**
+  - an expense marked as paid by a partner also credits that partner (capital or loan), so cash is unchanged;
+  - editing the expense moves the credit with it, and deleting or restoring the expense does the same;
+  - the credit cannot be deleted on its own.
+
+**UI**
+- **One entry form** is used on the partners page and the profile. It shows capital, what can be taken out, advances, the loan and the farm's cash.
+- **A "Cycles" panel** shows the open cycle and lets the owner close one on a date:
+  - a preview first;
+  - closing locks the books to that date;
+  - each closed cycle lists every partner's share;
+  - the last cycle can be reopened unless a payout came after it.
+- **Partner rows** show "advance not yet earned" and "lent to the farm".
+- **The expense form** has "Paid by" (the farm's cash, or a partner as capital or as a loan).
+
+**CSV:** one helper (`lib/csv.ts`, a Blob with a BOM). A "#" in a note no longer cuts the file, and Bangla opens correctly in Excel.

@@ -35,7 +35,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  addPartnerTransaction,
   deletePartner,
   deletePartnerTransaction,
 } from "@/app/dashboard/(app)/partners/actions";
@@ -57,6 +56,7 @@ import { useTranslation } from "@/i18n/I18nProvider";
 import { todayDhaka } from "@/lib/dates";
 import type { PartnerPosition } from "@/lib/partners/position";
 import { ShareRulesPanel } from "@/components/partners/ShareRulesPanel";
+import { AddTransactionDialog } from "@/components/partners/modals/AddTransactionDialog";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,6 +70,8 @@ interface Props {
   transactions: PartnerTransaction[];
   position: PartnerPosition;
   farm: ProfileFarm;
+  /** the farm's cash and whether advances / partner loans exist yet (for the entry form) */
+  money: { cash: number; moneyTypesEnabled: boolean };
   /** everything the share-rule panel needs (lib/partners/load-positions.ts) */
   shareRules: Omit<React.ComponentProps<typeof ShareRulesPanel>, "today">;
 }
@@ -139,6 +141,24 @@ const TXN_META: Record<
     textCls: "text-orange-600 dark:text-orange-400",
     bgCls: "bg-orange-100 dark:bg-orange-900/30",
   },
+  advance: {
+    label: "Profit advance",
+    sign: "−",
+    textCls: "text-amber-600 dark:text-amber-400",
+    bgCls: "bg-amber-100 dark:bg-amber-900/30",
+  },
+  loan_in: {
+    label: "Loan to the farm",
+    sign: "+",
+    textCls: "text-sky-600 dark:text-sky-400",
+    bgCls: "bg-sky-100 dark:bg-sky-900/30",
+  },
+  loan_repay: {
+    label: "Loan repaid",
+    sign: "−",
+    textCls: "text-sky-700 dark:text-sky-300",
+    bgCls: "bg-sky-100 dark:bg-sky-900/30",
+  },
 };
 
 const TXN_ICON: Record<PartnerTransactionType, React.ElementType> = {
@@ -146,6 +166,9 @@ const TXN_ICON: Record<PartnerTransactionType, React.ElementType> = {
   withdrawal: ArrowDownCircle,
   profit: Banknote,
   loss_allocation: TrendingDown,
+  advance: Wallet,
+  loan_in: ArrowUpCircle,
+  loan_repay: ArrowDownCircle,
 };
 
 const TYPE_CFG: Record<
@@ -174,9 +197,10 @@ export function PartnerProfileClient({
   position: pos,
   farm,
   shareRules,
+  money,
 }: Props) {
   const L = useL();
-  const { locale } = useTranslation();
+  const { locale, t } = useTranslation();
   const router = useRouter();
   const today = todayDhaka();
 
@@ -186,23 +210,8 @@ export function PartnerProfileClient({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deletingTxnId, setDeletingTxnId] = useState<string | null>(null);
   const [confirmTxnId, setConfirmTxnId] = useState<string | null>(null);
-  const [txnType, setTxnType] = useState<"investment" | "withdrawal">(
-    "investment"
-  );
-  const [txnState, txnAction, txnPending] = useActionState(
-    addPartnerTransaction,
-    undefined
-  );
   const [isDeleting, startDeleteTransition] = useTransition();
 
-  useEffect(() => {
-    if (txnState?.success) {
-      toast.success(L("লেনদেন সেভ হলো", "Transaction saved"));
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAddTxnOpen(false);
-    }
-    if (txnState?.error) toast.error(txnState.error);
-  }, [txnState, L]);
 
   // Build running balance (oldest → newest), display newest first
   const chronological = [...transactions].sort(
@@ -684,97 +693,17 @@ export function PartnerProfileClient({
       </div>
 
       {/* ── Add Transaction Modal ──────────────────────────────────────── */}
-      <Dialog open={addTxnOpen} onOpenChange={setAddTxnOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>New Transaction — {p.name}</DialogTitle>
-          </DialogHeader>
-          <form
-            action={(fd) => {
-              fd.set("partner_id", p.id);
-              fd.set("type", txnType);
-              txnAction(fd);
-            }}
-            className="space-y-4"
-          >
-            <div className="space-y-1.5">
-              <Label>{L("লেনদেনের ধরন", "Transaction Type")}</Label>
-              <Select
-                value={txnType}
-                onValueChange={(v) =>
-                  setTxnType(v as "investment" | "withdrawal")
-                }
-              >
-                <SelectTrigger>
-                  <span className="truncate">
-                    {txnType === "investment"
-                      ? L("মূলধন জমা", "Capital in (investment)")
-                      : L("টাকা তোলা", "Capital out (withdrawal)")}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="investment">
-                    {L("মূলধন জমা", "Capital In (Investment)")}
-                  </SelectItem>
-                  <SelectItem value="withdrawal">
-                    {L("টাকা তোলা", "Capital Out (Withdrawal)")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>{L("টাকা (৳)", "Amount (৳)")}</Label>
-                <Input
-                  name="amount"
-                  type="number"
-                  min="1"
-                  step="any"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{L("তারিখ", "Date")}</Label>
-                <Input
-                  name="recorded_at"
-                  type="date"
-                  max={today}
-                  defaultValue={today}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>{L("নোট (ঐচ্ছিক)", "Notes (optional)")}</Label>
-              <Textarea
-                name="notes"
-                maxLength={500}
-                placeholder={L("নগদ, ব্যাংক, চেক…", "Cash, bank transfer, cheque...")}
-                rows={2}
-              />
-            </div>
-            {txnState?.error && (
-              <p className="text-sm text-destructive">{txnState.error}</p>
-            )}
-            <div className="flex gap-2 justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setAddTxnOpen(false)}
-              >
-                {L("বাতিল", "Cancel")}
-              </Button>
-              <Button type="submit" disabled={txnPending}>
-                {txnPending
-                  ? L("সেভ হচ্ছে…", "Saving…")
-                  : txnType === "investment"
-                  ? L("জমা সেভ করুন", "Record investment")
-                  : L("তোলা সেভ করুন", "Record withdrawal")}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AddTransactionDialog
+        partners={[p]}
+        positions={[pos]}
+        cash={money.cash}
+        today={today}
+        t={t}
+        moneyTypesEnabled={money.moneyTypesEnabled}
+        fixedPartnerId={p.id}
+        open={addTxnOpen}
+        onOpenChange={setAddTxnOpen}
+      />
 
       {/* ── Edit Partner Modal ─────────────────────────────────────────── */}
       {editOpen && (

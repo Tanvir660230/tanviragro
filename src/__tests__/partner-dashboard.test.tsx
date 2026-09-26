@@ -9,6 +9,7 @@ import type { Partner } from "@/types/database";
 jest.mock("@/app/dashboard/(app)/partners/actions", () => ({
   createPartner: jest.fn(), addPartnerTransaction: jest.fn(), declareDistribution: jest.fn(), deletePartner: jest.fn(), deletePartnerTransaction: jest.fn(),
   saveShareRule: jest.fn(), deleteShareRule: jest.fn(), retirePartner: jest.fn(),
+  previewCycleClose: jest.fn(), closeCycle: jest.fn(), reopenLastCycle: jest.fn(),
 }));
 jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh: jest.fn(), push: jest.fn() }) }));
 
@@ -32,7 +33,7 @@ const { farm, partners: positions } = buildPartnerPositions({
 function render(locale: "bn" | "en") {
   return renderToString(
     <I18nProvider dictionary={(locale === "bn" ? bn : en) as never} locale={locale}>
-      <PartnerDashboard farm={farm} positions={positions} partners={rows} />
+      <PartnerDashboard farm={farm} positions={positions} partners={rows} cash={16782} cyclesEnabled cycleNotes={{}} canManage />
     </I18nProvider>,
   );
 }
@@ -43,6 +44,7 @@ test("renders the farm position and every partner, without a loss before any sal
   expect(html).toContain("Tanvir Khan");
   expect(html).toContain("Md Mohiuddin");
   expect(html).toContain("টাকা × দিন");
+  expect(html).toContain("হিসাবের চক্র");
   expect(html).not.toContain("ক্ষতি বাকি");
   expect(render("en")).toContain("No animal has been sold yet");
 });
@@ -57,6 +59,7 @@ test("the profile shows the same position (capital, share, estimate, account val
     <I18nProvider dictionary={bn as never} locale="bn">
       <PartnerProfileClient partner={rows[0]} transactions={[]} position={tanvir}
         farm={{ realized: farm.realized, estimate: farm.estimate, total: farm.total, soldCount: 0, marketPricePerKg: 420, herdValued: true }}
+        money={{ cash: 16782, moneyTypesEnabled: true }}
         shareRules={{ partner: pp[0], partners: pp, rules: [{ id: "r1", partnerId: "t", from: "2026-06-01", shareMode: "auto", fixedPct: 0, bearsLoss: true, note: null }],
           lockedUntil: null, rulesEnabled: true, canManage: true }} />
     </I18nProvider>,

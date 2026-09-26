@@ -62,7 +62,8 @@ export type PhotoType = "purchase" | "current" | "medical" | "breeding" | "other
 export type HealthEventType = "vaccine" | "checkup" | "deworming" | "treatment" | "other";
 export type VendorType = "cattle" | "feed" | "medicine" | "other";
 export type PartnerType = "capital" | "labor" | "hybrid";
-export type PartnerTransactionType = "investment" | "withdrawal" | "profit" | "loss_allocation";
+/** advance: taken against future profit · loan_in / loan_repay: a partner's loan to the farm (migration 20260927100000) */
+export type PartnerTransactionType = "investment" | "withdrawal" | "profit" | "loss_allocation" | "advance" | "loan_in" | "loan_repay";
 
 // ── Domain models ─────────────────────────────────────────────────
 
@@ -357,6 +358,20 @@ export type PartnerTransaction = {
   notes: string | null;
   deleted_at: string | null;
   created_at: string;
+  /** the expense this partner paid from their own pocket (migration 20260927100000) */
+  cost_entry_id?: string | null;
+};
+
+/** A settlement cycle closed by the owner on a date (migration 20260927100000). */
+export type PartnerCycle = {
+  id: string;
+  business_id: string;
+  closed_on: string;
+  note: string | null;
+  snapshot: Record<string, unknown>;
+  created_at: string;
+  created_by: string | null;
+  deleted_at: string | null;
 };
 
 export type ManagementFeeRate = {
@@ -752,6 +767,12 @@ export type Database = {
         Update: Partial<PartnerShareRule>;
         Relationships: [];
       };
+      partner_cycles: {
+        Row: PartnerCycle;
+        Insert: { id?: string; business_id: string; closed_on: string; note?: string | null; snapshot?: Record<string, unknown>; created_at?: string; created_by?: string | null; deleted_at?: string | null };
+        Update: Partial<PartnerCycle>;
+        Relationships: [];
+      };
       partner_transactions: {
         Row: PartnerTransaction;
         Insert: {
@@ -762,6 +783,7 @@ export type Database = {
           recorded_at: string;
           notes?: string | null;
           created_at?: string;
+          cost_entry_id?: string | null;
         };
         Update: Partial<PartnerTransaction>;
         Relationships: [

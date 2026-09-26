@@ -53,6 +53,9 @@ beforeEach(() => {
       { id: "p1", amount: "200000", type: "investment", recorded_at: "2026-06-01", partners: { name: "Tanvir" } },
       { id: "p2", amount: 5000, type: "withdrawal", recorded_at: "2026-07-01", partners: { name: "Tanvir" } },
       { id: "p3", amount: 1000, type: "profit", recorded_at: "2026-08-02", partners: { name: "Tanvir" } },
+      { id: "p4", amount: 500, type: "advance", recorded_at: "2026-08-05", partners: { name: "Mohiuddin" } },
+      { id: "p5", amount: 2000, type: "loan_in", recorded_at: "2026-08-06", partners: { name: "Nanu" } },
+      { id: "p6", amount: 1000, type: "loan_repay", recorded_at: "2026-09-06", partners: { name: "Nanu" } },
     ],
     fixed_assets: [
       { id: "f1", name: "Machine", category: "equipment", description: null, purchase_date: "2026-08-06", purchase_cost: 23200, salvage_value: 0, useful_life_years: 5, depreciation_method: "straight_line", declining_rate: null, is_active: true, disposed_at: null, disposal_value: null, notes: null, source_cost_entry_id: "e2" },
@@ -92,6 +95,7 @@ describe("accounting engine — one cash figure", () => {
       - (4000 + 1000)            // supplier purchases (opening stock is not cash)
       - 10000                    // shed without a payment record
       + (200000 - 5000 - 1000)
+      - 500 + (2000 - 1000)      // a profit advance out; a partner's loan in, half repaid
       + 400                      // still owed to the feed shop
       + (20000 - 5000) + (10000 - 10600);
     expect(bs.cashAndBank).toBeCloseTo(expected, 6);

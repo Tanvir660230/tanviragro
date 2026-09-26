@@ -395,9 +395,13 @@ export async function getAccountingData(
   const allPartnerCapitalWithdrawals = partnerTx
     .filter((t) => t.type === "withdrawal")
     .reduce((s, t) => s + Number(t.amount), 0);
+  // a profit advance is a drawing against profit, like a profit payout
   const allPartnerProfitDistributions = partnerTx
-    .filter((t) => t.type === "profit")
+    .filter((t) => t.type === "profit" || t.type === "advance")
     .reduce((s, t) => s + Number(t.amount), 0);
+  // a partner's loan to the farm is owed back: a liability, not capital
+  const partnerLoansOutstanding = partnerTx
+    .reduce((s, t) => s + (t.type === "loan_in" ? Number(t.amount) : t.type === "loan_repay" ? -Number(t.amount) : 0), 0);
   const allPartnerWithdrawals = allPartnerCapitalWithdrawals + allPartnerProfitDistributions;
 
   // Fixed asset totals (all-time for balance sheet)
@@ -436,7 +440,7 @@ export async function getAccountingData(
     const paid = (l.loan_payments ?? []).reduce((ps, p) => ps + Number(p.amount), 0);
     return s + Number(l.principal_amount) - paid;
   }, 0);
-  const allTimeFinancingCash = liabilitiesOutstanding + loanNetOutstanding;
+  const allTimeFinancingCash = liabilitiesOutstanding + loanNetOutstanding + partnerLoansOutstanding;
 
   // Total liabilities = cash outstanding + accrued interest payable (non-cash).
   // allTimeInterestExpense reduces retainedEarnings; it must also appear here so
@@ -563,10 +567,10 @@ export async function getAccountingData(
 
   // Period partner transactions (cash flow financing)
   const partnerInvestments = periodPartTx
-    .filter((t) => t.type === "investment")
+    .filter((t) => t.type === "investment" || t.type === "loan_in")
     .reduce((s, t) => s + Number(t.amount), 0);
   const partnerWithdrawals = periodPartTx
-    .filter((t) => t.type === "withdrawal" || t.type === "profit")
+    .filter((t) => t.type === "withdrawal" || t.type === "profit" || t.type === "advance" || t.type === "loan_repay")
     .reduce((s, t) => s + Number(t.amount), 0);
 
   // Cash paid for cattle purchased in the period only + capitalized costs paid in period

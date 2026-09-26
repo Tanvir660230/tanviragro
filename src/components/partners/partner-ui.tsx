@@ -8,37 +8,9 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { PartnerType, PartnerTransactionType } from "@/types/database";
+import type { PartnerType } from "@/types/database";
 import type { Dictionary } from "@/i18n/getDictionary";
 import { Label } from "@/components/ui/label";
-
-export const TXN_LABEL = (t: Dictionary): Record<PartnerTransactionType, string> => ({
-  investment: t.partners.investment,
-  withdrawal: t.partners.withdrawal,
-  profit: t.partners.profit,
-  loss_allocation: t.partners.loss_allocation,
-});
-
-export const TXN_ICON: Record<PartnerTransactionType, React.ReactNode> = {
-  investment: <ArrowUpCircle className="h-3.5 w-3.5 text-emerald-500" />,
-  withdrawal: <ArrowDownCircle className="h-3.5 w-3.5 text-red-500" />,
-  profit: <Banknote className="h-3.5 w-3.5 text-violet-500" />,
-  loss_allocation: <TrendingDown className="h-3.5 w-3.5 text-orange-500" />,
-};
-
-export const TXN_TEXT: Record<PartnerTransactionType, string> = {
-  investment: "text-emerald-600 dark:text-emerald-400",
-  withdrawal: "text-red-600 dark:text-red-400",
-  profit: "text-violet-600 dark:text-violet-400",
-  loss_allocation: "text-orange-600 dark:text-orange-400",
-};
-
-export const TXN_SIGN: Record<PartnerTransactionType, "+" | "−"> = {
-  investment: "+",
-  withdrawal: "−",
-  profit: "+",
-  loss_allocation: "−",
-};
 
 export const TYPE_CONFIG: Record<
   PartnerType,

@@ -9,6 +9,7 @@ import { useL } from "@/i18n/text";
 import { partnerTxnLabel } from "@/lib/partners/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { todayDhaka } from "@/lib/dates";
+import { downloadCsv } from "@/lib/csv";
 
 export type { CapitalTxn };
 
@@ -43,27 +44,15 @@ export function CapitalLedger({ transactions }: Props) {
     }
     const headers = ["Date", "Partner", "Type", "Amount (BDT)", "Running Balance (BDT)", "Notes"];
     const rows = displayed.map((t) => [
-      `"${t.recorded_at}"`,
-      `"${t.partner_name.replace(/"/g, '""')}"`,
-      `"${partnerTxnLabel(t.type, locale)}"`,
+      t.recorded_at,
+      t.partner_name,
+      partnerTxnLabel(t.type, locale),
       t.type === "investment" ? t.amount : -t.amount,
       t.balance,
-      `"${(t.notes ?? "").replace(/"/g, '""')}"`,
+      (t.notes ?? ""),
     ]);
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `capital_ledger_${todayDhaka()}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(`capital_ledger_${todayDhaka()}.csv`, [headers, ...rows]);
     toast.success(L("CSV নামানো হলো", "Capital ledger exported to CSV"));
   }
 

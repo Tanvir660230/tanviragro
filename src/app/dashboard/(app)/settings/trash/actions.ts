@@ -36,6 +36,9 @@ export async function restoreCostEntry(id: string): Promise<{ error?: string }> 
 
   const { error } = await supabase.from("cost_entries").update({ deleted_at: null }).eq("id", id);
   if (error) return { error: "Failed to restore" };
+  // a partner's credit for this expense comes back with it
+  await supabase.from("partner_transactions").update({ deleted_at: null }).eq("cost_entry_id", id).not("deleted_at", "is", null);
+  revalidatePath("/dashboard/partners");
   revalidatePath("/dashboard/finance");
     revalidatePath("/dashboard/settings/trash");
   revalidateTag("accounting", { expire: 0 });

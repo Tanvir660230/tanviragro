@@ -41,6 +41,7 @@ export default async function PartnerProfilePage({ params }: { params: Promise<{
           soldCount: data.farm.animals.filter((a) => a.status !== "active").length,
           marketPricePerKg: data.farm.marketPricePerKg, herdValued: data.farm.herdValued,
         }}
+        money={{ cash: data.cash, moneyTypesEnabled: data.cyclesEnabled }}
         shareRules={{
           partner: data.positionPartners.find((p) => p.id === id)!,
           partners: data.positionPartners,

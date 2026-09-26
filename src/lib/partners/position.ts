@@ -65,7 +65,11 @@ export type PositionInput = {
   dailyCosts: { date: string; amount: number }[];
   animals: PositionAnimal[];
   marketPricePerKg: number | null;
+  /** cycles the owner closed: results that became final on or before `closedOn` are settled there */
+  cycles?: { id: string; closedOn: string }[];
 };
+
+export type CycleResult = { id: string; closedOn: string; from: string | null; items: number; net: number; fee: number; shares: Record<string, number> };
 
 export type AnimalResult = PositionAnimal & { days: number; runningShare: number; fullCost: number; result: number };
 
@@ -86,12 +90,18 @@ export type PartnerPosition = {
   capitalDays: number;           // over the days of the animals on the farm now
   profitPct: number;             // of a profit on the current herd (after the fee)
   lossPct: number;
-  realizedShare: number;
-  estimateShare: number;
-  profitReceived: number;
-  balance: number;               // capital + labour value + realized + estimate − profit paid
-  distributable: number;         // realized profit share not yet paid
-  overpaid: number;              // paid more than the realized share (after later corrections)
+  closedShare: number;           // share of the cycles already closed (never changes)
+  realizedShare: number;         // closed cycles + the open cycle's final results
+  estimateShare: number;         // what the animals on the farm add if sold today
+  profitPaid: number;            // profit paid out
+  advances: number;              // taken as an advance against profit (any time, any amount)
+  profitReceived: number;        // profit paid + advances
+  loanBalance: number;           // this partner's loan to the farm, still owed back
+  balance: number;               // capital + labour + closed + open cycle if sold today − profit paid − advances
+  distributable: number;         // settled profit not yet paid or advanced
+  withdrawable: number;          // capital + settled profit − paid (the estimate is not counted)
+  advanceOutstanding: number;    // advances and payouts beyond the settled profit (come off the next profit)
+  overpaid: number;              // profit paid beyond the settled share (after later corrections)
 };
 
 export type FarmPosition = {
@@ -103,14 +113,18 @@ export type FarmPosition = {
   herdCost: number;
   herdValue: number;
   herdValued: boolean;
-  realized: number;
+  realized: number;              // every final result (closed cycles + open cycle)
+  openRealized: number;          // final results in the open cycle
   estimate: number;
   total: number;
   fee: number;
   feePctToday: number;
   profitPaid: number;
+  loansFromPartners: number;
   unallocated: number;
   orphanRunning: number;         // running costs on days with no animal
+  cycles: CycleResult[];
+  openCycleFrom: string | null;  // the open cycle starts the day after the last close
   animals: AnimalResult[];
   marketPricePerKg: number | null;
 };
@@ -119,6 +133,20 @@ const DAY = 86400000;
 const dayNum = (d: string) => Math.floor(Date.parse(`${d.slice(0, 10)}T00:00:00Z`) / DAY);
 const dayStr = (n: number) => new Date(n * DAY).toISOString().slice(0, 10);
 const r2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
+
+/**
+ * Round every share to paisa so that they add up exactly to `target`: every share is rounded down,
+ * and the paisa left over go one each to the shares with the largest remainders.
+ */
+function roundShares(shares: Record<string, number>, target: number): Record<string, number> {
+  const keys = Object.keys(shares);
+  const cents = keys.map((k) => shares[k] * 100);
+  const floors = cents.map((c) => Math.floor(c + 1e-7));
+  let left = Math.round(target * 100) - floors.reduce((s, x) => s + x, 0);
+  const order = keys.map((_, i) => i).sort((a, b) => (cents[b] - floors[b]) - (cents[a] - floors[a]));
+  for (let j = 0; left > 0 && j < order.length; j++, left--) floors[order[j]] += 1;
+  return Object.fromEntries(keys.map((k, i) => [k, floors[i] / 100]));
+}
 
 function addMonths(date: string, n: number): string {
   const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
@@ -264,10 +292,8 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
     ...candidates.filter((d) => !same(termsOn(partners, rules, d), termsOn(partners, rules, dayStr(dayNum(d) - 1)))),
     ...feeRates.map((f) => f.from),
   ];
-  const alloc: Record<string, { realized: number; estimate: number }> = Object.fromEntries(partners.map((p) => [p.id, { realized: 0, estimate: 0 }]));
-  let fee = 0;
-  let unallocated = 0;
   type Window = { from: string; to: string };
+  type Item = { result: number; from: string; to: string };
   const overlapDays = (w: Window, s: Window) => Math.max(0, Math.min(dayNum(w.to), dayNum(s.to)) - Math.max(dayNum(w.from), dayNum(s.from)) + 1);
   /** taka × days of each partner during each window, added up (the money that financed those animals) */
   const windowWeights = (ws: Window[]) => {
@@ -278,16 +304,19 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
     }
     return total;
   };
+  const zero = () => Object.fromEntries(partners.map((p) => [p.id, 0])) as Record<string, number>;
   /**
-   * A part (realized or estimate) is settled on its NET: the animals' results are added first, so
-   * a fixed share (e.g. the labour partner's 50%) is a share of the net profit, and a loss on one
-   * animal is set against the profit on another. The net is spread over the animals' days, the
-   * days are cut where the terms change, and each piece is split with the terms and the taka × days
-   * of the money in the farm during those animals' days.
+   * Settle a group of results on its NET: the animals' results are added first, so a fixed share
+   * (e.g. the labour partner's 50%) is a share of the net profit and a loss on one animal is set
+   * against the profit on another. The net is spread over the animals' days, the days are cut where
+   * the terms change, and each piece is split with the terms and the taka × days of the money in the
+   * farm during those animals' days.
    */
-  const allocatePart = (items: { result: number; from: string; to: string }[], part: "realized" | "estimate") => {
+  const settle = (items: Item[]): { shares: Record<string, number>; net: number; fee: number; unallocated: number } => {
+    const shares = zero();
     const net = items.reduce((s, x) => s + x.result, 0);
-    if (Math.abs(net) < 1e-9) return;
+    let fee = 0, unallocated = 0;
+    if (Math.abs(net) < 1e-9 || items.length === 0) return { shares, net, fee, unallocated };
     const first = items.map((x) => x.from).sort()[0];
     const last = items.map((x) => x.to).sort().at(-1)!;
     const segs = segments(first, last, cuts);
@@ -301,15 +330,36 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
       const pct = splitPercents(partners, termsOn(partners, rules, seg.from), windowWeights(windows));
       const table = piece > 0 ? pct.profit : pct.loss;
       const sum = Object.values(table).reduce((s, x) => s + x, 0);
-      for (const p of partners) alloc[p.id][part] += (piece * table[p.id]) / 100;
+      for (const p of partners) shares[p.id] += (piece * table[p.id]) / 100;
       unallocated += piece * (1 - sum / 100);
     });
+    return { shares: roundShares(shares, net - fee - unallocated), net, fee, unallocated };
   };
-  allocatePart([
-    ...animals.filter((a) => a.status !== "active").map((a) => ({ result: a.result, from: a.purchaseDate, to: lastDay(a) })),
-    ...orphanByDay.map((o) => ({ result: -o.amount, from: o.date, to: o.date })),
-  ], "realized");
-  allocatePart(animals.filter((a) => a.status === "active").map((a) => ({ result: a.result, from: a.purchaseDate, to: asOf })), "estimate");
+
+  // ── cycles: every result that became final falls in the cycle of the day it happened ──
+  const closes = [...(input.cycles ?? [])].filter((c) => c.closedOn <= asOf).sort((a, b) => a.closedOn.localeCompare(b.closedOn));
+  const cycleOf = (d: string) => { const i = closes.findIndex((c) => d <= c.closedOn); return i === -1 ? closes.length : i; };
+  const finalItems: (Item & { end: string })[] = [
+    ...animals.filter((a) => a.status !== "active").map((a) => ({ result: a.result, from: a.purchaseDate, to: lastDay(a), end: lastDay(a) })),
+    ...orphanByDay.map((o) => ({ result: -o.amount, from: o.date, to: o.date, end: o.date })),
+  ];
+  const byCycle: Item[][] = Array.from({ length: closes.length + 1 }, () => []);
+  for (const it of finalItems) byCycle[cycleOf(it.end)].push(it);
+
+  let fee = 0, unallocated = 0;
+  const closed = zero();
+  const cycles: CycleResult[] = closes.map((c, i) => {
+    const s = settle(byCycle[i]);
+    fee += s.fee; unallocated += s.unallocated;
+    for (const k of Object.keys(closed)) closed[k] += s.shares[k];
+    return { id: c.id, closedOn: c.closedOn, from: i === 0 ? null : dayStr(dayNum(closes[i - 1].closedOn) + 1), items: byCycle[i].length, net: r2(s.net), fee: r2(s.fee), shares: s.shares };
+  });
+  // the open cycle: its final results alone (A), and with the animals on the farm valued today (B)
+  const openFinal = byCycle[closes.length];
+  const estimateItems = animals.filter((a) => a.status === "active").map((a) => ({ result: a.result, from: a.purchaseDate, to: asOf }));
+  const A = settle(openFinal);
+  const B = settle([...openFinal, ...estimateItems]);
+  fee += B.fee; unallocated += B.unallocated;
 
   // ── 3. each partner ──
   const active = animals.filter((a) => a.status === "active");
@@ -323,9 +373,16 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
     const sum = (type: string) => mine.filter((t) => t.type === type).reduce((s, t) => s + t.amount, 0);
     const capitalIn = sum("investment");
     const capitalOut = sum("withdrawal");
-    const profitReceived = sum("profit");
+    const profitPaid = sum("profit");
+    const advances = sum("advance");
+    const loanBalance = sum("loan_in") - sum("loan_repay");
     const laborValue = laborContributions(p, asOf).reduce((s, c) => s + c.amount, 0);
-    const { realized, estimate } = alloc[p.id];
+    const closedShare = closed[p.id];
+    const openRealized = A.shares[p.id];
+    const ifSoldToday = B.shares[p.id];
+    // safe to pay: the smaller of the open cycle's final result and the same with the herd valued today
+    const settledProfit = closedShare + Math.min(openRealized, ifSoldToday);
+    const drawn = profitPaid + advances;
     const next = rules.filter((r) => r.partnerId === p.id && r.from > asOf).sort((a, b) => a.from.localeCompare(b.from))[0];
     return {
       id: p.id, name: p.name, partnerType: p.partnerType, leftAt: p.leftAt,
@@ -333,15 +390,21 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
       capitalIn: r2(capitalIn), capitalOut: r2(capitalOut), netCapital: r2(capitalIn - capitalOut), laborValue: r2(laborValue),
       capitalDays: Math.round(weightsNow[p.id] ?? 0),
       profitPct: r2(pctNow.profit[p.id]), lossPct: r2(pctNow.loss[p.id]),
-      realizedShare: r2(realized), estimateShare: r2(estimate), profitReceived: r2(profitReceived),
-      balance: r2(capitalIn - capitalOut + laborValue + realized + estimate - profitReceived),
-      distributable: r2(Math.max(0, realized - profitReceived)),
-      overpaid: r2(Math.max(0, profitReceived - Math.max(0, realized))),
+      closedShare: r2(closedShare),
+      realizedShare: r2(closedShare + openRealized),
+      estimateShare: r2(ifSoldToday - openRealized),
+      profitPaid: r2(profitPaid), advances: r2(advances), profitReceived: r2(drawn),
+      loanBalance: r2(loanBalance),
+      balance: r2(capitalIn - capitalOut + laborValue + closedShare + ifSoldToday - drawn),
+      distributable: r2(Math.max(0, settledProfit - drawn)),
+      withdrawable: r2(Math.max(0, capitalIn - capitalOut + laborValue + settledProfit - drawn)),
+      advanceOutstanding: r2(Math.max(0, drawn - Math.max(0, settledProfit))),
+      overpaid: r2(Math.max(0, profitPaid - Math.max(0, settledProfit))),
     };
   });
 
   const orphanRunning = orphanByDay.reduce((s, o) => s + o.amount, 0);
-  const realized = animals.filter((a) => a.status !== "active").reduce((s, a) => s + a.result, 0) - orphanRunning;
+  const realized = finalItems.reduce((s, x) => s + x.result, 0);
   const estimate = active.reduce((s, a) => s + a.result, 0);
   return {
     farm: {
@@ -354,13 +417,17 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
       herdValue: r2(active.reduce((s, a) => s + (a.valueToday ?? a.fullCost), 0)),
       herdValued: active.every((a) => a.valueToday != null),
       realized: r2(realized),
+      openRealized: r2(A.net),
       estimate: r2(estimate),
       total: r2(realized + estimate),
       fee: r2(fee),
       feePctToday: feeOn(feeRates, asOf),
       profitPaid: r2(positions.reduce((s, p) => s + p.profitReceived, 0)),
+      loansFromPartners: r2(positions.reduce((s, p) => s + p.loanBalance, 0)),
       unallocated: r2(unallocated),
       orphanRunning: r2(orphanRunning),
+      cycles,
+      openCycleFrom: closes.length ? dayStr(dayNum(closes[closes.length - 1].closedOn) + 1) : null,
       animals,
       marketPricePerKg: input.marketPricePerKg,
     },

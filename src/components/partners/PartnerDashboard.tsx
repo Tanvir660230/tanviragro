@@ -16,6 +16,7 @@ import { EmptyState } from "./partner-ui";
 import { AddPartnerDialog } from "./modals/AddPartnerDialog";
 import { AddTransactionDialog } from "./modals/AddTransactionDialog";
 import { DeclareDistributionModal } from "./modals/DeclareDistributionModal";
+import { CyclesPanel } from "./CyclesPanel";
 
 // ── formatting ────────────────────────────────────────────────────────────────
 const taka = (n: number) => `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
@@ -27,9 +28,15 @@ interface Props {
   farm: FarmPosition;
   positions: PartnerPosition[];
   partners: Partner[];
+  /** the farm's cash now (the entry form checks withdrawals against it) */
+  cash: number;
+  /** migration 20260927100000: cycles, advances, partner loans */
+  cyclesEnabled: boolean;
+  cycleNotes: Record<string, string | null>;
+  canManage: boolean;
 }
 
-export function PartnerDashboard({ farm, positions, partners }: Props) {
+export function PartnerDashboard({ farm, positions, partners, cash, cyclesEnabled, cycleNotes, canManage }: Props) {
   const feePct = farm.feePctToday;
   const L = useL();
   const { t, locale } = useTranslation();
@@ -52,7 +59,7 @@ export function PartnerDashboard({ farm, positions, partners }: Props) {
       {/* ── actions ── */}
       <div className="flex flex-wrap gap-2">
         <AddPartnerDialog today={today} t={t} />
-        {partners.length > 0 && <AddTransactionDialog partners={partners} today={today} t={t} />}
+        {partners.length > 0 && <AddTransactionDialog partners={partners} positions={positions} cash={cash} today={today} t={t} moneyTypesEnabled={cyclesEnabled} />}
         {distributable > 0.5 && (
           <Button variant="outline" onClick={() => setDistOpen(true)} className="gap-1.5">
             <Banknote className="h-4 w-4" />{L(`লাভ বণ্টন (${taka(distributable)})`, `Pay out profit (${taka(distributable)})`)}
@@ -130,6 +137,10 @@ export function PartnerDashboard({ farm, positions, partners }: Props) {
             )}
           </section>
 
+          {/* ── cycles ── */}
+          <CyclesPanel cycles={farm.cycles} notes={cycleNotes} names={Object.fromEntries(positions.map((p) => [p.id, p.name]))}
+            openCycleFrom={farm.openCycleFrom} openRealized={farm.openRealized} estimate={farm.estimate} today={today} enabled={cyclesEnabled} canManage={canManage} />
+
           {/* ── 2. how it is split ── */}
           <section className="rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-4 text-sm" aria-label={L("ভাগের নিয়ম", "How it is split")}>
             <p className="flex items-center gap-1.5 font-semibold"><Info className="h-4 w-4 text-primary" aria-hidden />{L("ভাগের নিয়ম", "How it is split")}</p>
@@ -185,7 +196,12 @@ export function PartnerDashboard({ farm, positions, partners }: Props) {
                       <Cell label={L("আজ বিক্রি করলে ভাগ", "Share if sold today")} value={signed(share)} valueCls={tone(share)}
                         sub={p.realizedShare !== 0 ? L(`পাকা ${signed(p.realizedShare)}`, `final ${signed(p.realizedShare)}`) : L("আনুমানিক", "estimate")} />
                       <Cell label={L("মোট পাওনা", "Account value")} value={(p.balance < 0 ? "−" : "") + taka(p.balance)} valueCls={p.balance < 0 ? "text-red-600 dark:text-red-400" : undefined}
-                        sub={p.balance < 0 ? L("খামারের কাছে দেনা", "owes the farm") : p.overpaid > 0.5 ? L(`${taka(p.overpaid)} বেশি পেয়েছেন`, `${taka(p.overpaid)} overpaid`) : p.profitReceived > 0 ? L(`লাভ পেয়েছেন ${taka(p.profitReceived)}`, `profit paid ${taka(p.profitReceived)}`) : undefined} />
+                        sub={[
+                          p.balance < 0 ? L("খামারের কাছে দেনা", "owes the farm") : null,
+                          p.advanceOutstanding > 0.5 ? L(`অগ্রিম বাকি ${taka(p.advanceOutstanding)} (পরের লাভ থেকে কাটা যাবে)`, `advance ${taka(p.advanceOutstanding)} (off the next profit)`) : null,
+                          p.advanceOutstanding <= 0.5 && p.profitReceived > 0 ? L(`লাভ পেয়েছেন ${taka(p.profitReceived)}`, `profit paid ${taka(p.profitReceived)}`) : null,
+                          p.loanBalance > 0.5 ? L(`খামারের কাছে ধার ${taka(p.loanBalance)}`, `lent to the farm ${taka(p.loanBalance)}`) : null,
+                        ].filter(Boolean).join(" · ") || undefined} />
                       <ChevronRight className="hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden />
                     </Link>
                   </li>

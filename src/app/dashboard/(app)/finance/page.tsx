@@ -353,6 +353,15 @@ export default async function FinancePage(props: {
     notes: r.notes,
   }));
 
+  // partners who can have paid an expense from their own pocket (only once migration 20260927100000 is in)
+  const [{ data: payerRows }, cyclesProbe] = businessId
+    ? await Promise.all([
+        supabase.from("partners").select("id, name").eq("business_id", businessId).is("deleted_at", null).order("name"),
+        supabase.from("partner_cycles").select("id", { head: true, count: "exact" }).eq("business_id", businessId),
+      ])
+    : [{ data: [] }, { error: null }];
+  const payers = cyclesProbe.error ? [] : ((payerRows ?? []) as { id: string; name: string }[]);
+
   // What-if starts from the latest price in the market price log (it used the old ৳1,000 "unit share" value)
   const { data: lastMarket } = businessId
     ? await supabase.from("market_prices").select("price_per_kg").eq("business_id", businessId).order("date", { ascending: false }).limit(1).maybeSingle()
@@ -423,7 +432,7 @@ export default async function FinancePage(props: {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Money" icon={Landmark} actions={<AddCostDialog />} className="mb-0" />
+      <PageHeader title="Money" icon={Landmark} actions={<AddCostDialog payers={payers} />} className="mb-0" />
       <Suspense fallback={null}>
         <CapitalSummaryCard />
       </Suspense>

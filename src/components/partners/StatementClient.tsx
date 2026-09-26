@@ -10,6 +10,7 @@ import { useL } from "@/i18n/text";
 import { Tr } from "@/i18n/Tr";
 import { partnerTxnLabel, partnerTypeLabel } from "@/lib/partners/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { downloadCsv } from "@/lib/csv";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,10 +57,10 @@ export function StatementClient({
 
   function exportToCsv() {
     const metaRows = [
-      ["Partner Statement", `"${p.name.replace(/"/g, '""')}"`],
-      ["Statement Date", `"${statementDate}"`],
-      ["Business Name", `"${businessName.replace(/"/g, '""')}"`],
-      ["Partner Type", `"${partnerTypeLabel(p.partner_type, locale)}"`],
+      ["Partner Statement", p.name],
+      ["Statement Date", statementDate],
+      ["Business Name", businessName],
+      ["Partner Type", partnerTypeLabel(p.partner_type, locale)],
       ["Profit Share", `"${pos.profitPct.toFixed(1)}%"`],
       ["Loss Share", `"${pos.lossPct.toFixed(1)}%"`],
       ["Total Invested", pos.capitalIn],
@@ -75,28 +76,16 @@ export function StatementClient({
     const txnRows = withBalance.map((t) => {
       const isCredit = t.type === "investment";
       return [
-        `"${t.recorded_at}"`,
-        `"${partnerTxnLabel(t.type, locale)}"`,
-        `"${(t.notes ?? "").replace(/"/g, '""')}"`,
+        t.recorded_at,
+        partnerTxnLabel(t.type, locale),
+        (t.notes ?? ""),
         isCredit ? "" : t.amount,
         isCredit ? t.amount : "",
         t.balance,
       ];
     });
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [...metaRows.map((r) => r.join(",")), ...txnRows.map((r) => r.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `partner_statement_${p.name.toLowerCase().replace(/\s+/g, "_")}_${statementDate}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(`partner_statement_${p.name.toLowerCase().replace(/\s+/g, "_")}_${statementDate}.csv`, [...metaRows, ...txnRows]);
   }
 
   // Build running balance

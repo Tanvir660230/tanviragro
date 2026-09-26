@@ -20,6 +20,7 @@ import { SitePageTitle } from "@/components/navigation/SitePageTitle";
 
 import { useL } from "@/i18n/text";
 import { todayDhaka } from "@/lib/dates";
+import { downloadCsv } from "@/lib/csv";
 export interface InventoryItemStock {
   name: string;
   category: string;
@@ -72,8 +73,8 @@ export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any
   function exportSummaryCSV() {
     const csvRows = [
       ["Report Title", `"${bizName} Farm Executive Report"`],
-      ["Report Reference", `"${reportId}"`],
-      ["Generated Date", `"${reportDate}"`],
+      ["Report Reference", reportId],
+      ["Generated Date", reportDate],
       [],
       ["HERD & LIVESTOCK ASSETS", "Value / Count"],
       ["Total Cattle Head Count", totalCattle],
@@ -101,8 +102,8 @@ export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any
       ["FEED & SUPPLIES INVENTORY BREAKDOWN"],
       ["Item Name", "Category", "In Stock", "Unit", "Avg Unit Cost (BDT)", "Total Valuation (BDT)"],
       ...inventoryWithStock.map((item) => [
-        `"${item.name.replace(/"/g, '""')}"`,
-        `"${item.category}"`,
+        item.name,
+        item.category,
         item.stock,
         item.unit,
         Math.round(item.avgCost),
@@ -110,14 +111,7 @@ export function ReportHubClient(props: (ReportHubData & { analyticsPayload?: any
       ]),
     ];
 
-    const csvContent = "data:text/csv;charset=utf-8," + csvRows.map((e) => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `farm_report_${bizName.toLowerCase().replace(/\s+/g, "_")}_${todayDhaka()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(`farm_report_${bizName.toLowerCase().replace(/\s+/g, "_")}_${todayDhaka()}.csv`, csvRows);
   }
 
   return (

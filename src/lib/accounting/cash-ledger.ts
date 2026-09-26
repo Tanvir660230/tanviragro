@@ -5,7 +5,7 @@
  * balance, the report and the cash statement all read this one list (through
  * lib/accounting/engine.ts), so they cannot show different cash figures.
  *
- *  in   partner investment · cattle sale · loan received · bill bought on credit (not paid then)
+ *  in   partner investment · partner loan · cattle sale · loan received · bill bought on credit (not paid then)
  *  out  … · supplier due paid later (on the day it was paid)
  *  out  partner withdrawal / profit paid · cattle bought · every cost entry (expense or asset)
  *       · vet fee on a treatment · supplier purchase (net of reversals) · loan repayment
@@ -26,6 +26,8 @@ export type CashCategory =
   | "Vet Fee"
   | "Asset Purchase"
   | "Supplier Due"
+  | "Profit Advance"
+  | "Partner Loan"
   | "Loan Received"
   | "Loan Repayment";
 
@@ -73,6 +75,9 @@ export function buildCashLedger(input: CashLedgerInput): CashRow[] {
     if (t.type === "investment") push({ id: t.id, date: day(t.recorded_at), description: `Investment — ${who}`, category: "Capital In", signed: Number(t.amount) });
     else if (t.type === "withdrawal") push({ id: t.id, date: day(t.recorded_at), description: `Withdrawal — ${who}`, category: "Capital Out", signed: -Number(t.amount) });
     else if (t.type === "profit") push({ id: t.id, date: day(t.recorded_at), description: `Profit paid — ${who}`, category: "Capital Out", signed: -Number(t.amount) });
+    else if (t.type === "advance") push({ id: t.id, date: day(t.recorded_at), description: `Profit advance — ${who}`, category: "Profit Advance", signed: -Number(t.amount) });
+    else if (t.type === "loan_in") push({ id: t.id, date: day(t.recorded_at), description: `Loan from partner — ${who}`, category: "Partner Loan", signed: Number(t.amount) });
+    else if (t.type === "loan_repay") push({ id: t.id, date: day(t.recorded_at), description: `Loan repaid to partner — ${who}`, category: "Partner Loan", signed: -Number(t.amount) });
     // loss_allocation moves no money
   }
 

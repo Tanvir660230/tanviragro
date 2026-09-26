@@ -9,7 +9,7 @@ import { PERMISSIONS } from "@/constants/roles";
 import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { FinancialEventBus } from "@/lib/financial/events";
 import { PartnerEngine } from "@/lib/partners/partner-engine";
-import { loadPartnerData } from "@/lib/partners/load-positions";
+import { loadPartnerData, PREVIEW_CYCLE_ID } from "@/lib/partners/load-positions";
 import type { Partner, PartnerTransactionType, PartnerType } from "@/types/database";
 import { checkRule, termsOn, type PositionPartner } from "@/lib/partners/position";
 import { todayDhaka } from "@/lib/dates";
@@ -350,80 +350,90 @@ export async function deletePartner(id: string): Promise<{ error?: string }> {
   }
 }
 
+export type PartnerTxnState = { error?: string; success?: boolean; needsConfirm?: boolean } | undefined;
+
+const MONEY_TYPES = ["investment", "withdrawal", "advance", "loan_in", "loan_repay"] as const;
+type MoneyType = (typeof MONEY_TYPES)[number];
+
+/**
+ * One partner entry: capital in or out, a profit advance (any time, any amount — it comes off the
+ * next profit), or a loan to the farm and its repayment. Profit payouts go through
+ * declareDistribution only. Checked against the partner's dates, their account and the farm's cash;
+ * going beyond the account or the cash needs a confirmation and a note.
+ */
 export async function addPartnerTransaction(
-  _prev: PartnerFormState,
+  _prev: PartnerTxnState,
   formData: FormData
-): Promise<PartnerFormState> {
+): Promise<PartnerTxnState> {
   try {
     const supabase = await createClient();
     const ctx = await getBusinessContext(supabase);
     requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
 
     const partnerId = formData.get("partner_id") as string;
-    const amount = parseFloat(formData.get("amount") as string);
-    const type = (formData.get("type") as string === "draw" ? "withdrawal" : formData.get("type")) as PartnerTransactionType;
-    const recordedAt = (formData.get("recorded_at") as string) || todayDhaka();
+    const amount = Math.round(parseFloat(formData.get("amount") as string) * 100) / 100;
+    const rawType = formData.get("type") as string === "draw" ? "withdrawal" : (formData.get("type") as string);
+    const recordedAt = ((formData.get("recorded_at") as string) || todayDhaka()).slice(0, 10);
     const notes = (formData.get("notes") as string)?.trim() || null;
+    const confirmed = formData.get("confirm") === "1";
 
-    const validation = PartnerEngine.validateTransaction({
-      partnerId,
-      type,
-      amount,
-      recordedAt,
-    });
-
-    if (!validation.isValid) {
-      return { error: validation.errors[0] };
+    if (!(MONEY_TYPES as readonly string[]).includes(rawType)) {
+      return { error: "এই ধরনের লেনদেন এখানে লেখা যায় না (লাভ দিতে \"লাভ বণ্টন\" ব্যবহার করুন)।" };
     }
+    const type = rawType as MoneyType;
+    const validation = PartnerEngine.validateTransaction({ partnerId, type: type === "advance" || type === "loan_in" || type === "loan_repay" ? "investment" : type, amount, recordedAt });
+    if (!validation.isValid) return { error: validation.errors[0] };
+    if (recordedAt > todayDhaka()) return { error: "ভবিষ্যতের তারিখ দেওয়া যাবে না" };
 
     await assertResourceOwnership(supabase, "partners", partnerId, ctx.businessId);
     await verifyFinancialLock(supabase, ctx.businessId, recordedAt);
 
-    const { data: insertedTxn, error } = await supabase
-      .from("partner_transactions")
-      .insert({
-        partner_id: partnerId,
-        amount,
-        type,
-        recorded_at: recordedAt,
-        notes,
-      })
-      .select("id")
-      .single();
+    const data = await loadPartnerData(supabase, ctx.businessId);
+    if (!data.cyclesEnabled && type !== "investment" && type !== "withdrawal") {
+      return { error: "অগ্রিম ও ধার লেখা যাবে database আপডেটের পরে (migration 20260927100000)।" };
+    }
+    const partner = data.positionPartners.find((p) => p.id === partnerId);
+    const pos = data.positions.find((p) => p.id === partnerId);
+    if (!partner || !pos) return { error: "অংশীদার পাওয়া যায়নি" };
 
-    if (error || !insertedTxn) return { error: "সংরক্ষণ ব্যর্থ হয়েছে" };
-
-    if (type === "investment") {
-      await FinancialEventBus.publish("PartnerInvestment", ctx.businessId, {
-        partnerId,
-        transactionId: insertedTxn.id,
-        amount,
-        recordedAt,
-      }, ctx.user.id);
-    } else if (type === "withdrawal") {
-      await FinancialEventBus.publish("PartnerWithdrawal", ctx.businessId, {
-        partnerId,
-        transactionId: insertedTxn.id,
-        amount,
-        recordedAt,
-      }, ctx.user.id);
-    } else if (type === "profit") {
-      await FinancialEventBus.publish("ProfitDistributed", ctx.businessId, {
-        partnerId,
-        transactionId: insertedTxn.id,
-        amount,
-        recordedAt,
-      }, ctx.user.id);
-    } else if (type === "loss_allocation") {
-      await FinancialEventBus.publish("LossDistributed", ctx.businessId, {
-        partnerId,
-        transactionId: insertedTxn.id,
-        amount,
-        recordedAt,
-      }, ctx.user.id);
+    // dates: money comes in only after joining; after leaving only money going back
+    if ((type === "investment" || type === "loan_in") && recordedAt < partner.joinedAt) {
+      return { error: `${partner.name} ${partner.joinedAt}-এ যোগ দিয়েছেন — এর আগের তারিখে জমা লেখা যাবে না।` };
+    }
+    if (partner.leftAt && recordedAt >= partner.leftAt && (type === "investment" || type === "loan_in" || type === "advance")) {
+      return { error: `${partner.name} ${partner.leftAt} থেকে অবসরে — এখন শুধু টাকা ফেরত (তোলা বা ধার ফেরত) লেখা যায়।` };
+    }
+    if (type === "loan_repay" && amount > pos.loanBalance + 0.005) {
+      return { error: `খামারের কাছে ${partner.name}-এর ধার ৳${Math.round(pos.loanBalance).toLocaleString("en-IN")} — এর বেশি ফেরত লেখা যাবে না।` };
     }
 
+    // money going out: the partner's account and the farm's cash
+    if (type === "withdrawal" || type === "advance" || type === "loan_repay") {
+      const warnings: string[] = [];
+      if (type === "withdrawal" && amount > pos.withdrawable + 0.5) {
+        warnings.push(`${partner.name}-এর তোলার মতো পাওনা ৳${Math.round(pos.withdrawable).toLocaleString("en-IN")} (মূলধন + পাকা লাভ − আগে নেওয়া)`);
+      }
+      if (amount > data.cash + 0.5) warnings.push(`খামারের নগদ এখন ৳${Math.round(data.cash).toLocaleString("en-IN")}`);
+      if (warnings.length && !confirmed) {
+        return { needsConfirm: true, error: `${warnings.join("; ")}। তবুও লিখতে চাইলে কারণ লিখে নিশ্চিত করুন।` };
+      }
+      if (warnings.length && !notes) return { needsConfirm: true, error: "বেশি টাকা নেওয়ার কারণ নোটে লিখুন।" };
+    }
+
+    const { data: insertedTxn, error } = await supabase
+      .from("partner_transactions")
+      .insert({ partner_id: partnerId, amount, type, recorded_at: recordedAt, notes })
+      .select("id")
+      .single();
+    if (error || !insertedTxn) {
+      return { error: /invalid input value for enum/i.test(error?.message ?? "") ? "এই ধরন database-এ এখনো নেই (migration 20260927100000 চালাতে হবে)।" : "সংরক্ষণ ব্যর্থ হয়েছে" };
+    }
+
+    const event = type === "investment" ? "PartnerInvestment" : type === "withdrawal" ? "PartnerWithdrawal" : null;
+    if (event) await FinancialEventBus.publish(event, ctx.businessId, { partnerId, transactionId: insertedTxn.id, amount, recordedAt }, ctx.user.id);
+
     revalidatePath("/dashboard/partners");
+    revalidatePath(`/dashboard/partners/${partnerId}`);
     revalidateTag("accounting", { expire: 0 });
     return { success: true };
   } catch (err: unknown) {
@@ -547,13 +557,17 @@ export async function deletePartnerTransaction(
 
     const { data: txn } = await supabase
       .from("partner_transactions")
-      .select("id, recorded_at, partners!inner(business_id)")
+      .select("*, partners!inner(business_id)")
       .eq("id", id)
       .maybeSingle();
 
     if (!txn) return { error: "Transaction not found" };
     if ((txn as { partners: { business_id: string } }).partners.business_id !== ctx.businessId)
       return { error: "Unauthorized" };
+    // the partner's credit for an expense they paid goes with that expense
+    if ((txn as { cost_entry_id?: string | null }).cost_entry_id) {
+      return { error: "এটা একটা খরচের টাকা (অংশীদার নিজে দিয়েছিলেন) — টাকা-পয়সা পাতায় খরচটা বদলান বা মুছুন।" };
+    }
 
     await verifyFinancialLock(supabase, ctx.businessId, (txn as { recorded_at: string }).recorded_at);
 
@@ -574,5 +588,104 @@ export async function deletePartnerTransaction(
     return {};
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to delete transaction" };
+  }
+}
+
+// ── Cycles ──────────────────────────────────────────────────────────────────
+
+export type CyclePreview = {
+  closedOn: string;
+  from: string | null;
+  items: number;
+  net: number;
+  fee: number;
+  shares: { id: string; name: string; amount: number }[];
+  stillOnFarm: number;
+};
+
+async function checkCloseDate(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string, date: string): Promise<string | null> {
+  if (!ISO.test(date)) return "তারিখ দিন";
+  if (date > todayDhaka()) return "ভবিষ্যতের তারিখে চক্র বন্ধ করা যায় না";
+  const { data: last } = await supabase.from("partner_cycles").select("closed_on").eq("business_id", businessId).is("deleted_at", null)
+    .order("closed_on", { ascending: false }).limit(1).maybeSingle();
+  if (last && String(last.closed_on).slice(0, 10) >= date) return `আগের চক্র ${String(last.closed_on).slice(0, 10)}-এ বন্ধ — এর পরের তারিখ দিন।`;
+  return null;
+}
+
+/** What closing a cycle on `date` would settle (nothing is saved). */
+export async function previewCycleClose(date: string): Promise<{ error?: string; preview?: CyclePreview }> {
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
+    const d = String(date ?? "").slice(0, 10);
+    const bad = await checkCloseDate(supabase, ctx.businessId, d);
+    if (bad) return { error: bad };
+    const data = await loadPartnerData(supabase, ctx.businessId, d);
+    const c = data.farm.cycles.find((x) => x.id === PREVIEW_CYCLE_ID);
+    if (!c) return { error: "হিসাব করা যায়নি" };
+    return {
+      preview: {
+        closedOn: c.closedOn, from: c.from, items: c.items, net: c.net, fee: c.fee,
+        shares: data.positions.map((p) => ({ id: p.id, name: p.name, amount: c.shares[p.id] ?? 0 })).filter((x) => Math.abs(x.amount) >= 0.01),
+        stillOnFarm: data.farm.animals.filter((a) => a.status === "active" || (a.endDate ?? "") > d).length,
+      },
+    };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "হিসাব করা যায়নি" };
+  }
+}
+
+/**
+ * Close a cycle on the owner's date: every animal that left up to that day is settled on its net and
+ * never changes again. The books are locked to that day. Animals still on the farm roll over.
+ */
+export async function closeCycle(date: string, note?: string): Promise<{ error?: string }> {
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
+    const d = String(date ?? "").slice(0, 10);
+    const bad = await checkCloseDate(supabase, ctx.businessId, d);
+    if (bad) return { error: bad };
+    const res = await previewCycleClose(d);
+    if (res.error || !res.preview) return { error: res.error ?? "হিসাব করা যায়নি" };
+
+    const { error } = await supabase.from("partner_cycles").insert({
+      business_id: ctx.businessId, closed_on: d, note: note?.trim() || null,
+      snapshot: { net: res.preview.net, fee: res.preview.fee, items: res.preview.items, from: res.preview.from, shares: res.preview.shares },
+    });
+    if (error) return { error: isMissingTable(error) ? "চক্রের টেবিল এখনো তৈরি হয়নি (migration 20260927100000 চালাতে হবে)।" : "চক্র বন্ধ করা যায়নি" };
+
+    // the settled cycle may not move: lock the books to its last day
+    const lock = await lockedUntil(supabase, ctx.businessId);
+    if (!lock || lock < d) await supabase.from("financial_locks").insert({ business_id: ctx.businessId, locked_until: d, created_by: ctx.user.id });
+
+    revalidatePath("/dashboard/partners");
+    revalidateTag("accounting", { expire: 0 });
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "চক্র বন্ধ করা যায়নি" };
+  }
+}
+
+/** Open the last closed cycle again (its animals go back into the open cycle). The book lock stays. */
+export async function reopenLastCycle(): Promise<{ error?: string }> {
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
+    const { data: last } = await supabase.from("partner_cycles").select("id, closed_on").eq("business_id", ctx.businessId).is("deleted_at", null)
+      .order("closed_on", { ascending: false }).limit(1).maybeSingle();
+    if (!last) return { error: "কোনো বন্ধ চক্র নেই" };
+    const { count } = await supabase.from("partner_transactions").select("id, partners!inner(business_id)", { count: "exact", head: true })
+      .eq("partners.business_id", ctx.businessId).eq("type", "profit").is("deleted_at", null).gt("recorded_at", String(last.closed_on).slice(0, 10));
+    if ((count ?? 0) > 0) return { error: "এই চক্রের পরে লাভ বণ্টন হয়েছে — খোলা যাবে না।" };
+    const { error } = await supabase.from("partner_cycles").update({ deleted_at: new Date().toISOString() }).eq("id", last.id);
+    if (error) return { error: "খোলা যায়নি" };
+    revalidatePath("/dashboard/partners");
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "খোলা যায়নি" };
   }
 }

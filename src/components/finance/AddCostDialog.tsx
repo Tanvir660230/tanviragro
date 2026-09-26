@@ -39,13 +39,18 @@ const ASSET_CATEGORIES    = ["Infrastructure", "Equipment", "Vehicle", "Land", "
 
 type EntryMode = "expense-fixed" | "expense-variable" | "asset";
 
-export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: () => void }) {
+/** Partners who can have paid an expense from their own pocket (needs migration 20260927100000). */
+export type PayerOption = { id: string; name: string };
+
+export function CostForm({ formKey, onSuccess, payers = [] }: { formKey: number; onSuccess: () => void; payers?: PayerOption[] }) {
   const L = useL();
   const { locale } = useTranslation();
   const router   = useRouter();
   const today    = todayDhaka();
   const [mode, setMode]         = useState<EntryMode | "">("");
   const [category, setCategory] = useState("");
+  const [paidBy, setPaidBy]     = useState("");            // "" = the farm's cash
+  const [paidAs, setPaidAs]     = useState<"capital" | "loan">("capital");
 
   const [state, formAction, isPending] = useActionState<CostFormState, FormData>(
     createCostEntry,
@@ -77,6 +82,8 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
       <input type="hidden" name="type"        value={costType} />
       <input type="hidden" name="entry_class" value={entryClass} />
       <input type="hidden" name="category"    value={category} />
+      <input type="hidden" name="paid_by_partner_id" value={paidBy} />
+      <input type="hidden" name="paid_as" value={paidAs} />
 
       {/* Entry Mode */}
       <div className="space-y-1.5">
@@ -152,6 +159,34 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
         />
       </div>
 
+      {/* Who paid: the farm's cash, or a partner from their own pocket */}
+      {payers.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>{L("টাকা কে দিলেন", "Paid by")}</Label>
+          <Select value={paidBy || "farm"} onValueChange={(v) => setPaidBy(!v || v === "farm" ? "" : v)}>
+            <SelectTrigger className="w-full">
+              <span className="truncate">{paidBy ? payers.find((x) => x.id === paidBy)?.name : L("খামারের নগদ", "The farm's cash")}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="farm">{L("খামারের নগদ", "The farm's cash")}</SelectItem>
+              {payers.map((x) => <SelectItem key={x.id} value={x.id}>{L(`${x.name} (নিজের টাকা)`, `${x.name} (own money)`)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {paidBy && (
+            <div className="grid grid-cols-2 gap-2">
+              {([["capital", L("মূলধন হিসেবে", "As capital"), L("লাভ-ক্ষতির ভাগ পাবেন", "shares profit and loss")],
+                 ["loan", L("খামারের ধার", "As a loan"), L("পরে ফেরত দিতে হবে", "to be paid back")]] as const).map(([v, label, sub]) => (
+                <button key={v} type="button" onClick={() => setPaidAs(v)}
+                  className={`rounded-lg border px-2.5 py-2 text-left text-xs ${paidAs === v ? "border-primary bg-primary text-primary-foreground" : "border-input text-muted-foreground hover:text-foreground"}`}>
+                  <span className="block font-semibold">{label}</span><span className="block opacity-70">{sub}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {paidBy && <p className="text-[11px] text-muted-foreground">{L("খরচ খামারের হিসাবে লেখা হবে, আর একই টাকা ওই অংশীদারের নামে জমা হবে — নগদ বদলাবে না।", "The expense is booked for the farm and the same amount is credited to the partner — cash does not change.")}</p>}
+        </div>
+      )}
+
       {state?.error && (
         <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>
       )}
@@ -169,7 +204,7 @@ export function CostForm({ formKey, onSuccess }: { formKey: number; onSuccess: (
 
 // ── AddCostDialog ──────────────────────────────────────────────────
 
-export function AddCostDialog() {
+export function AddCostDialog({ payers = [] }: { payers?: PayerOption[] }) {
   const L = useL();
   const [open, setOpen]       = useState(false);
   const [formKey, setFormKey] = useState(0);
@@ -189,7 +224,7 @@ export function AddCostDialog() {
         <DialogHeader>
           <DialogTitle>{L("নতুন খরচ / সম্পদ", "New Cost / Asset Entry")}</DialogTitle>
         </DialogHeader>
-        <CostForm formKey={formKey} onSuccess={() => setOpen(false)} />
+        <CostForm formKey={formKey} onSuccess={() => setOpen(false)} payers={payers} />
       </DialogContent>
     </Dialog>
   );
