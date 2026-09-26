@@ -123,6 +123,108 @@ export async function endFeedUsage(_prev: UsageFormState, formData: FormData): P
   return { success: true, status: (status as string) ?? "closed" };
 }
 
+export type FinishChoice = { itemId: string; how: "fed" | "used" | "lost"; fedFrom?: string | null };
+
+/**
+ * "These are finished" for several items at once, on one date:
+ *  • in use → its usage period ends with 0 left (what was eaten is feed consumption);
+ *  • not in use, fed → it was fed from `fedFrom` to the date: a usage period is opened and
+ *    closed with 0 left, so the eaten quantity lands on those days as feed consumption;
+ *  • used (medicine and other non-feed items) → consumed on the date (its expense, e.g. medicine);
+ *  • lost (spoiled, given away) → a stock count of 0 (an adjustment, not feed eaten).
+ * Each item is done on its own; the result lists any that could not be.
+ */
+export async function finishItems(input: { date: string; items: FinishChoice[] }): Promise<{ done: number; failed: { itemId: string; error: string }[] }> {
+  const denied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);
+  if (denied) return { done: 0, failed: input.items.map((i) => ({ itemId: i.itemId, error: denied })) };
+  const supabase = await createClient();
+  const businessId = await getCurrentBusinessId(supabase);
+  const fail = (error: string) => ({ done: 0, failed: input.items.map((i) => ({ itemId: i.itemId, error })) });
+  if (!businessId) return fail("Business not found");
+  if (!DATE_RE.test(input.date)) return fail("Choose the date it finished");
+  const lock = await checkFinancialLock(supabase, businessId, input.date);
+  if (lock) return fail(lock);
+
+  const ids = [...new Set(input.items.map((i) => i.itemId))];
+  const { data: own } = await supabase.from("inventory_items").select("id, unit, category").eq("business_id", businessId).in("id", ids);
+  const mine = new Set(((own ?? []) as { id: string }[]).map((r) => r.id));
+  const isFeed = new Set(((own ?? []) as { id: string; category: string }[]).filter((r) => r.category === "feed" || r.category === "roughage").map((r) => r.id));
+  const { data: openRows } = await supabase.from("v_feed_usage_lines").select("period_id, item_id").eq("status", "open").in("item_id", ids);
+  const periodOf = new Map(((openRows ?? []) as { period_id: string; item_id: string }[]).map((r) => [r.item_id, r.period_id]));
+
+  const failed: { itemId: string; error: string }[] = [];
+  let doneCount = 0;
+  const closedPeriods = new Set<string>();
+
+  for (const choice of input.items) {
+    const id = choice.itemId;
+    if (!mine.has(id)) { failed.push({ itemId: id, error: "Not an item of this farm" }); continue; }
+    const periodId = periodOf.get(id);
+    try {
+      if (periodId) {
+        if (closedPeriods.has(periodId)) { doneCount++; continue; }
+        // every item of the period ends with 0 — a recipe period needs all its items selected
+        const { data: lines } = await supabase.from("v_feed_usage_lines").select("item_id").eq("period_id", periodId);
+        const lineIds = ((lines ?? []) as { item_id: string }[]).map((l) => l.item_id);
+        if (lineIds.some((l) => !ids.includes(l))) { failed.push({ itemId: id, error: "Part of a recipe in use — select all its items, or end it from “In use”" }); continue; }
+        const { error } = await supabase.rpc("close_feed_usage_period", {
+          p_period_id: periodId, p_end_date: input.date, p_closing: lineIds.map((l) => ({ item_id: l, qty: 0 })), p_reason: null,
+        });
+        if (error) { failed.push({ itemId: id, error: dbMessage(error) }); continue; }
+        closedPeriods.add(periodId);
+        doneCount++;
+        continue;
+      }
+
+      if (choice.how === "fed" && isFeed.has(id)) {
+        const from = choice.fedFrom && DATE_RE.test(choice.fedFrom) ? choice.fedFrom : input.date;
+        if (from > input.date) { failed.push({ itemId: id, error: "“Fed since” is after the finish date" }); continue; }
+        const { data: newId, error: openErr } = await supabase.rpc("open_feed_usage_period", {
+          p_business_id: businessId, p_target_type: "item", p_target_id: id, p_start: from,
+          p_rule_type: "weight_share", p_rule_value: null, p_notes: "Finished (marked from the stock list)",
+          p_idempotency_key: `finish:${id}:${from}:${input.date}`,
+        });
+        if (openErr) { failed.push({ itemId: id, error: dbMessage(openErr) }); continue; }
+        let pid = typeof newId === "string" ? newId : null;
+        if (!pid) {
+          const { data: again } = await supabase.from("v_feed_usage_lines").select("period_id").eq("status", "open").eq("item_id", id).maybeSingle();
+          pid = (again as { period_id?: string } | null)?.period_id ?? null;
+        }
+        if (!pid) { failed.push({ itemId: id, error: "Could not start the feeding period" }); continue; }
+        const { error: closeErr } = await supabase.rpc("close_feed_usage_period", {
+          p_period_id: pid, p_end_date: input.date, p_closing: [{ item_id: id, qty: 0 }], p_reason: null,
+        });
+        if (closeErr) {
+          await supabase.rpc("cancel_feed_usage_period", { p_period_id: pid, p_reason: "Finish failed — undone" });
+          failed.push({ itemId: id, error: dbMessage(closeErr) });
+          continue;
+        }
+        doneCount++;
+        continue;
+      }
+
+      // used up (non-feed) or lost: the rest leaves stock on the date; the database values it at WAC
+      const { data: bal } = await supabase.from("v_inventory_balance").select("qty_on_hand").eq("item_id", id).maybeSingle();
+      const stock = Number((bal as { qty_on_hand?: number | string } | null)?.qty_on_hand ?? 0);
+      if (Math.abs(stock) < 0.0001) { doneCount++; continue; }
+      const used = choice.how !== "lost" && stock > 0;   // "fed" on a non-feed item is its use
+      const { error } = await supabase.from("inventory_transactions").insert({
+        item_id: id, type: stock > 0 ? "consumption" : "purchase",
+        movement_type: stock > 0 ? (used ? "consumption" : "wastage") : "adjustment_in",
+        qty: Math.abs(stock), recorded_at: input.date,
+        notes: used ? `Finished — used up (${stock.toFixed(2)})` : `Finished — lost or spoiled (${stock.toFixed(2)} written off)`,
+      });
+      if (error) { failed.push({ itemId: id, error: "Could not write off the stock" }); continue; }
+      doneCount++;
+    } catch (e) {
+      failed.push({ itemId: id, error: e instanceof Error ? e.message : "Failed" });
+    }
+  }
+
+  done();
+  return { done: doneCount, failed };
+}
+
 /** Cancel an open period started by mistake (kept for the audit trail). */
 export async function cancelFeedUsage(periodId: string, reason: string): Promise<{ error?: string }> {
   const denied = await actionPermissionError(PERMISSIONS.INVENTORY_EDIT);

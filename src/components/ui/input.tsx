@@ -62,7 +62,7 @@ function Input({
       type={type}
       data-slot="input"
       className={cn(
-        "w-full min-w-0 border border-input bg-card/60 text-foreground transition-all duration-150 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted/40 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-card/40 dark:border-border dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        "w-full min-w-0 border border-input bg-card/60 text-foreground transition-all duration-150 outline-none placeholder:font-normal placeholder:text-muted-foreground/55 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted/40 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-card/40 dark:border-border dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
         sizeClasses[inputSize],
         className
       )}

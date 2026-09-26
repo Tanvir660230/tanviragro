@@ -78,7 +78,10 @@ export function MixClient({ data, lang }: { data: MixPageData; lang: MixLang }) 
     startTransition(async () => {
       const res = await recordFeedMix({ batchId, date, outputItemId: outputId || null, lines: lines.map((l) => ({ itemId: l.itemId, qty: l.qtyN })), note });
       if (res.error) { toast.error(res.error); return; }
-      toast.success(res.duplicate ? t.saved_before : fill(t.saved, { qty: fmt(res.outputQty ?? totalKg) }));
+      // a mix not being fed yet: one tap to the stock page, where it waits under "not started"
+      const feeding = data.items.find((i) => i.id === outputId)?.inUse;
+      toast.success(res.duplicate ? t.saved_before : fill(t.saved, { qty: fmt(res.outputQty ?? totalKg) }),
+        !res.duplicate && !feeding ? { action: { label: t.start_feeding, onClick: () => router.push("/dashboard/inventory") }, duration: 10000 } : undefined);
       reset();
       router.refresh();
     });

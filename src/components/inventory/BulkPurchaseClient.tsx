@@ -460,7 +460,15 @@ function ItemRow({ r, idx, t, items, rows, unit, qty, total, landed, transport, 
             </div>
           </div>
           <Input type="number" inputMode="decimal" min="0" step="any" value={r.price} onChange={(e) => onChange({ price: e.target.value })}
-            placeholder={last && r.priceMode === "unit" ? String(Math.round(last.unitCost * 100) / 100) : "0"} className="h-10 text-base font-semibold" aria-label={t.price} />
+            placeholder="0" className="h-10 text-base font-semibold" aria-label={t.price} />
+          {/* the last price is offered, never shown inside the box as if it were typed */}
+          {last && r.price === "" && (r.priceMode === "unit" || qty > 0) && (
+            <button type="button"
+              onClick={() => onChange({ price: String(Math.round((r.priceMode === "unit" ? last.unitCost : last.unitCost * qty) * 100) / 100) })}
+              className="inline-flex items-center rounded-full border border-dashed border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/5">
+              {fill(t.use_last, { amount: r.priceMode === "unit" ? `${taka(last.unitCost)}/${unit}` : taka(last.unitCost * qty) })}
+            </button>
+          )}
         </div>
       </div>
 

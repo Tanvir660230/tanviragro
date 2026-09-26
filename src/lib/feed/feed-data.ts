@@ -29,7 +29,10 @@ export type FeedItemStatus = {
    * direct = fed as it is (e.g. straw)
    */
   role: FeedRole;
-  /** retired by the owner: never offered as a mix or a new feed */
+  /**
+   * retired by the owner AND nothing left: never offered as a mix or a new feed. An item that
+   * still has stock (or is in use) is never hidden — a mix made into a retired item used to vanish.
+   */
   discontinued: boolean;
   /** not in use yet: the day it most likely started being fed (its last stock-in after the last recorded use) */
   suggestedStart: string | null;
@@ -43,6 +46,9 @@ export type FeedItemStatus = {
 
 export type FeedRole = "mix" | "ingredient" | "direct";
 
+/** Retired only when the owner said so and nothing is left or in use (one rule for every page). */
+export const isRetired = (flagged: boolean, stockQty: number, inUse = false) => flagged && stockQty <= 0.0001 && !inUse;
+
 /** Mix items: made on the Mix page, or named as a mix. Ingredients: in any mix or recipe, and not a mix. */
 export function feedRoles(input: {
   items: { id: string; name: string; unit: string; category: string; is_discontinued?: boolean | null }[];
@@ -51,7 +57,7 @@ export function feedRoles(input: {
 }): Record<string, FeedRole> {
   const mix = new Set(input.mixOutputIds);
   for (const i of input.items) {
-    if (!i.is_discontinued && i.category === "feed" && i.unit.trim().toLowerCase() === "kg" && /\bmix\b|মিক্স|মিশ্রণ/i.test(i.name)) mix.add(i.id);
+    if (i.category === "feed" && i.unit.trim().toLowerCase() === "kg" && /\bmix\b|মিক্স|মিশ্রণ/i.test(i.name)) mix.add(i.id);
   }
   const ing = new Set(input.ingredientIds.filter((id) => !mix.has(id)));
   return Object.fromEntries(input.items.map((i) => [i.id, mix.has(i.id) ? "mix" : ing.has(i.id) ? "ingredient" : "direct"]));
@@ -269,7 +275,8 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
       id: i.id, name: i.name, unit: i.unit, category: i.category, kgPerUnit: i.kg_per_unit,
       stockQty, stockValue: Number(b?.value_on_hand ?? 0), wac: wac[i.id] ?? null, learnedDaily: learned,
       openPeriodId: openByItem.get(i.id) ?? null, daysLeft: f.daysLeft, depletionDate: f.date,
-      expectedLeft, dailyQty: openLine?.dailyQty ?? learned, role: roles[i.id] ?? "direct", discontinued: !!i.is_discontinued,
+      expectedLeft, dailyQty: openLine?.dailyQty ?? learned, role: roles[i.id] ?? "direct",
+      discontinued: isRetired(!!i.is_discontinued, stockQty, openByItem.has(i.id)),
       suggestedStart: openByItem.has(i.id) ? null : suggestStart(i.id),
     };
   });

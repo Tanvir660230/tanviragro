@@ -62,6 +62,8 @@ export async function recordFeedMix(input: {
     p_batch_id: input.batchId, p_note: (input.note ?? "").trim() || null,
   });
   if (error) return { error: message(error) };
+  // a mix made into a retired item brings it back: it has stock to feed now
+  await supabase.from("inventory_items").update({ is_discontinued: false }).eq("id", outputItemId!).eq("business_id", businessId).eq("is_discontinued", true);
   done();
   const r = (data ?? {}) as { duplicate?: boolean; output_qty?: number };
   return { duplicate: !!r.duplicate, outputQty: r.output_qty };

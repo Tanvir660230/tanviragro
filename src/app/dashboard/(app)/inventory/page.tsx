@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { StockList, type StockStatus } from "@/components/inventory/StockList";
 import { InventoryFeedBoard } from "@/components/inventory/InventoryFeedBoard";
-import { loadFeedData, syncFeedAutoUsage } from "@/lib/feed/feed-data";
+import { isRetired, loadFeedData, syncFeedAutoUsage } from "@/lib/feed/feed-data";
 import { getBusinessContext } from "@/lib/context/business-context";
 import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
@@ -130,8 +130,11 @@ export default async function InventoryPage({
     })
   );
 
-  const activeItems = items.filter((i) => !i.is_discontinued);
-  const discontinuedItems = items.filter((i) => i.is_discontinued);
+  // an item with stock or in use is never tucked away as "discontinued" (the same rule as the feed data)
+  const inUseIds = new Set((feed?.items ?? []).filter((i) => i.openPeriodId).map((i) => i.id));
+  const retired = (i: InventoryRow) => isRetired(!!i.is_discontinued, i.stock, inUseIds.has(i.id));
+  const activeItems = items.filter((i) => !retired(i));
+  const discontinuedItems = items.filter(retired);
 
   const cattle: CattleOption[] = (cattleData ?? []) as CattleOption[];
 
@@ -222,8 +225,8 @@ export default async function InventoryPage({
             <AddItemDialog />
           </div>
         ) : (
-          <StockList items={activeItems} discontinued={discontinuedItems} cattle={cattle} lang={locale}
-            status={Object.fromEntries((feed?.items ?? []).map((i): [string, StockStatus] => [i.id, { role: i.role, inUse: !!i.openPeriodId, daysLeft: i.daysLeft }]))} />
+          <StockList items={activeItems} discontinued={discontinuedItems} cattle={cattle} lang={locale} canEdit={canEdit} asOf={feed?.asOf ?? todayDhaka()}
+            status={Object.fromEntries((feed?.items ?? []).map((i): [string, StockStatus] => [i.id, { role: i.role, inUse: !!i.openPeriodId, daysLeft: i.daysLeft, suggestedStart: i.suggestedStart }]))} />
         )}
       </section>
 
