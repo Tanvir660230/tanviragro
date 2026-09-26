@@ -18,9 +18,11 @@ interface Props {
   id: string;
   restoreAction: "cost_entry" | "inventory_item" | "weight_log";
   table: "cost_entries" | "inventory_items" | "weight_logs";
+  /** false: only "delete for good" (e.g. a vet fee saved twice — restoring would count it twice) */
+  canRestore?: boolean;
 }
 
-export function TrashRestoreButton({ id, restoreAction, table }: Props) {
+export function TrashRestoreButton({ id, restoreAction, table, canRestore = true }: Props) {
   const L = useL();
   const router = useRouter();
   const [restoring, startRestore] = useTransition();
@@ -49,7 +51,7 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
 
   return (
     <div className="flex items-center gap-1.5 shrink-0">
-      <Button
+      {canRestore && <Button
         variant="outline"
         size="sm"
         className="gap-1.5 text-xs h-8 shadow-sm"
@@ -59,7 +61,7 @@ export function TrashRestoreButton({ id, restoreAction, table }: Props) {
       >
         {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
         {L("ফেরত আনুন", "Restore")}
-      </Button>
+      </Button>}
       <Button
         variant="ghost"
         size="icon-sm"

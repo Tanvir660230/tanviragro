@@ -1,13 +1,5 @@
-import { unstable_cache } from "next/cache";
-import { createClient } from "@supabase/supabase-js";
-
-function getServiceClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
-  );
-}
+import { cache } from "react";
+import { getServerClient } from "@/lib/supabase/cached";
 
 export type TopBarAlertData = {
   overdueHealth: { id: string; title: string; scheduled_at: string; cattle_id: string }[];
@@ -30,7 +22,9 @@ async function fetchTopBarAlerts(
     return { overdueHealth: [], upcomingHealth: [], lowStockItems: [], loansDue: [], insuranceExpiring: [], unweighedCattleIds: [], allCattleIds: [] };
   }
 
-  const supabase = getServiceClient();
+  // the signed-in user's client (row-level security), like every page: the service-role key it
+  // used was a secret the site does not need here, and when it failed the alerts were silently empty
+  const supabase = await getServerClient();
 
   const [
     { data: overdueHealthRaw },
@@ -86,8 +80,5 @@ async function fetchTopBarAlerts(
   };
 }
 
-export const getCachedTopBarAlerts = unstable_cache(
-  fetchTopBarAlerts,
-  ["topbar-alerts"],
-  { revalidate: 60 }
-);
+/** Once per request (the top bar and the notifications page share it). */
+export const getCachedTopBarAlerts = cache(fetchTopBarAlerts);

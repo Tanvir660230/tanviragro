@@ -4,7 +4,6 @@
  */
 import { cashNet, cashStatement } from "@/lib/accounting/cash-ledger";
 
-jest.mock("next/cache", () => ({ unstable_cache: (fn: () => unknown) => fn }));
 
 const BIZ = "biz-1";
 const tables: Record<string, unknown[]> = {};
@@ -17,9 +16,8 @@ function query(rows: unknown[]) {
   q.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve({ data: rows, error: null }).then(res, rej);
   return q;
 }
-jest.mock("@supabase/supabase-js", () => ({
-  createClient: () => ({ from: (t: string) => query(tables[t] ?? []), rpc: () => Promise.resolve({ data: rpcRows, error: null }) }),
-}));
+// the signed-in user's client (the engine no longer uses the service-role key)
+const db = () => ({ from: (t: string) => query(tables[t] ?? []), rpc: () => Promise.resolve({ data: rpcRows, error: null }) }) as never;
 jest.mock("@/lib/context/business-context", () => ({
   getBusinessContext: async () => ({
     businessId: BIZ, business: { id: BIZ, name: "Test Farm", opening_cash_balance: "1500" },
@@ -72,8 +70,21 @@ beforeEach(() => {
 });
 
 describe("accounting engine — one cash figure", () => {
+  it("a failed query is an error, never a silently wrong cash figure", async () => {
+    const denied = () => {
+      const q: Record<string, unknown> = {};
+      for (const m of ["select", "eq", "is", "order", "not", "in"]) q[m] = () => q;
+      const res = { data: null, error: { message: "permission denied" } };
+      q.range = () => Promise.resolve(res);
+      q.then = (ok: (v: unknown) => unknown) => Promise.resolve(res).then(ok);
+      return q;
+    };
+    const failing = { from: (t: string) => (t === "liabilities" ? denied() : query(tables[t] ?? [])), rpc: () => Promise.resolve({ data: [], error: null }) } as never;
+    await expect(getAccountingData(failing)).rejects.toThrow(/permission denied/);
+  });
+
   it("balance sheet, trial balance and cash statement agree", async () => {
-    const acc = await getAccountingData({} as never);
+    const acc = await getAccountingData(db());
     const bs = acc.balanceSheet;
     const expected = 1500
       + 90000 - (70000 + 65000 + 30000)
@@ -98,7 +109,7 @@ describe("accounting engine — one cash figure", () => {
 
   it("reads every page of the money tables (no silent stop at 1000 rows)", async () => {
     tables.cost_entries = Array.from({ length: 1500 }, (_, i) => ({ id: `x${i}`, category: "Labor", amount: 1, type: "fixed", recorded_at: "2026-06-05", description: null, entry_class: "expense", cattle_id: null, expense_categories: null }));
-    const before = (await getAccountingData({} as never)).cashLedger.filter((r) => r.category === "Operating Cost").length;
+    const before = (await getAccountingData(db())).cashLedger.filter((r) => r.category === "Operating Cost").length;
     expect(before).toBe(1500);
   });
 });

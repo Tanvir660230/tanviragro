@@ -125,3 +125,60 @@ export async function permanentlyDelete(
   revalidateTag("accounting", { expire: 0 });
   return {};
 }
+
+/**
+ * Empty the trash: every soft-deleted expense, weight and stock item of this farm is removed for
+ * good. Kept (and counted in `kept`): stock items that still have purchase/usage history, a recipe
+ * or a feeding period, and an expense a fixed asset points to — deleting those would break
+ * other records.
+ */
+export async function emptyTrash(): Promise<{ error?: string; removed?: number; kept?: number }> {
+  const permissionDenied = await actionPermissionError(PERMISSIONS.SETTINGS_EDIT);
+  if (permissionDenied) return { error: permissionDenied };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+  const bizId = await getOwnerBizId(supabase, user.id);
+  if (!bizId) return { error: "Business not found" };
+
+  let removed = 0;
+  let kept = 0;
+
+  // expenses (not one a fixed asset was bought with)
+  const { data: costs } = await supabase.from("cost_entries").select("id").eq("business_id", bizId).not("deleted_at", "is", null);
+  const costIds = (costs ?? []).map((c) => c.id);
+  if (costIds.length) {
+    const { data: linked } = await supabase.from("fixed_assets").select("source_cost_entry_id").in("source_cost_entry_id", costIds);
+    const keep = new Set((linked ?? []).map((l) => l.source_cost_entry_id));
+    const del = costIds.filter((id) => !keep.has(id));
+    kept += keep.size;
+    if (del.length) {
+      const { error } = await supabase.from("cost_entries").delete().in("id", del);
+      if (error) return { error: "Could not empty the expenses in the trash" };
+      removed += del.length;
+    }
+  }
+
+  // weights of this farm's animals
+  const { data: logs } = await supabase.from("weight_logs").select("id, cattle!inner(business_id)").eq("cattle.business_id", bizId).not("deleted_at", "is", null);
+  const logIds = ((logs ?? []) as { id: string }[]).map((l) => l.id);
+  if (logIds.length) {
+    const { error } = await supabase.from("weight_logs").delete().in("id", logIds);
+    if (error) return { error: "Could not empty the weights in the trash" };
+    removed += logIds.length;
+  }
+
+  // stock items: only those with no history (the database refuses the others; they stay archived)
+  const { data: items } = await supabase.from("inventory_items").select("id").eq("business_id", bizId).not("deleted_at", "is", null);
+  for (const { id } of items ?? []) {
+    const { count } = await supabase.from("inventory_transactions").select("id", { count: "exact", head: true }).eq("item_id", id);
+    if ((count ?? 0) > 0) { kept++; continue; }
+    const { error } = await supabase.from("inventory_items").delete().eq("id", id);
+    if (error) kept++; else removed++;
+  }
+
+  revalidatePath("/dashboard/settings/trash");
+  revalidatePath("/dashboard/finance");
+  revalidateTag("accounting", { expire: 0 });
+  return { removed, kept };
+}

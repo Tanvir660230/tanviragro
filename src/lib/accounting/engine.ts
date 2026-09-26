@@ -1,9 +1,8 @@
 import { calculateDepreciation } from "@/lib/financial/calculations";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { unstable_cache } from "next/cache";
+import { cache } from "react";
 import { selectAll } from "@/lib/supabase/select-all";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { getBusinessContext } from "@/lib/context/business-context";
 import { requireAnyPermission } from "@/lib/auth/permissions";
@@ -158,40 +157,39 @@ function monthsBetween(from: Date, to: Date): number {
 
 export const computeDepreciation = calculateDepreciation;
 
-// ── Cached Database Fetch ─────────────────────────────────────────
-// Extracts all heavy Supabase queries into a single unstable_cache block.
-// Cached per business; revalidateTag('accounting') clears it immediately, and the 60s TTL bounds
-// staleness for any write path that forgets to call it (BUG-05).
-export const getCachedDbData = async (businessId: string) => {
-  const fetcher = unstable_cache(
-    async () => {
-      // We must use the Service Role Key here because unstable_cache is a server-side
-      // cache that does not have access to cookies or user-specific auth headers.
-      const supabaseAdmin = createSupabaseClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
+// ── Database Fetch ────────────────────────────────────────────────
+// Every query of the engine, read with the SIGNED-IN user's client (row-level security), once per
+// request (React cache: the homepage asks for all-time and this month in the same render).
+// It used to read through a cross-request cache with the service-role key; on the live site that
+// failed, and the homepage showed "—" for cash and the month's spending. Always fresh now, so a
+// write is visible on the next page load without relying on revalidateTag("accounting").
+// A failed query throws: a partial read would show a wrong cash figure without any sign.
+function must<T>(res: { data: T | null; error?: { message?: string } | null }, what: string): T {
+  if (res.error) throw new Error(`accounting: could not read ${what}: ${res.error.message ?? "unknown error"}`);
+  return (res.data ?? []) as T;
+}
 
+export const getCachedDbData = cache(async (db: Client, businessId: string) => {
     const [
       cattleRes, salesRes, costsRes,
       invTxRes, partnerTxRes, fixedAssetRes, liabRes, loansRes, treatmentsRes,
       rpcFeedRes,
     ] = await Promise.all([
-      supabaseAdmin.from("cattle").select("id, tag_id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
+      db.from("cattle").select("id, tag_id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
       // money tables are read page by page too: a plain select stops silently at row 1000
-      selectAll(() => supabaseAdmin.from("sales").select("id, cattle_id, sale_price_total, sold_at, buyer_name, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
-      selectAll(() => supabaseAdmin.from("cost_entries").select("id, category, amount, type, recorded_at, description, entry_class, cattle_id, expense_categories(kind)").eq("business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
+      selectAll(() => db.from("sales").select("id, cattle_id, sale_price_total, sold_at, buyer_name, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
+      selectAll(() => db.from("cost_entries").select("id, category, amount, type, recorded_at, description, entry_class, cattle_id, expense_categories(kind)").eq("business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
       // every ledger row (the API returns at most 1000 per request)
-      selectAll(() => supabaseAdmin.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category, name)").eq("inventory_items.business_id", businessId).order("id")).then((data) => ({ data })),
-      selectAll(() => supabaseAdmin.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id, name)").eq("partners.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
-      supabaseAdmin.from("fixed_assets").select("*").eq("business_id", businessId),
-      supabaseAdmin.from("liabilities").select("id, name, lender, outstanding, recorded_at, settled_at, notes").eq("business_id", businessId).is("deleted_at", null),
-      supabaseAdmin.from("loans").select("id, lender_name, principal_amount, interest_rate_pct, loan_date, status, loan_payments(id, amount, paid_at)").eq("business_id", businessId).is("deleted_at", null),
+      selectAll(() => db.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category, name)").eq("inventory_items.business_id", businessId).order("id")).then((data) => ({ data })),
+      selectAll(() => db.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id, name)").eq("partners.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
+      db.from("fixed_assets").select("*").eq("business_id", businessId),
+      db.from("liabilities").select("id, name, lender, outstanding, recorded_at, settled_at, notes").eq("business_id", businessId).is("deleted_at", null),
+      db.from("loans").select("id, lender_name, principal_amount, interest_rate_pct, loan_date, status, loan_payments(id, amount, paid_at)").eq("business_id", businessId).is("deleted_at", null),
       // Vet fees from medical treatments — these are capitalized costs per cattle,
       // parallel to cost_entries with type="variable" and cattle_id. Without this,
       // all veterinary fees logged via the treatment system are invisible in the P&L.
-      selectAll(() => supabaseAdmin.from("cattle_treatments").select("id, cattle_id, vet_fee, additional_medical_cost, treated_at, diagnosis, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId).order("id")).then((data) => ({ data })),
-      supabaseAdmin.rpc("get_cattle_consumptions", { p_business_id: businessId }),
+      selectAll(() => db.from("cattle_treatments").select("id, cattle_id, vet_fee, additional_medical_cost, treated_at, diagnosis, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId).order("id")).then((data) => ({ data })),
+      db.rpc("get_cattle_consumptions", { p_business_id: businessId }),
     ]);
 
     type CattleRow = { id: string; tag_id: string | null; purchase_price: number; status: string; purchase_date: string; updated_at: string | null; initial_weight_kg: number | null };
@@ -211,23 +209,18 @@ export const getCachedDbData = async (businessId: string) => {
     };
 
     return {
-      cattle: (cattleRes.data ?? []) as unknown as CattleRow[],
-      sales: (salesRes.data ?? []) as unknown as SaleRow[],
-      costs: (costsRes.data ?? []) as unknown as CostRow[],
-      invTx: (invTxRes.data ?? []) as unknown as InvTxRow[],
-      partnerTx: (partnerTxRes.data ?? []) as unknown as PartnerTxRow[],
-      fixedAssetDb: (fixedAssetRes.data ?? []) as unknown as FixedAssetDbRow[],
-      liabData: (liabRes.data ?? []) as unknown as LiabilityRow[],
-      loansData: (loansRes.data ?? []) as unknown as LoanEngineRow[],
-      treatments: (treatmentsRes.data ?? []) as unknown as TreatmentRow[],
-      rpcFeedData: (rpcFeedRes.data ?? []) as any[],
+      cattle: must(cattleRes, "cattle") as unknown as CattleRow[],
+      sales: must(salesRes, "sales") as unknown as SaleRow[],
+      costs: must(costsRes, "costs") as unknown as CostRow[],
+      invTx: must(invTxRes, "stock ledger") as unknown as InvTxRow[],
+      partnerTx: must(partnerTxRes, "partner entries") as unknown as PartnerTxRow[],
+      fixedAssetDb: must(fixedAssetRes, "fixed assets") as unknown as FixedAssetDbRow[],
+      liabData: must(liabRes, "dues") as unknown as LiabilityRow[],
+      loansData: must(loansRes, "loans") as unknown as LoanEngineRow[],
+      treatments: must(treatmentsRes, "treatments") as unknown as TreatmentRow[],
+      rpcFeedData: must(rpcFeedRes, "feed per animal") as any[],
     };
-  },
-  [`accounting-db-${businessId}`],
-  { tags: ['accounting', `accounting-${businessId}`], revalidate: 60 }
-  );
-  return fetcher();
-};
+});
 
 // ── Main query ────────────────────────────────────────────────────
 
@@ -251,7 +244,7 @@ export async function getAccountingData(
   const {
     cattle, sales, costs, invTx, partnerTx, fixedAssetDb, liabData, loansData, treatments,
     rpcFeedData
-  } = await getCachedDbData(businessId);
+  } = await getCachedDbData(supabase as Client, businessId);
 
   // Build cattle lookup for COGS
   const cattleMap = new Map<string, number>();

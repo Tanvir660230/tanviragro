@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { TrashRestoreButton } from "@/components/settings/TrashRestoreButton";
+import { EmptyTrashButton } from "@/components/settings/EmptyTrashButton";
 import { cookies } from "next/headers";
 import { getDictionary } from "@/i18n/getDictionary";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -71,6 +72,7 @@ export default async function TrashBinPage() {
         subtitle={t.trash.subtitle}
         icon={Trash2}
         back="/dashboard/settings"
+        actions={<EmptyTrashButton count={(deletedCosts ?? []).length + (deletedItems ?? []).length + (deletedLogs ?? []).length} />}
       />
 
       {/* Summary notice banner */}
@@ -110,7 +112,8 @@ export default async function TrashBinPage() {
                   `একই ডাক্তারের খরচ দুবার লেখা হয়েছিল। টাকাটা গরু #${twin.tag ?? "?"}-এর চিকিৎসার রেকর্ডে একবার গোনা আছে (নগদ ও খরচ দুটোতেই)। ফেরত আনলে দুবার কাটা হবে, তাই ফেরত আনা বন্ধ।`,
                   `The same vet fee was saved twice. The money is counted once, on the treatment record of #${twin.tag ?? "?"} (in cash and in costs). Restoring this would count it twice, so restore is off.`) : undefined}
                 deletedAt={e.deleted_at}
-                restoreAction={twin ? null : "cost_entry"}
+                restoreAction="cost_entry"
+                canRestore={!twin}
                 id={e.id}
                 table="cost_entries"
               />
@@ -172,6 +175,7 @@ function TrashRow({
   label,
   detail,
   note,
+  canRestore = true,
   deletedAt,
   restoreAction,
   id,
@@ -181,7 +185,8 @@ function TrashRow({
   detail: string;
   note?: string;
   deletedAt: string;
-  restoreAction: "cost_entry" | "inventory_item" | "weight_log" | null;
+  restoreAction: "cost_entry" | "inventory_item" | "weight_log";
+  canRestore?: boolean;
   id: string;
   table: "cost_entries" | "inventory_items" | "weight_logs";
 }) {
@@ -195,7 +200,7 @@ function TrashRow({
         </p>
         {note && <p className="mt-1 text-xs leading-snug text-emerald-700 dark:text-emerald-400">{note}</p>}
       </div>
-      {restoreAction && <TrashRestoreButton id={id} restoreAction={restoreAction} table={table} />}
+      <TrashRestoreButton id={id} restoreAction={restoreAction} table={table} canRestore={canRestore} />
     </div>
   );
 }
