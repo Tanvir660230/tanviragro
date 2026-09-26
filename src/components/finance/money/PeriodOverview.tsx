@@ -45,6 +45,7 @@ export function PeriodOverview({ m }: { m: MoneyModel }) {
             {p.depreciation > 0.5 && <span>{L(`সম্পদের ক্ষয় (অবচয়): ${taka(p.depreciation)}`, `Depreciation: ${taka(p.depreciation)}`)}</span>}
             {p.assetsBought > 0.5 && <span>{L(`সম্পদ কেনা (খরচ নয়): ${taka(p.assetsBought)}`, `Assets bought (not a cost): ${taka(p.assetsBought)}`)}</span>}
             {p.cattleBought > 0.5 && <span>{L(`গরু কেনা: ${taka(p.cattleBought)}`, `Cattle bought: ${taka(p.cattleBought)}`)}</span>}
+            {p.cattleOwnCosts > 0.5 && <span>{L(`নির্দিষ্ট গরুর নিজের খরচ (ডাক্তার ইত্যাদি): ${taka(p.cattleOwnCosts)}`, `Costs put on one animal (vet etc.): ${taka(p.cattleOwnCosts)}`)}</span>}
           </div>
         </section>
 

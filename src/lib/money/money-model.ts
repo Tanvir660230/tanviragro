@@ -37,6 +37,7 @@ export type MoneyInput = {
   inPeriod: AccountingData;       // the chosen period's income statement
   thisMonth: AccountingData;
   lastMonth: AccountingData;
+  lastMonthSameDays: AccountingData;   // last month, day 1 to today's day number — a fair comparison
   months: { month: string; data: AccountingData }[];   // oldest first
   farm: FarmPosition;
   home: HomeModel;
@@ -95,6 +96,11 @@ export function buildMoneyModel(input: MoneyInput) {
   // ── the chosen period ──
   const lines = expenseLines(inPeriod);
   const running = lines.reduce((s, l) => s + l.amount, 0);
+  // cattle bought = the purchase price only; costs put on one animal (a vet fee for C006) are the
+  // animal's own costs — the engine's cashPaidCattle holds both
+  const cattleBought = all.cashLedger.filter((r) => r.category === "Cattle Purchase" && inRange(r.date, period.from, period.to))
+    .reduce((s, r) => s + r.amount, 0);
+  const cattleOwnCosts = Math.max(0, inPeriod.cashFlow.cashPaidCattle - cattleBought);
   const left = farm.animals.filter((a) => a.status !== "active" && a.endDate && inRange(a.endDate, period.from, period.to));
   const periodResult = {
     animals: left.length,
@@ -127,18 +133,21 @@ export function buildMoneyModel(input: MoneyInput) {
     runwayDays,
     monthExpenses: capitalSummary(input.thisMonth).operatingExpenses,
     lastMonthExpenses: capitalSummary(input.lastMonth).operatingExpenses,
+    lastMonthSameDays: capitalSummary(input.lastMonthSameDays).operatingExpenses,
     farmResult: { total: farm.total, realized: farm.realized, estimate: farm.estimate, range: farm.estimateRange },
     netWorth,
     marketPrice: input.marketPrice,
+    /** days since the market price was set — cattle values and every "if sold" figure lean on it */
+    marketPriceAgeDays: input.marketPrice ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${input.marketPrice.date}T00:00:00Z`)) / DAY) : null,
     period: {
       ...period,
-      sales: inPeriod.incomeStatement.cattleSales,
       expenseLines: lines,
       running,
       depreciation: inPeriod.incomeStatement.depreciation,
       interest: inPeriod.incomeStatement.interestExpense,
       assetsBought: inPeriod.cashFlow.fixedAssetPurchases,
-      cattleBought: inPeriod.cashFlow.cashPaidCattle,
+      cattleBought,
+      cattleOwnCosts,
       result: periodResult,
       cash: cashFlow(all.cashLedger, period.from, period.to),
     },

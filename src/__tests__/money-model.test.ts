@@ -27,7 +27,7 @@ function input(over: Partial<MoneyInput> = {}): MoneyInput {
   return {
     today: "2026-09-27", period: { from: "2026-09-01", to: "2026-09-27" },
     all: acc({ ledger }), inPeriod: acc({ is: { feedExpenses: 8000, laborWages: 1500, utilities: 1600, depreciation: 1100 }, ledger }),
-    thisMonth: acc({ is: { feedExpenses: 8000, laborWages: 1500, utilities: 1600 } }), lastMonth: acc({ is: { feedExpenses: 9000 } }),
+    thisMonth: acc({ is: { feedExpenses: 8000, laborWages: 1500, utilities: 1600 } }), lastMonth: acc({ is: { feedExpenses: 9000 } }), lastMonthSameDays: acc({ is: { feedExpenses: 7000 } }),
     months: [{ month: "2026-08", data: acc({ is: { feedExpenses: 9000 } }) }, { month: "2026-09", data: acc({ is: { feedExpenses: 8000, laborWages: 1500 } }) }],
     farm, home, marketPrice: { perKg: 420, date: "2026-09-24" }, ...over,
   };
@@ -63,7 +63,22 @@ describe("money model", () => {
     const m = buildMoneyModel(input());
     expect(m.monthExpenses).toBe(11100);
     expect(m.lastMonthExpenses).toBe(9000);
+    expect(m.lastMonthSameDays).toBe(7000);
     expect(m.months.map((x) => [x.month, x.expenses, x.cashIn, x.cashOut])).toEqual([["2026-08", 9000, 0, 999], ["2026-09", 9500, 12085, 12112]]);
+  });
+
+  it("cattle bought is the purchase price only; costs put on one animal are listed apart", () => {
+    const ledger = [row("p", "2026-09-10", "Cattle Purchase", 80000, "out"), row("q", "2026-08-10", "Cattle Purchase", 50000, "out")];
+    const withCattle = acc({ ledger });
+    (withCattle.cashFlow as { cashPaidCattle: number }).cashPaidCattle = 81640;   // purchase + a 1,640 vet fee on one animal
+    const m = buildMoneyModel(input({ all: acc({ ledger }), inPeriod: withCattle }));
+    expect(m.period.cattleBought).toBe(80000);
+    expect(m.period.cattleOwnCosts).toBe(1640);
+  });
+
+  it("how old the market price is", () => {
+    expect(buildMoneyModel(input()).marketPriceAgeDays).toBe(3);
+    expect(buildMoneyModel(input({ marketPrice: null })).marketPriceAgeDays).toBeNull();
   });
 
   it("month ends", () => {

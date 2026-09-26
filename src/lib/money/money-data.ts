@@ -20,11 +20,13 @@ export async function loadMoneyData(supabase: SupabaseClient<any>, businessId: s
   const lastMonth = shiftMonth(month, -1);
   const to = period.to ?? today;
 
-  const [all, inPeriod, thisMonth, prevMonth, monthData, partner, priceRes] = await Promise.all([
+  const lastSameDaysEnd = (() => { const e = `${lastMonth}-${today.slice(8, 10)}`, me = monthEnd(lastMonth); return e < me ? e : me; })();
+  const [all, inPeriod, thisMonth, prevMonth, prevSameDays, monthData, partner, priceRes] = await Promise.all([
     getAccountingData(supabase),
     getAccountingData(supabase, period.from ?? undefined, to),
     getAccountingData(supabase, startOfMonth(today), today),
     getAccountingData(supabase, `${lastMonth}-01`, monthEnd(lastMonth)),
+    getAccountingData(supabase, `${lastMonth}-01`, lastSameDaysEnd),
     Promise.all(last6.map(async (m) => ({ month: m, data: await getAccountingData(supabase, `${m}-01`, m === month ? today : monthEnd(m)) }))),
     loadPartnerData(supabase, businessId),
     supabase.from("market_prices").select("price_per_kg, date").eq("business_id", businessId).order("date", { ascending: false }).limit(1).maybeSingle(),
@@ -32,7 +34,7 @@ export async function loadMoneyData(supabase: SupabaseClient<any>, businessId: s
   const price = priceRes.data as { price_per_kg: number | string; date: string } | null;
 
   return buildMoneyModel({
-    today, period: { from: period.from, to }, all, inPeriod, thisMonth, lastMonth: prevMonth, months: monthData,
+    today, period: { from: period.from, to }, all, inPeriod, thisMonth, lastMonth: prevMonth, lastMonthSameDays: prevSameDays, months: monthData,
     farm: partner.farm, home: partner.home,
     marketPrice: price && Number(price.price_per_kg) > 0 ? { perKg: Number(price.price_per_kg), date: String(price.date).slice(0, 10) } : null,
   });

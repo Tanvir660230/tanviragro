@@ -16,7 +16,10 @@ export const tone = (n: number) => (Math.round(n) > 0 ? "text-emerald-600 dark:t
 export function MoneyToday({ m }: { m: MoneyModel }) {
   const L = useL();
   const { locale } = useTranslation();
-  const change = m.monthExpenses - m.lastMonthExpenses;
+  // against the same days of last month: a month half gone always looks cheaper than a whole one
+  const change = m.monthExpenses - m.lastMonthSameDays;
+  const day = Number(m.today.slice(8, 10));
+  const oldPrice = m.marketPriceAgeDays != null && m.marketPriceAgeDays > 30;
   const w = m.netWorth;
 
   return (
@@ -28,8 +31,9 @@ export function MoneyToday({ m }: { m: MoneyModel }) {
             : L("হাত ও ব্যাংক মিলিয়ে", "on hand and in the bank")}
           warn={m.runwayDays != null && m.runwayDays < 7} />
         <Tile icon={CalendarDays} label={L("এই মাসের চলতি খরচ", "Running costs this month")} value={taka(m.monthExpenses)}
-          note={m.lastMonthExpenses > 0
-            ? L(`গত মাসে ${taka(m.lastMonthExpenses)} (${change >= 0 ? "বেশি" : "কম"} ${taka(change)})`, `last month ${taka(m.lastMonthExpenses)} (${change >= 0 ? "up" : "down"} ${taka(change)})`)
+          note={m.lastMonthSameDays > 0
+            ? L(`গত মাসের প্রথম ${day} দিনে ${taka(m.lastMonthSameDays)} (${change >= 0 ? "বেশি" : "কম"} ${taka(change)}) · পুরো মাসে ${taka(m.lastMonthExpenses)}`,
+                `first ${day} days of last month ${taka(m.lastMonthSameDays)} (${change >= 0 ? "up" : "down"} ${taka(change)}) · whole month ${taka(m.lastMonthExpenses)}`)
             : L("খাবার, ডাক্তার, মজুরি, বিদ্যুৎ …", "feed, vet, labour, utilities …")} />
         <Tile icon={m.farmResult.total >= 0 ? TrendingUp : TrendingDown} label={L("আজ সব গরু বিক্রি করলে", "If every animal were sold today")}
           value={signed(m.farmResult.total)} valueCls={tone(m.farmResult.total)}
@@ -42,11 +46,12 @@ export function MoneyToday({ m }: { m: MoneyModel }) {
                   `cash ${taka(w.cash)} + stock ${taka(w.stock)} + cattle ${taka(w.herd)} + assets ${taka(w.assets)}${w.dues > 0.5 ? ` − dues ${taka(w.dues)}` : ""}`)} />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-5 py-2.5 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
+        <span className={cn("flex items-center gap-1.5", oldPrice && "font-medium text-amber-700 dark:text-amber-400")}>
           <Scale className="h-3.5 w-3.5" aria-hidden />
           {m.marketPrice
             ? L(`গরুর দাম ধরা হয়েছে ৳${m.marketPrice.perKg}/কেজি (${fmtDay(m.marketPrice.date, locale)})`, `Cattle valued at ৳${m.marketPrice.perKg}/kg (${fmtDay(m.marketPrice.date, locale)})`)
             : L("বাজারদর দেওয়া নেই — গরু খরচে ধরা হয়েছে", "No market price — cattle counted at cost")}
+          {oldPrice && L(` — ${m.marketPriceAgeDays} দিন পুরনো, নতুন দাম দিন`, ` — ${m.marketPriceAgeDays} days old, set today's price`)}
         </span>
         <Link href="#market-price" className="font-medium text-primary hover:underline">{L("বাজারদর বদলান", "Update the price")}</Link>
       </div>
