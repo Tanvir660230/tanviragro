@@ -6,6 +6,7 @@ import { unallocatedCostOf } from "@/lib/accounting/inventory-ledger";
 import { loadHomeInputs } from "@/lib/home/home-data";
 import { buildHomeModel, type HomeModel } from "@/lib/home/home-model";
 import { todayDhaka } from "@/lib/dates";
+import { assetDailyCosts, spread } from "@/lib/partners/asset-costs";
 import {
   buildPartnerPositions, type FarmPosition, type FeeRate, type PartnerPosition, type PositionAnimal,
   type PositionPartner, type ShareRule,
@@ -42,13 +43,7 @@ const dayStr = (n: number) => new Date(n * DAY).toISOString().slice(0, 10);
 const missingTable = (e: { code?: string; message?: string } | null) =>
   !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table/i.test(e.message ?? ""));
 
-/** Spread an amount evenly over the days from `from` to `to` (both included). */
-function spread(out: { date: string; amount: number }[], amount: number, from: string, to: string) {
-  const a = dayNum(from), b = dayNum(to);
-  if (!(amount) || b < a) return;
-  const per = amount / (b - a + 1);
-  for (let d = a; d <= b; d++) out.push({ date: dayStr(d), amount: per });
-}
+
 
 /**
  * Everything the partner pages show, from the central sources: the accounting engine
@@ -104,10 +99,7 @@ export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, busin
     const v = unallocatedCostOf({ ...t, category: t.inventory_items?.category ?? null });
     if (v) dailyCosts.push({ date: String(t.recorded_at).slice(0, 10), amount: v });
   }
-  for (const a of acc.fixedAssets) {
-    const end = a.disposedAt && a.disposedAt < today ? a.disposedAt : today;
-    spread(dailyCosts, a.accumulatedDepreciation, a.purchaseDate, end);   // the depreciation to date, over the days it built up
-  }
+  dailyCosts.push(...assetDailyCosts(acc.fixedAssets, today));   // depreciation, and a sold asset's gain or loss
   const firstLoan = db.loansData.map((l) => String(l.loan_date).slice(0, 10)).sort()[0];
   if (firstLoan) spread(dailyCosts, acc.incomeStatement.interestExpense, firstLoan, today);
 

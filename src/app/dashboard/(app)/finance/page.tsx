@@ -8,6 +8,7 @@ import { TransactionStatement } from "@/components/finance/TransactionStatement"
 import { MarketPriceCard } from "@/components/finance/MarketPriceCard";
 import { MoneyToday } from "@/components/finance/money/MoneyToday";
 import { MoneyChecks } from "@/components/finance/money/MoneyChecks";
+import { CashCountPanel } from "@/components/finance/money/CashCountPanel";
 import { PeriodOverview } from "@/components/finance/money/PeriodOverview";
 import { MonthlyTrend } from "@/components/finance/money/MonthlyTrend";
 import { SellPlanner } from "@/components/finance/money/SellPlanner";
@@ -41,14 +42,33 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
   const businessId = biz?.id ?? "";
   const { start, end } = financePeriod(fp, fs, fe, biz?.fiscal_year_start_month ?? 7);
 
-  const [m, partner, costsRes, purchasesRes, treatmentsRes, payersRes, cyclesProbe] = await Promise.all([
+  // the lists read only the chosen period's rows (date columns, so no time-zone edge); the asset
+  // payments are read in full because an asset is owned until it is sold
+  const COST_COLS = "id, type, entry_class, category, amount, recorded_at, description, cattle_id";
+  const [m, partner, costsRes, assetCostsRes, purchasesRes, treatmentsRes, payersRes, cyclesProbe] = await Promise.all([
     loadMoneyData(supabase, businessId, { from: start, to: end }),
     loadPartnerData(supabase, businessId),
-    selectAll(() => supabase.from("cost_entries").select("id, type, entry_class, category, amount, recorded_at, description, cattle_id")
-      .eq("business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
-    selectAll(() => supabase.from("inventory_transactions").select("id, qty, unit_cost, recorded_at, notes, inventory_items!inner(name, category, unit, business_id)")
-      .eq("inventory_items.business_id", businessId).eq("movement_type", "purchase").not("unit_cost", "is", null).order("id")).then((data) => ({ data })),
-    supabase.from("cattle_treatments").select("id, cattle_id, vet_fee, additional_medical_cost, treated_at, diagnosis, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId),
+    selectAll(() => {
+      let q = supabase.from("cost_entries").select(COST_COLS).eq("business_id", businessId).is("deleted_at", null);
+      if (start) q = q.gte("recorded_at", start);
+      if (end) q = q.lte("recorded_at", end);
+      return q.order("id");
+    }).then((data) => ({ data })),
+    selectAll(() => supabase.from("cost_entries").select(COST_COLS).eq("business_id", businessId).is("deleted_at", null)
+      .eq("entry_class", "asset").order("id")).then((data) => ({ data })),
+    selectAll(() => {
+      let q = supabase.from("inventory_transactions").select("id, qty, unit_cost, recorded_at, notes, inventory_items!inner(name, category, unit, business_id)")
+        .eq("inventory_items.business_id", businessId).eq("movement_type", "purchase").not("unit_cost", "is", null);
+      if (start) q = q.gte("recorded_at", start);
+      if (end) q = q.lte("recorded_at", end);
+      return q.order("id");
+    }).then((data) => ({ data })),
+    selectAll(() => {
+      let q = supabase.from("cattle_treatments").select("id, cattle_id, vet_fee, additional_medical_cost, treated_at, diagnosis, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId);
+      if (start) q = q.gte("treated_at", start);
+      if (end) q = q.lte("treated_at", end);
+      return q.order("id");
+    }).then((data) => ({ data })),
     supabase.from("partners").select("id, name").eq("business_id", businessId).is("deleted_at", null).order("name"),
     supabase.from("partner_cycles").select("id", { head: true, count: "exact" }).eq("business_id", businessId),
   ]);
@@ -70,7 +90,7 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
 
   // ── assets: the engine's register (value after depreciation) + asset payments without one ──
   const linked = new Set(m.fixedAssets.map((a) => a.sourceCostEntryId).filter(Boolean));
-  const costAssets = entries.filter((e) => e.entry_class === "asset" && !linked.has(e.id));
+  const costAssets = ((assetCostsRes.data ?? []) as CostEntry[]).filter((e) => !linked.has(e.id)).sort((a, b) => b.recorded_at.localeCompare(a.recorded_at));
   const fixedAssets: SimpleFixedAsset[] = m.fixedAssets.filter((a) => a.isActive).map((a) => ({
     id: a.id, name: a.name, category: a.category, description: a.description, purchaseDate: a.purchaseDate,
     purchaseCost: a.purchaseCost, bookValue: a.bookValue, annualDepreciation: a.annualDepreciation, usefulLifeYears: a.usefulLifeYears,
@@ -96,7 +116,12 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
           { value: "costs", bn: "খরচের তালিকা", en: "Expenses", icon: <Receipt />, count: expenseEntries.length,
             content: <CostList entries={expenseEntries} inventoryPurchases={purchases} treatmentFees={treatmentFees}
               cattleTags={Object.fromEntries(partner.farm.animals.map((a) => [a.id, a.tag]))} /> },
-          { value: "cash", bn: "নগদ বিবরণী", en: "Cash statement", icon: <History />, content: <TransactionStatement /> },
+          { value: "cash", bn: "নগদ বিবরণী", en: "Cash statement", icon: <History />, content: (
+            <div className="space-y-4">
+              <CashCountPanel count={m.cashCount} cashToday={m.cash} />
+              <TransactionStatement />
+            </div>
+          ) },
           { value: "cattle", bn: "প্রতি গরু", en: "Per animal", icon: <Beef />, count: m.animals.length, content: (
             <div className="space-y-4">
               <SellPlanner animals={m.animals} costPerHeadDay={m.costPerHeadDay} defaultPrice={m.marketPrice?.perKg ?? null} />

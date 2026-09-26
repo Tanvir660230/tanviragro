@@ -29,6 +29,9 @@ export function MoneyToday({ m }: { m: MoneyModel }) {
           note={m.runwayDays != null
             ? L(`গত ৩০ দিনে গড়ে দিনে ${taka(m.avgDailySpend)} খরচ — এই হারে প্রায় ${m.runwayDays} দিন চলবে`, `Spent ${taka(m.avgDailySpend)} a day over 30 days — lasts about ${m.runwayDays} days at that rate`)
             : L("হাত ও ব্যাংক মিলিয়ে", "on hand and in the bank")}
+          extra={m.cashCount.last && (Math.abs(m.cashCount.last.gap) < 1
+            ? L(`${fmtDay(m.cashCount.last.date, locale)} গুনে মিলেছে`, `counted on ${fmtDay(m.cashCount.last.date, locale)}: matches`)
+            : L(`${fmtDay(m.cashCount.last.date, locale)} গুনে ${taka(m.cashCount.last.gap)} ${m.cashCount.last.gap < 0 ? "কম" : "বেশি"}`, `counted on ${fmtDay(m.cashCount.last.date, locale)}: ${taka(m.cashCount.last.gap)} ${m.cashCount.last.gap < 0 ? "short" : "over"}`))}
           warn={m.runwayDays != null && m.runwayDays < 7} />
         <Tile icon={CalendarDays} label={L("এই মাসের চলতি খরচ", "Running costs this month")} value={taka(m.monthExpenses)}
           note={m.lastMonthSameDays > 0
@@ -58,12 +61,13 @@ export function MoneyToday({ m }: { m: MoneyModel }) {
   );
 }
 
-function Tile({ icon: Icon, label, value, note, valueCls, warn }: { icon: React.ElementType; label: string; value: string; note: React.ReactNode; valueCls?: string; warn?: boolean }) {
+function Tile({ icon: Icon, label, value, note, valueCls, warn, extra }: { icon: React.ElementType; label: string; value: string; note: React.ReactNode; valueCls?: string; warn?: boolean; extra?: React.ReactNode }) {
   return (
     <div className="bg-card px-5 py-4">
       <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />{label}</p>
       <p className={cn("mt-1 text-xl font-bold tabular-nums tracking-tight sm:text-2xl", valueCls)}>{value}</p>
       <p className={cn("mt-0.5 text-[11px] leading-snug", warn ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>{note}</p>
+      {extra && <p className="mt-0.5 text-[11px] font-medium leading-snug text-muted-foreground">{extra}</p>}
     </div>
   );
 }

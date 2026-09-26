@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { fmtDay } from "@/lib/format";
 import type { MoneyCheck, MoneyModel } from "@/lib/money/money-model";
 import { taka } from "./MoneyToday";
 
@@ -12,6 +14,7 @@ import { taka } from "./MoneyToday";
  */
 export function MoneyChecks({ checks }: { checks: MoneyModel["checks"] }) {
   const L = useL();
+  const { locale } = useTranslation();
   const problems = checks.filter((c) => !c.ok);
 
   if (problems.length === 0) {
@@ -23,6 +26,7 @@ export function MoneyChecks({ checks }: { checks: MoneyModel["checks"] }) {
     );
   }
 
+  const day = (d?: string) => (d ? fmtDay(d, locale) : "");
   const text = (c: MoneyCheck): { msg: string; href: string; action: string } => {
     switch (c.key) {
       case "books": return { msg: L(`খাতা মিলছে না (${taka(c.amount ?? 0)} পার্থক্য) — কোনো লেনদেন অর্ধেক লেখা হয়েছে`, `The books are off by ${taka(c.amount ?? 0)} — an entry is half recorded`), href: "/dashboard/accounting", action: L("হিসাব দেখুন", "Open accounts") };
@@ -30,6 +34,13 @@ export function MoneyChecks({ checks }: { checks: MoneyModel["checks"] }) {
       case "price": return { msg: c.count == null ? L("বাজারদর দেওয়া নেই — গরুর দাম খরচে ধরা হচ্ছে", "No market price — cattle are counted at cost") : L(`বাজারদর ${c.count} দিন পুরনো — গরুর দাম আর লাভের হিসাব এর ওপর`, `The market price is ${c.count} days old — cattle values lean on it`), href: "#market-price", action: L("দাম দিন", "Set the price") };
       case "weights": return { msg: L(`${c.count}টি গরু অনেক দিন মাপা হয়নি — এদের দাম আন্দাজ`, `${c.count} animals not weighed lately — their value is a guess`), href: "/dashboard/cattle", action: L("ওজন দিন", "Weigh") };
       case "stock": return { msg: L(`স্টক শূন্যের নিচে (${taka(c.amount ?? 0)}) — কেনার চেয়ে বেশি খাওয়ানো লেখা হয়েছে; কোনো কেনা লেখা বাকি`, `Stock is below zero (${taka(c.amount ?? 0)}) — more fed than bought; a purchase is missing`), href: "/dashboard/inventory", action: L("স্টক দেখুন", "Open stock") };
+      case "count": return {
+        msg: !c.date ? L("হাতের টাকা কখনো গুনে মেলানো হয়নি — গুনে লিখলে লেখা-বাকি খরচ ধরা পড়বে", "The cash has never been counted — a count shows spending not entered")
+          : c.amount != null ? (c.amount < 0
+            ? L(`${day(c.date)} গুনে হিসাবের চেয়ে ${taka(c.amount)} কম পেয়েছেন — কোনো খরচ লেখা বাকি`, `Counted ${taka(c.amount)} less than the books on ${day(c.date)} — spending not entered`)
+            : L(`${day(c.date)} গুনে হিসাবের চেয়ে ${taka(c.amount)} বেশি পেয়েছেন — কোনো আয় বা মূলধন লেখা বাকি`, `Counted ${taka(c.amount)} more than the books on ${day(c.date)} — money in not entered`))
+          : L(`শেষবার টাকা গোনা হয়েছে ${c.count} দিন আগে — আবার গুনে মেলান`, `Last counted ${c.count} days ago — count again`),
+        href: "?tab=cash#cash-count", action: L("গুনে মেলান", "Count") };
       case "cash": return { msg: L(`নগদ শূন্যের নিচে (−${taka(c.amount ?? 0)}) — কোনো টাকা আসা লেখা হয়নি`, `Cash is below zero (−${taka(c.amount ?? 0)}) — money that came in is not recorded`), href: "?tab=cash", action: L("নগদ বিবরণী", "Cash statement") };
     }
   };

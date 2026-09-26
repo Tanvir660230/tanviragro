@@ -66,7 +66,7 @@ describe("no asset purchase is counted twice (source guards)", () => {
     expect(fs.existsSync(path.join(__dirname, "..", "lib/financial/financial-repository.ts"))).toBe(false);
   });
   test("asset lists show a linked purchase once", () => {
-    expect(read("app/dashboard/(app)/finance/page.tsx")).toMatch(/e\.entry_class === "asset" && !linked\.has\(e\.id\)/);
+    expect(read("app/dashboard/(app)/finance/page.tsx")).toMatch(/assetCostsRes\.data \?\? \[\]\) as CostEntry\[\]\)\.filter\(\(e\) => !linked\.has\(e\.id\)\)/);
     expect(read("app/dashboard/(app)/accounting/balance-sheet/page.tsx")).toMatch(/!linkedPayments\.has\(e\.id\)/);
   });
   test("the database refuses to orphan or over-link a payment", () => {

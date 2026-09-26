@@ -10,7 +10,7 @@
  * sold or died in it.
  */
 import type { AccountingData } from "@/lib/accounting/engine";
-import type { CashRow } from "@/lib/accounting/cash-ledger";
+import { cashOnDate, type CashRow } from "@/lib/accounting/cash-ledger";
 import type { FarmPosition } from "@/lib/partners/position";
 import type { HomeModel } from "@/lib/home/home-model";
 import { capitalSummary } from "@/lib/money/summary";
@@ -45,12 +45,17 @@ export type MoneyInput = {
   marketPrice: { perKg: number; date: string } | null;
   /** the accounts' "if sold today" result (lib/partners/load-positions.ts) — must equal farm.total */
   accountsCheck: number;
+  /** cash counts written down (newest first); null until migration 20260927120000 is applied */
+  cashCounts: { id: string; date: string; amount: number; note: string | null }[] | null;
 };
+
+/** How often the cash should be counted against the books. */
+export const COUNT_EVERY_DAYS = 7;
 
 /** A market price older than this is flagged: every cattle value leans on it. */
 export const PRICE_STALE_DAYS = 7;
 
-export type MoneyCheck = { key: "books" | "engines" | "price" | "weights" | "stock" | "cash"; ok: boolean; amount?: number; count?: number };
+export type MoneyCheck = { key: "books" | "engines" | "price" | "weights" | "stock" | "cash" | "count"; ok: boolean; amount?: number; count?: number; date?: string };
 
 export type MoneyModel = ReturnType<typeof buildMoneyModel>;
 
@@ -139,6 +144,14 @@ export function buildMoneyModel(input: MoneyInput) {
   const marketPriceAgeDays = input.marketPrice ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${input.marketPrice.date}T00:00:00Z`)) / DAY) : null;
   const unweighed = animals.filter((a) => a.daysSinceWeighed == null || a.daysSinceWeighed > WEIGH_EVERY_DAYS).length;
   const enginesGap = input.accountsCheck - farm.total;
+  // each count against the books for that day — recomputed now, so an expense entered later
+  // (backdated to when it was spent) closes the gap
+  const counts = (input.cashCounts ?? []).map((c) => {
+    const expected = cashOnDate(all.cashLedger, all.openingCash, c.date);
+    return { ...c, expected, gap: c.amount - expected };
+  });
+  const lastCount = counts[0] ?? null;
+  const countAge = lastCount ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${lastCount.date}T00:00:00Z`)) / DAY) : null;
   const checks: MoneyCheck[] = [
     { key: "books", ok: bs.isBalanced, amount: bs.discrepancy },                         // assets = dues + capital + profit
     { key: "engines", ok: Math.abs(enginesGap) < 10, amount: enginesGap },               // accounts and partner engine agree
@@ -146,11 +159,17 @@ export function buildMoneyModel(input: MoneyInput) {
     { key: "weights", ok: unweighed === 0, count: unweighed },
     { key: "stock", ok: bs.feedInventory > -0.5, amount: bs.feedInventory },            // below zero: more fed than bought
     { key: "cash", ok: bs.cashAndBank > -0.5, amount: bs.cashAndBank },                 // below zero: money in not entered
+    // the counted cash matches the books, and was counted lately (no check before the migration)
+    input.cashCounts == null ? { key: "count", ok: true }
+      : !lastCount ? { key: "count", ok: false }
+      : Math.abs(lastCount.gap) >= 1 ? { key: "count", ok: false, amount: lastCount.gap, date: lastCount.date }
+      : { key: "count", ok: countAge! <= COUNT_EVERY_DAYS, count: countAge!, date: lastCount.date },
   ];
 
   return {
     today,
     checks,
+    cashCount: { enabled: input.cashCounts != null, list: counts.slice(0, 10), last: lastCount, ageDays: countAge },
     cash: bs.cashAndBank,
     avgDailySpend,
     runwayDays,

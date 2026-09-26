@@ -374,6 +374,19 @@ export type PartnerCycle = {
   deleted_at: string | null;
 };
 
+/** A cash count written down by the owner (migration 20260927120000). */
+export type CashCount = {
+  id: string;
+  business_id: string;
+  counted_on: string;
+  amount: number;
+  expected: number | null;
+  note: string | null;
+  created_at: string;
+  created_by: string | null;
+  deleted_at: string | null;
+};
+
 export type ManagementFeeRate = {
   id: string;
   business_id: string;
@@ -771,6 +784,12 @@ export type Database = {
         Row: PartnerCycle;
         Insert: { id?: string; business_id: string; closed_on: string; note?: string | null; snapshot?: Record<string, unknown>; created_at?: string; created_by?: string | null; deleted_at?: string | null };
         Update: Partial<PartnerCycle>;
+        Relationships: [];
+      };
+      cash_counts: {
+        Row: CashCount;
+        Insert: { id?: string; business_id: string; counted_on: string; amount: number; expected?: number | null; note?: string | null; created_at?: string; created_by?: string | null; deleted_at?: string | null };
+        Update: Partial<CashCount>;
         Relationships: [];
       };
       partner_transactions: {

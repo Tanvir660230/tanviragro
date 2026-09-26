@@ -31,7 +31,7 @@ function input(over: Partial<MoneyInput> = {}): MoneyInput {
     all: acc({ ledger }), inPeriod: acc({ is: { feedExpenses: 8000, laborWages: 1500, utilities: 1600, depreciation: 1100 }, ledger }),
     thisMonth: acc({ is: { feedExpenses: 8000, laborWages: 1500, utilities: 1600 } }), lastMonth: acc({ is: { feedExpenses: 9000 } }), lastMonthSameDays: acc({ is: { feedExpenses: 7000 } }),
     months: [{ month: "2026-08", data: acc({ is: { feedExpenses: 9000 } }) }, { month: "2026-09", data: acc({ is: { feedExpenses: 8000, laborWages: 1500 } }) }],
-    farm, home, marketPrice: { perKg: 420, date: "2026-09-24" }, accountsCheck: 27711, ...over,
+    farm, home, marketPrice: { perKg: 420, date: "2026-09-24" }, accountsCheck: 27711, cashCounts: null, ...over,
   };
 }
 
@@ -108,5 +108,22 @@ describe("money model", () => {
     const n = buildMoneyModel(input({ all: neg }));
     expect(ok(n, "stock")).toBe(false);
     expect(ok(n, "cash")).toBe(false);
+  });
+  it("cash counts: the counted cash against the books for that day", () => {
+    const ledger = [row("a", "2026-09-01", "Capital In", 20000, "in"), row("b", "2026-09-20", "Operating Cost", 3000, "out")];
+    const all = { ...acc({ ledger }), openingCash: 0 } as AccountingData;
+    const chk = (m: ReturnType<typeof buildMoneyModel>) => m.checks.find((c) => c.key === "count")!;
+    // before the migration: no check at all
+    expect(chk(buildMoneyModel(input({ all, cashCounts: null }))).ok).toBe(true);
+    // never counted: a reminder
+    expect(chk(buildMoneyModel(input({ all, cashCounts: [] }))).ok).toBe(false);
+    // counted 14,500 on 25 Sep; the books say 17,000 → 2,500 not entered
+    const m = buildMoneyModel(input({ all, cashCounts: [{ id: "k", date: "2026-09-25", amount: 14500, note: null }] }));
+    expect(m.cashCount.last!.expected).toBe(17000);
+    expect(m.cashCount.last!.gap).toBe(-2500);
+    expect(chk(m)).toMatchObject({ ok: false, amount: -2500, date: "2026-09-25" });
+    // it matches and is recent: fine; a match 20 days old: count again
+    expect(chk(buildMoneyModel(input({ all, cashCounts: [{ id: "k", date: "2026-09-25", amount: 17000, note: null }] }))).ok).toBe(true);
+    expect(chk(buildMoneyModel(input({ all, cashCounts: [{ id: "k", date: "2026-09-07", amount: 20000, note: null }] }))).ok).toBe(false);
   });
 });

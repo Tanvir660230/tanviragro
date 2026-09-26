@@ -540,3 +540,20 @@ As a result, cash, the running costs, "if sold today" and the farm's worth are t
 - **The partner engine does not see an asset sale's gain or loss.** When an asset is sold, the checks strip will show the difference until the partner engine learns it.
 - **Only entered money counts.** A weekly cash count (enter the counted cash, see the gap) would catch unrecorded spending.
 - **List rows load all-time and are filtered in the page.** This is fine for a few thousand rows; later, filter in the query.
+
+## 16. Cash counts; a sold asset in the partner result; lighter lists (2026-09-27)
+
+**Cash counts** (migration `20260927120000_cash_counts`; rollback in `supabase/rollback/`)
+- The owner counts the cash in hand and in the bank, and writes the figure down in the Cash statement tab ("টাকা গুনে মেলান").
+- Each count is compared with `cashOnDate(ledger, opening, day)`, recomputed every time. When a missing expense is entered on the day it was spent, the gap closes by itself.
+- The checks strip warns in three cases: the cash was never counted, the last count differs by ৳1 or more, or the last count is older than 7 days (`COUNT_EVERY_DAYS`).
+- Until the migration is applied, the table is missing and the panel and the check stay hidden.
+- **Status:** the migration is **not applied on production yet**; auto mode blocked the write. Apply it with auto mode off, before or with the deploy.
+
+**A sold asset in the partner result**
+- `lib/partners/asset-costs.ts` adds, on the disposal day, the asset's value then minus the money got for it.
+- This matches the accounts' `assetDisposalGain`, so `accountsCheck` = `farm.total` still holds after a sale.
+
+**Lighter lists**
+- The Money page lists read only the chosen period's rows from the database: expenses, stock bought and treatments. These are date columns, so there is no time-zone edge.
+- Asset payments are read in full, because an asset is owned until it is sold.
