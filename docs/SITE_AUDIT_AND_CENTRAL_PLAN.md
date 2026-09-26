@@ -548,7 +548,7 @@ As a result, cash, the running costs, "if sold today" and the farm's worth are t
 - Each count is compared with `cashOnDate(ledger, opening, day)`, recomputed every time. When a missing expense is entered on the day it was spent, the gap closes by itself.
 - The checks strip warns in three cases: the cash was never counted, the last count differs by ৳1 or more, or the last count is older than 7 days (`COUNT_EVERY_DAYS`).
 - Until the migration is applied, the table is missing and the panel and the check stay hidden.
-- **Status:** the migration is **not applied on production yet**; auto mode blocked the write. Apply it with auto mode off, before or with the deploy.
+- **Status:** applied on production on 2026-09-27. Checked afterwards: row-level security is on, one "tenant members" policy, 0 rows, and a stranger's insert is refused (a dry run, nothing saved).
 
 **A sold asset in the partner result**
 - `lib/partners/asset-costs.ts` adds, on the disposal day, the asset's value then minus the money got for it.
