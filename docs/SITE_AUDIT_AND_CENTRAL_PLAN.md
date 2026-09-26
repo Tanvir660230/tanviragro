@@ -557,3 +557,30 @@ As a result, cash, the running costs, "if sold today" and the farm's worth are t
 **Lighter lists**
 - The Money page lists read only the chosen period's rows from the database: expenses, stock bought and treatments. These are date columns, so there is no time-zone edge.
 - Asset payments are read in full, because an asset is owned until it is sold.
+
+## 17. Site-wide scan: one figure everywhere, and speed (2026-09-27, deployed f6d221a)
+
+**Why it was slow**
+- **The login check went to the network too often.** `auth.getUser()` (a round trip to the auth server) ran 8–10 times on every page: in the proxy, sidebar, bottom bar, header, business context and the page.
+- **The farm lookup repeated.** `getBusinessContext` was cached per client object, so each part of a page that made its own client repeated getUser → business → profile.
+- **The server is far from the database.** The database host resolves to `2406:da14::` (AWS, probably Tokyo); Netlify functions run in the US by default, so every query crosses the Pacific.
+- **Measured:** the live login page took 0.5–1.3 s, and 7 s on a cold start. The same build ran locally answers in 10 ms.
+
+**Fixed in code**
+- **Login check:** `getClaims()` verifies the session locally (the project signs with ES256), in the proxy and in the context.
+- **Farm lookup:** the context is resolved once per request; the owner's business and profile are read together.
+- **Sidebar, bottom bar and header:** they use the context, with no queries of their own.
+- **Heavy reads:** the accounting engine, feed data and partner data are memoized per request by farm (`lib/request-memo.ts`). The homepage starts the accounting read together with the rest.
+- **Header alerts:** stock comes from `v_inventory_balance` (it used to add up to 5,000 raw rows), and the cattle tags are read in the same queries.
+- **Client cache:** `staleTimes.dynamic = 30`.
+- **Fonts:** unused weights dropped, and the mono font is not preloaded.
+- **Still to do by the owner:** Netlify → Site configuration → Functions → Region → pick the one nearest the database (Asia Pacific, Tokyo). This is the biggest remaining gain.
+
+**Same data, different figures (fixed)**
+- **One cost and one profit per animal:** the homepage, cattle list and an animal's page counted cost as purchase + feed + own costs. The Money and partners pages add the farm's running-cost share. Now all of them use the farm position (`lib/home/farm-align.ts`).
+- **Weighing rule:** it was 7 days in the header, notifications and cattle list, and 14 on the homepage. Now it is 14 days everywhere (`WEIGH_EVERY_DAYS`).
+- **Qurbani board:** it had its own Eid dates and its own growth rate (a regression). It now uses `nextEidDate` and the home model's measured growth.
+- **Stock:** two formulas (by `type` and by `movement_type`) gave the same numbers today. The stock page and the stock lookup now use `v_inventory_balance`; the lookup used to sum raw rows capped at 1,000.
+- **Balance sheet:** the liability lines did not add up to the total when a partner had lent money. Partner loans are now shown (`partnerLoans`).
+- **Bell:** now in Bangla, with only real alerts (the fake "system online" notice is gone).
+- **Page titles:** they come from the site map (the menu's words).
