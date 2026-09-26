@@ -55,30 +55,20 @@ import { partnerTxnLabel, partnerTypeLabel } from "@/lib/partners/labels";
 import { Tr } from "@/i18n/Tr";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { todayDhaka } from "@/lib/dates";
+import type { PartnerPosition } from "@/lib/partners/position";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type TxnFilter = "all" | "investment" | "withdrawal" | "profit" | "loss_allocation";
 
-export interface PartnerAccountSummary {
-  totalInvested: number;
-  withdrawn: number;
-  profitReceived: number;
-  lossBorne: number;
-  laborValue: number;
-  months: number;
-  equity: number;
-  pendingProfit: number;
-  pendingLoss: number;
-}
+/** The farm figures this partner's shares come from (lib/partners/position.ts). */
+export type ProfileFarm = { realized: number; estimate: number; total: number; soldCount: number; marketPricePerKg: number | null; herdValued: boolean };
 
 interface Props {
   partner: Partner;
   transactions: PartnerTransaction[];
-  sharePct: number;
-  acc: PartnerAccountSummary;
-  totalBusinessValue: number;
-  hasMarketPrice: boolean;
+  position: PartnerPosition;
+  farm: ProfileFarm;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -178,10 +168,8 @@ const TYPE_CFG: Record<
 export function PartnerProfileClient({
   partner: p,
   transactions,
-  sharePct,
-  acc,
-  totalBusinessValue,
-  hasMarketPrice,
+  position: pos,
+  farm,
 }: Props) {
   const L = useL();
   const { locale } = useTranslation();
@@ -220,10 +208,8 @@ export function PartnerProfileClient({
   const withBalance = chronological.reduce(
     (arr, txn) => {
       const last = arr.length > 0 ? arr[arr.length - 1].balance : 0;
-      const delta =
-        txn.type === "investment" || txn.type === "profit"
-          ? txn.amount
-          : -txn.amount;
+      // capital only: a profit payout or a loss record is not capital put in or taken out
+      const delta = txn.type === "investment" ? txn.amount : txn.type === "withdrawal" ? -txn.amount : 0;
       arr.push({ ...txn, balance: last + delta });
       return arr;
     },
@@ -272,8 +258,8 @@ export function PartnerProfileClient({
   const typeCfg = TYPE_CFG[p.partner_type ?? "capital"] ?? TYPE_CFG.capital;
   const avColor = avatarColor(p.name);
   const initStr = initials(p.name);
-  const currentValue = Math.round((totalBusinessValue * sharePct) / 100);
-  const isEquityPositive = acc.equity >= 0;
+  const months = Math.max(0, Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${String(p.joined_at).slice(0, 10)}T00:00:00Z`)) / (30.44 * 86400000)));
+  const share = pos.realizedShare + pos.estimateShare;
 
   function handleDelete() {
     startDeleteTransition(async () => {
@@ -328,18 +314,12 @@ export function PartnerProfileClient({
                     </span>
                     <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                       <Layers className="h-3 w-3" />
-                      {sharePct.toFixed(1)}%
+                      {L(`লাভের ${pos.profitPct.toFixed(1)}%`, `${pos.profitPct.toFixed(1)}% of profit`)}
                     </span>
-                    {acc.pendingProfit > 0 && (
+                    {pos.distributable > 0.5 && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                         <Clock className="h-3 w-3" />
-                        {L("লাভ পাওনা", "Profit due")}: {bdt(acc.pendingProfit)}
-                      </span>
-                    )}
-                    {acc.pendingLoss > 0 && (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
-                        <Clock className="h-3 w-3" />
-                        {L("ক্ষতি বাকি", "Loss due")}: {bdt(acc.pendingLoss)}
+                        {L("লাভ পাওনা", "Profit due")}: {bdt(pos.distributable)}
                       </span>
                     )}
                   </div>
@@ -383,7 +363,7 @@ export function PartnerProfileClient({
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm text-muted-foreground">
                 <span>{L("যোগ দিয়েছেন", "Joined")} {fmtDate(p.joined_at)}</span>
                 <span>·</span>
-                <span>{L(`${acc.months} মাস ধরে`, `${acc.months} month${acc.months !== 1 ? "s" : ""} active`)}</span>
+                <span>{L(`${months} মাস ধরে`, `${months} month${months !== 1 ? "s" : ""} active`)}</span>
                 {!p.bears_loss && p.partner_type !== "labor" && (
                   <><span>·</span>
                   <span className="text-amber-600 dark:text-amber-400 font-medium">{L("ক্ষতির ভাগ নেই", "No loss sharing")}</span></>
@@ -403,205 +383,46 @@ export function PartnerProfileClient({
         </div>
       </div>
 
-      {/* ── KPI Row ──────────────────────────────────────────────────── */}
-      {(() => {
-        const roi =
-          acc.totalInvested > 0
-            ? ((acc.equity - acc.totalInvested) / acc.totalInvested) * 100
-            : null;
-        return (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <ProfileStatCard
-              icon={Banknote}
-              label={L("মোট জমা", "Total Invested")}
-              value={bdt(acc.totalInvested)}
-              iconCls="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
-            />
-            <ProfileStatCard
-              icon={isEquityPositive ? TrendingUp : TrendingDown}
-              label={L("বর্তমান মূলধন", "Current Equity")}
-              value={(isEquityPositive ? "" : "−") + bdt(acc.equity)}
-              valueColor={isEquityPositive ? "green" : "red"}
-              iconCls={isEquityPositive
-                ? "text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30"
-                : "text-destructive bg-red-100 dark:bg-red-900/30"
-              }
-              sub={roi !== null ? `ROI: ${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%` : undefined}
-            />
-            <ProfileStatCard
-              icon={Layers}
-              label={L("লাভের ভাগ", "Profit Share")}
-              value={`${sharePct.toFixed(1)}%`}
-              iconCls="text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-900/30"
-            />
-            <ProfileStatCard
-              icon={Wallet}
-              label={L("লাভ পেয়েছেন", "Profit Received")}
-              value={bdt(acc.profitReceived)}
-              valueColor="green"
-              iconCls="text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30"
-              sub={acc.pendingProfit > 0 ? L(`বাকি: ${bdt(acc.pendingProfit)}`, `Pending: ${bdt(acc.pendingProfit)}`) : undefined}
-            />
-          </div>
-        );
-      })()}
+      {/* ── Position (lib/partners/position.ts — the same figures as the partners page) ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <ProfileStatCard icon={Banknote} label={L("খাটানো মূলধন", "Capital in")} value={bdt(pos.netCapital + pos.laborValue)}
+          iconCls="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
+          sub={pos.capitalOut > 0 ? L(`জমা ${bdt(pos.capitalIn)} − তোলা ${bdt(pos.capitalOut)}`, `in ${bdt(pos.capitalIn)} − out ${bdt(pos.capitalOut)}`) : undefined} />
+        <ProfileStatCard icon={Layers} label={L("লাভের ভাগ", "Share of profit")} value={`${pos.profitPct.toFixed(1)}%`}
+          iconCls="text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-900/30"
+          sub={pos.bearsLoss ? L(`ক্ষতির ভাগ ${pos.lossPct.toFixed(1)}%`, `loss share ${pos.lossPct.toFixed(1)}%`) : L("ক্ষতির ভাগ নেই", "bears no loss")} />
+        <ProfileStatCard icon={share >= 0 ? TrendingUp : TrendingDown} label={L("আজ বিক্রি করলে ভাগ", "Share if sold today")}
+          value={(share >= 0 ? "+" : "−") + bdt(share)} valueColor={share >= 0 ? "green" : "red"}
+          iconCls={share >= 0 ? "text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30" : "text-destructive bg-red-100 dark:bg-red-900/30"}
+          sub={L(`পাকা ${pos.realizedShare >= 0 ? "+" : "−"}${bdt(pos.realizedShare)} · আনুমানিক ${pos.estimateShare >= 0 ? "+" : "−"}${bdt(pos.estimateShare)}`,
+                 `final ${pos.realizedShare >= 0 ? "+" : "−"}${bdt(pos.realizedShare)} · estimate ${pos.estimateShare >= 0 ? "+" : "−"}${bdt(pos.estimateShare)}`)} />
+        <ProfileStatCard icon={Wallet} label={L("মোট পাওনা", "Account value")} value={bdt(pos.balance)}
+          iconCls="text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30"
+          sub={pos.profitReceived > 0 ? L(`লাভ পেয়েছেন ${bdt(pos.profitReceived)}`, `profit paid ${bdt(pos.profitReceived)}`) : undefined} />
+      </div>
 
-      {/* ── Capital Position ─────────────────────────────────────────── */}
-      <div className="rounded-xl bg-card border border-border shadow-card p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-            {L("মূলধনের হিসাব", "Capital Account")}
-          </h3>
-          {p.share_mode === "auto" && (
-            <span className="text-xs text-muted-foreground">
-              {L("অনুপাত অনুযায়ী ভাগ", "Ratio-based allocation")}
-            </span>
-          )}
+      <div className="rounded-xl bg-card border border-border shadow-card p-5 space-y-3 text-sm">
+        <h3 className="text-sm font-semibold flex items-center gap-2"><Wallet className="h-4 w-4 text-muted-foreground" />{L("হিসাব কীভাবে", "How it is worked out")}</h3>
+        <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          <Line label={L("জমা", "Put in")} value={`+${bdt(pos.capitalIn)}`} />
+          {pos.capitalOut > 0 && <Line label={L("তোলা", "Taken out")} value={`−${bdt(pos.capitalOut)}`} />}
+          {pos.laborValue > 0 && <Line label={L("শ্রমের মূল্য", "Labour value")} value={`+${bdt(pos.laborValue)}`} />}
+          <Line label={L("পাকা লাভ/ক্ষতির ভাগ (বিক্রি হওয়া গরু)", "Share of final result (animals sold)")} value={`${pos.realizedShare >= 0 ? "+" : "−"}${bdt(pos.realizedShare)}`} />
+          <Line label={L("আনুমানিক ভাগ (খামারে থাকা গরু)", "Estimated share (animals on the farm)")} value={`${pos.estimateShare >= 0 ? "+" : "−"}${bdt(pos.estimateShare)}`} />
+          {pos.profitReceived > 0 && <Line label={L("লাভ পেয়ে গেছেন", "Profit already paid")} value={`−${bdt(pos.profitReceived)}`} />}
+          <Line label={L("মোট পাওনা", "Account value")} value={bdt(pos.balance)} strong />
         </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {p.partner_type !== "labor" && acc.totalInvested > 0 && (
-            <PositionTile
-              label={L("জমা", "Invested")}
-              value={acc.totalInvested}
-              sign="+"
-              colorKey="blue"
-            />
-          )}
-          {acc.laborValue > 0 && (
-            <PositionTile
-              label={L("শ্রমের মূল্য", "Labor Value")}
-              value={acc.laborValue}
-              sign="+"
-              colorKey="amber"
-              icon={<Wrench className="h-3 w-3" />}
-            />
-          )}
-          {acc.withdrawn > 0 && (
-            <PositionTile
-              label={L("তোলা", "Withdrawn")}
-              value={acc.withdrawn}
-              sign="−"
-              colorKey="red"
-            />
-          )}
-          {acc.profitReceived > 0 && (
-            <PositionTile
-              label={L("লাভ দেওয়া হয়েছে", "Profit Paid Out")}
-              value={acc.profitReceived}
-              sign="+"
-              colorKey="violet"
-            />
-          )}
-          {acc.lossBorne > 0 && (
-            <PositionTile
-              label={L("ক্ষতি বহন", "Loss Borne")}
-              value={acc.lossBorne}
-              sign="−"
-              colorKey="orange"
-            />
-          )}
-          {acc.pendingProfit > 0 && (
-            <PositionTile
-              label={L("বাকি লাভ", "Pending Profit")}
-              value={acc.pendingProfit}
-              sign="+"
-              colorKey="emerald"
-              pending
-            />
-          )}
-          {acc.pendingLoss > 0 && (
-            <PositionTile
-              label={L("বাকি ক্ষতি", "Pending Loss")}
-              value={acc.pendingLoss}
-              sign="−"
-              colorKey="orange"
-              pending
-            />
-          )}
-        </div>
-
-        {/* Equity summary bar */}
-        {acc.totalInvested > 0 && (
-          <div className="mt-4 space-y-1.5 pt-4 border-t border-border/60">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {L("নিট মূলধন", "Net Equity")}
-              </span>
-              <span
-                className={cn(
-                  "text-sm font-bold tabular-nums",
-                  isEquityPositive
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-destructive"
-                )}
-              >
-                {isEquityPositive ? "+" : "−"}
-                {bdt(acc.equity)}
-              </span>
-            </div>
-            <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-500",
-                  isEquityPositive ? "bg-emerald-500" : "bg-destructive"
-                )}
-                style={{
-                  width: `${Math.min(
-                    100,
-                    (Math.abs(acc.equity) / Math.max(acc.totalInvested + acc.laborValue, 1)) * 100
-                  )}%`,
-                }}
-              />
-            </div>
-            {!hasMarketPrice && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                {L("বর্তমান বাজারমূল্য দেখতে \"খরচ ও টাকা\" পাতায় বাজারদর দিন।", "Set market price in Settings to see current market value.")}
-              </p>
-            )}
-          </div>
+        <p className="text-xs text-muted-foreground">
+          {farm.soldCount === 0
+            ? L("এখনো কোনো গরু বিক্রি হয়নি — তাই পাকা লাভ বা ক্ষতি নেই। আনুমানিক ভাগ বাজারদর ও ওজনের সাথে বদলায়।", "No animal has been sold yet — so there is no final profit or loss. The estimate moves with price and weight.")
+            : L("শুধু পাকা লাভের ভাগ বণ্টন করা যায়।", "Only the share of final profit can be paid out.")}
+          {" "}{p.share_mode === "manual"
+            ? L(`নির্দিষ্ট ভাগ: লাভের ${pos.profitPct.toFixed(1)}%।`, `Fixed share: ${pos.profitPct.toFixed(1)}% of profit.`)
+            : L(`ভাগ টাকা × দিন অনুপাতে (${Math.round(pos.capitalDays).toLocaleString("en-IN")} টাকা-দিন)।`, `Share by taka × days (${Math.round(pos.capitalDays).toLocaleString("en-IN")} taka-days).`)}
+        </p>
+        {!farm.herdValued && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">{L("কিছু গরুর দাম জানা নেই — টাকা-পয়সা পাতায় বাজারদর দিন ও গরু ওজন করুন।", "Some animals have no value yet — enter the market price and weigh the cattle.")}</p>
         )}
-
-        {/* Labor vesting */}
-        {p.partner_type !== "capital" &&
-          p.labor_value_monthly &&
-          p.labor_value_monthly > 0 && (
-            <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium flex items-center gap-1.5 text-muted-foreground">
-                  <Wrench className="h-3 w-3" />
-                  {L("শ্রমের হিসাব", "Labor Vesting")}
-                </span>
-                {acc.months >= (p.cliff_months ?? 0) ? (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                    ✓ {L(`${acc.months} মাস যোগ হয়েছে`, `${acc.months} months vested`)}
-                  </span>
-                ) : (
-                  <span className="text-amber-600 dark:text-amber-400 font-medium">
-                    ⏳ {L(`অপেক্ষা: ${acc.months}/${p.cliff_months ?? 0} মাস`, `Cliff: ${acc.months}/${p.cliff_months ?? 0} months`)}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                ৳{p.labor_value_monthly.toLocaleString("en-IN")}/{L("মাস", "month")} ×{" "}
-                {acc.months >= (p.cliff_months ?? 0) ? acc.months : 0} {L("মাস", "months")} ={" "}
-                <span className="font-semibold text-foreground">
-                  {bdt(acc.laborValue)}
-                </span>
-              </div>
-              {(p.cliff_months ?? 0) > 0 && acc.months < (p.cliff_months ?? 0) && (
-                <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-amber-400"
-                    style={{
-                      width: `${Math.min(100, (acc.months / (p.cliff_months ?? 1)) * 100)}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
       </div>
 
       {/* ── Capital Timeline Chart ───────────────────────────────────── */}
@@ -942,7 +763,7 @@ export function PartnerProfileClient({
       {editOpen && (
         <EditPartnerProfileModal
           partner={p}
-          totalInvested={acc.totalInvested}
+          totalInvested={pos.capitalIn}
           onClose={() => setEditOpen(false)}
         />
       )}
@@ -955,6 +776,14 @@ export function PartnerProfileClient({
 
 
 
+
+function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={cn("flex items-baseline justify-between gap-3", strong && "border-t border-border/60 pt-1.5 font-semibold sm:col-span-2")}>
+      <span className="text-muted-foreground">{label}</span><span className="tabular-nums">{value}</span>
+    </div>
+  );
+}
 
 // ── KpiTile ───────────────────────────────────────────────────────────────────
 

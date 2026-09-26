@@ -1,380 +1,231 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Users,
-  Banknote,
-  TrendingUp,
-  TrendingDown,
-  Info,
-  AlertCircle,
-  Wallet,
-} from "lucide-react";
+import Link from "next/link";
+import { Banknote, Beef, ChevronDown, ChevronRight, Info, Scale, Sparkles, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Partner, PartnerTransaction } from "@/types/database";
+import type { Partner } from "@/types/database";
 import { useTranslation } from "@/i18n/I18nProvider";
-import { bdt, computeNetInvestment } from "@/lib/partners/calculations";
-import { PartnerDomainService } from "@/lib/services/partner.service";
-
-import {
-  PartnerEquityChart,
-  type EquityEntry,
-} from "@/components/partners/PartnerEquityChart";
-import {
-  SummaryCard,
-  EmptyState,
-  TXN_ICON,
-  TXN_LABEL,
-  TXN_SIGN,
-  TXN_TEXT,
-} from "./partner-ui";
-import { PartnerCard } from "./PartnerCard";
+import { useL } from "@/i18n/text";
+import { todayDhaka } from "@/lib/dates";
+import { avatarColor, initials } from "@/lib/partners/calculations";
+import { partnerTypeLabel } from "@/lib/partners/labels";
+import type { FarmPosition, PartnerPosition } from "@/lib/partners/position";
+import { EmptyState } from "./partner-ui";
 import { AddPartnerDialog } from "./modals/AddPartnerDialog";
 import { AddTransactionDialog } from "./modals/AddTransactionDialog";
 import { DeclareDistributionModal } from "./modals/DeclareDistributionModal";
-import { useL } from "@/i18n/text";
-import { todayDhaka } from "@/lib/dates";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export type CattleValuation = {
-  activeCattleCount: number;
-  marketPricePerKg: number;
-  marketPriceDate: string | null;
-  totalEstimatedValue: number;
-  totalActiveCostBasis: number;
-  totalUnrealizedGain: number;
-  hasMarketPrice: boolean;
-  rows: Array<{
-    id: string;
-    daysInPen: number;
-    estimatedWeight: number;
-    weightSource: "weighed" | "estimated";
-    estimatedMarketValue: number;
-    costBasis: number;
-    unrealizedGain: number;
-  }>;
-};
-
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ── formatting ────────────────────────────────────────────────────────────────
+const taka = (n: number) => `৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
+const signed = (n: number) => (Math.round(n) === 0 ? "৳0" : `${n > 0 ? "+" : "−"}${taka(n)}`);
+const tone = (n: number) => (Math.round(n) > 0 ? "text-emerald-600 dark:text-emerald-400" : Math.round(n) < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground");
+const pct = (n: number) => `${n.toLocaleString("en-IN", { maximumFractionDigits: 1 })}%`;
 
 interface Props {
+  farm: FarmPosition;
+  positions: PartnerPosition[];
   partners: Partner[];
-  txnsByPartner: Record<string, PartnerTransaction[]>;
-  netPL: number;
-  mgmtFeeRate?: number;
-  cattleValuation: CattleValuation;
-  totalAssetValue?: number;
+  feePct: number;
 }
 
-// ── PartnerDashboard ──────────────────────────────────────────────────────────
-
-export function PartnerDashboard({
-  partners,
-  txnsByPartner,
-  netPL,
-  mgmtFeeRate = 0,
-  cattleValuation,
-  totalAssetValue = 0,
-}: Props) {
+export function PartnerDashboard({ farm, positions, partners, feePct }: Props) {
   const L = useL();
-  const { t } = useTranslation();
-
-  const [distOpen, setDistOpen] = useState(false);
+  const { t, locale } = useTranslation();
   const today = todayDhaka();
+  const [distOpen, setDistOpen] = useState(false);
+  const [showAnimals, setShowAnimals] = useState(false);
 
-  // Management fee
-  const mgmtFeeAmount = netPL > 0 ? (netPL * mgmtFeeRate) / 100 : 0;
-  const netPLAfterFee = netPL - mgmtFeeAmount;
-
-  // Centralized Enterprise Equity & Partner Portfolio Engine
-  const farmEquity = PartnerDomainService.calculateFarmEquitySummary({
-    partners,
-    txnsByPartner,
-    netPL,
-    mgmtFeeRate,
-    totalUnrealizedValuationGain: cattleValuation.hasMarketPrice ? cattleValuation.totalUnrealizedGain : 0,
-  });
-
-  const totalCapital = farmEquity.totalContributedCapital;
-  const totalEquity = farmEquity.totalBookEquity;
-  const totalBusinessValue = farmEquity.totalMarketEquity;
-  const totalPendingAmount = farmEquity.totalPendingDistribution;
-
-  const accounts = farmEquity.partners.map((b) => ({
-    partner: partners.find((p) => p.id === b.partnerId)!,
-    sharePct: b.effectiveSharePct,
-    acc: {
-      totalInvested: b.totalContributedCapital,
-      withdrawn: b.totalWithdrawnCapital,
-      profitReceived: b.totalRealizedProfit,
-      lossBorne: b.totalRealizedLoss,
-      laborValue: b.vestedLaborValue,
-      months: b.monthsActive,
-      equity: b.currentBookEquity,
-      pendingProfit: b.pendingProfit,
-      pendingLoss: b.pendingLoss,
-    },
-  }));
-
-  const pendingAccounts = accounts.filter(
-    ({ acc }) => acc.pendingProfit + acc.pendingLoss > 0
-  );
-
-  const shareWarning = !farmEquity.ownershipBalanced;
-
-  const isLoss = netPL < 0;
-
-  // Cross-partner recent activity
-  const nameById = Object.fromEntries(partners.map((p) => [p.id, p.name]));
-  const allRecentTxns = Object.entries(txnsByPartner)
-    .flatMap(([pid, txns]) =>
-      txns.map((t) => ({ ...t, partnerName: nameById[pid] ?? L("অজানা", "Unknown") }))
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
-    )
-    .slice(0, 6);
+  const sold = farm.animals.filter((a) => a.status !== "active");
+  const onFarm = farm.animals.filter((a) => a.status === "active");
+  const netCapital = farm.capitalIn - farm.capitalOut;
+  const distributable = positions.reduce((s, p) => s + p.distributable, 0);
+  const fixed = positions.filter((p) => p.shareMode === "manual");
+  const noLoss = positions.filter((p) => !p.bearsLoss);
 
   return (
-    <div className="space-y-4">
-      {/* ── Overview stat cards ───────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard
-          icon={Users}
-          label={t.partners.total_partners}
-          value={partners.length.toString()}
-          iconCls="text-primary bg-primary/10"
-        />
-        <SummaryCard
-          icon={Banknote}
-          label={L("মোট খাটানো মূলধন", "Capital Deployed")}
-          value={bdt(totalCapital)}
-          iconCls="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30"
-        />
-        <SummaryCard
-          icon={netPL >= 0 ? TrendingUp : TrendingDown}
-          label={t.partners.net_pl}
-          value={(netPL >= 0 ? "+" : "−") + bdt(netPL)}
-          valueColor={netPL > 0 ? "green" : netPL < 0 ? "red" : undefined}
-          iconCls={
-            netPL >= 0
-              ? "text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30"
-              : "text-destructive bg-red-100 dark:bg-red-900/30"
-          }
-        />
-        <SummaryCard
-          icon={Wallet}
-          label={t.partners.equity}
-          value={(totalEquity >= 0 ? "" : "−") + bdt(totalEquity)}
-          valueColor={totalEquity >= 0 ? "green" : "red"}
-          iconCls="text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-900/30"
-        />
-      </div>
-
-      {/* ── Management fee info ──────────────────────────────────────── */}
-      {mgmtFeeRate > 0 && netPL > 0 && (
-        <div className="flex items-center justify-between rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-3 text-sm">
-          <div className="flex items-center gap-2">
-            <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span className="font-medium">{L("ম্যানেজমেন্ট ফি", "Management fee")} ({mgmtFeeRate}%)</span>
-            <span className="text-muted-foreground hidden sm:inline">{L("— অংশীদারদের ভাগের আগে কাটা হয়", "— deducted before partner profit split")}</span>
-          </div>
-          <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-            {bdt(mgmtFeeAmount)}
-          </span>
-        </div>
-      )}
-
-      {/* ── Manual-share overflow warning ───────────────────────────── */}
-      {shareWarning && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-destructive">
-          {farmEquity.manualOwnershipAllocated > 100
-            ? t.partners.share_warning.replace("{{pct}}", farmEquity.manualOwnershipAllocated.toFixed(1))
-            : L("⚠️ নিজে দেওয়া ভাগ = ১০০% — বাকি অংশীদাররা লাভের ০% পাবেন।", "⚠️ Manual shares = 100% — auto partners will receive 0% profit share.")}
-        </div>
-      )}
-
-      {/* ── Pending-distribution banner ──────────────────────────────── */}
-      {partners.length > 0 && totalPendingAmount > 0 && !isLoss && (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 rounded-lg border px-4 py-3",
-            isLoss
-              ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800"
-              : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
-          )}
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            {isLoss ? (
-              <AlertCircle className="h-4 w-4 text-orange-600 shrink-0" />
-            ) : (
-              <TrendingUp className="h-4 w-4 text-emerald-600 shrink-0" />
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {isLoss ? t.partners.unallocated_loss : t.partners.undistributed_profit}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {bdt(totalPendingAmount)} · {pendingAccounts.length} partner
-                {pendingAccounts.length !== 1 ? "s" : ""}
-              </p>
-            </div>
-          </div>
-          <Button size="sm" variant="outline" className="shrink-0" onClick={() => setDistOpen(true)}>
-            {t.partners.declare_distribution}
-          </Button>
-        </div>
-      )}
-
-      {/* ── Action buttons ───────────────────────────────────────────── */}
+    <div className="space-y-5">
+      {/* ── actions ── */}
       <div className="flex flex-wrap gap-2">
-        <AddPartnerDialog
-          today={today}
-          t={t}
-          totalPartnerCapital={totalCapital}
-          netPLAfterFee={netPLAfterFee}
-          cattleValuation={cattleValuation}
-          totalAssetValue={totalAssetValue}
-        />
-
-        {partners.length > 0 && (
-          <AddTransactionDialog
-            partners={partners}
-            today={today}
-            t={t}
-          />
+        <AddPartnerDialog today={today} t={t} />
+        {partners.length > 0 && <AddTransactionDialog partners={partners} today={today} t={t} />}
+        {distributable > 0.5 && (
+          <Button variant="outline" onClick={() => setDistOpen(true)} className="gap-1.5">
+            <Banknote className="h-4 w-4" />{L(`লাভ বণ্টন (${taka(distributable)})`, `Pay out profit (${taka(distributable)})`)}
+          </Button>
         )}
       </div>
 
-      {/* ── Declare Distribution modal ───────────────────────────────── */}
+      {partners.length === 0 ? <EmptyState t={t} /> : (
+        <>
+          {/* ── 1. the farm's position ── */}
+          <section className="rounded-xl border border-border bg-card shadow-card" aria-label={L("খামারের অবস্থা", "Farm position")}>
+            <div className="border-b border-border/60 px-5 py-4">
+              <h2 className="text-sm font-semibold">{L("খামারের অবস্থা আজ", "The farm today")}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {sold.length === 0
+                  ? L("এখনো কোনো গরু বিক্রি হয়নি — তাই পাকা লাভ বা ক্ষতি কিছুই নেই। খাবার, মজুরি, বিদ্যুৎ সবই গরুর খরচের অংশ, ক্ষতি নয়।",
+                      "No animal has been sold yet — so there is no final profit or loss. Feed, wages and electricity are part of what the cattle cost, not a loss.")
+                  : L(`${sold.length}টি গরু খামার ছেড়েছে; সেগুলোর ফল পাকা।`, `${sold.length} animal(s) have left the farm; their result is final.`)}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-border/60 lg:grid-cols-4">
+              <Tile icon={Users} label={L("খাটানো মূলধন", "Capital in the farm")} value={taka(netCapital)}
+                note={L(`${positions.filter((p) => p.netCapital > 0).length} জনের জমা − তোলা`, `${positions.filter((p) => p.netCapital > 0).length} partners, in − out`)} />
+              <Tile icon={Beef} label={L("গরুর মোট খরচ", "Cattle full cost")} value={taka(farm.herdCost)}
+                note={L(`${onFarm.length}টি গরু · কেনা + খাবার + ডাক্তার + চলতি খরচ`, `${onFarm.length} head · bought + feed + vet + running costs`)} />
+              <Tile icon={Scale} label={L("গরুর আজকের দাম", "Cattle value today")} value={taka(farm.herdValue)}
+                note={farm.marketPricePerKg ? L(`ওজন × ৳${farm.marketPricePerKg}/কেজি (আনুমানিক)`, `weight × ৳${farm.marketPricePerKg}/kg (estimate)`) : L("বাজারদর নেই — খরচ ধরা হয়েছে", "no market price — counted at cost")} />
+              <Tile icon={farm.total >= 0 ? TrendingUp : TrendingDown} label={L("আজ বিক্রি করলে ফল", "Result if sold today")} value={signed(farm.total)} valueCls={tone(farm.total)}
+                note={L(`পাকা ${signed(farm.realized)} · আনুমানিক ${signed(farm.estimate)}`, `final ${signed(farm.realized)} · estimate ${signed(farm.estimate)}`)} />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-5 py-2.5 text-xs text-muted-foreground">
+              <span>{L(`চলতি খরচ মোট ${taka(farm.runningCosts)} — প্রতি গরু প্রতি দিন ${taka(farm.costPerHeadDay)}, যত দিন খামারে তত ভাগ`,
+                       `Running costs ${taka(farm.runningCosts)} in all — ${taka(farm.costPerHeadDay)} per head per day, by days on the farm`)}</span>
+              <button type="button" onClick={() => setShowAnimals((v) => !v)} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                {showAnimals ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}{L("প্রতিটি গরুর হিসাব", "Each animal")}
+              </button>
+            </div>
+            {showAnimals && (
+              <div className="overflow-x-auto border-t border-border/60">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/30 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">{L("গরু", "Animal")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{L("দিন", "Days")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{L("কেনা", "Bought")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{L("নিজের খরচ", "Own costs")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{L("চলতি খরচের ভাগ", "Running share")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{L("দাম", "Value")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{L("ফল", "Result")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {farm.animals.map((a) => (
+                      <tr key={a.id}>
+                        <td className="px-4 py-2 font-medium">
+                          <Link href={`/dashboard/cattle/${a.id}`} className="hover:underline">{a.tag}</Link>
+                          <span className="ml-1.5 text-[11px] text-muted-foreground">
+                            {a.status === "active" ? L("খামারে", "on farm") : a.status === "sold" ? L(`বিক্রি ${a.endDate}`, `sold ${a.endDate}`) : L(`মারা গেছে ${a.endDate}`, `died ${a.endDate}`)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">{a.days}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{taka(a.purchasePrice)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{taka(a.ownCost)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{taka(a.runningShare)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {a.status === "active" ? (a.valueToday != null ? taka(a.valueToday) : "—") : taka(a.salePrice ?? 0)}
+                          {a.status === "active" && a.valueToday != null && <span className="ml-1 text-[10px] text-muted-foreground">{L("আনু.", "est.")}</span>}
+                        </td>
+                        <td className={cn("px-4 py-2 text-right font-semibold tabular-nums", tone(a.result))}>{signed(a.result)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* ── 2. how it is split ── */}
+          <section className="rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-4 text-sm" aria-label={L("ভাগের নিয়ম", "How it is split")}>
+            <p className="flex items-center gap-1.5 font-semibold"><Info className="h-4 w-4 text-primary" aria-hidden />{L("ভাগের নিয়ম", "How it is split")}</p>
+            <ul className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
+              {feePct > 0 && <li>• {L(`লাভ থেকে আগে ${feePct}% ম্যানেজমেন্ট ফি।`, `A ${feePct}% management fee comes off profit first.`)}</li>}
+              {fixed.map((p) => <li key={p.id}>• {L(`${p.name} লাভের নির্দিষ্ট ${pct(p.profitPct)} পান${p.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`, `${p.name} takes a fixed ${pct(p.profitPct)} of profit${p.bearsLoss ? "" : " and bears no loss"}.`)}</li>)}
+              <li>• {L("বাকি লাভ মূলধনীদের মধ্যে টাকা × দিন অনুপাতে — যার টাকা যত বেশি দিন খামারে, তার ভাগ তত বেশি। পরে যোগ দিলে, টাকা আসার দিন থেকে ভাগ শুরু।",
+                       "The rest of the profit goes to the money partners by taka × days — money in the farm longer earns more; a later partner shares from the day their money came in.")}</li>
+              <li>• {L(`ক্ষতি হলে পুরো ক্ষতি বহন করেন ক্ষতির ভাগীদাররা, একই টাকা × দিন অনুপাতে${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} ক্ষতি বহন করেন না)` : ""}।`,
+                       `A loss is carried in full by the partners who bear loss, by the same taka × days${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} bear no loss)` : ""}.`)}</li>
+              <li>• {L("বিক্রি হওয়া গরুর লাভ পাকা — শুধু সেটাই বণ্টন করা যায়। খামারে থাকা গরুর ফল আনুমানিক, বাজারদর ও ওজনের সাথে বদলায়।",
+                       "Profit from animals sold is final — only that can be paid out. The result on animals still on the farm is an estimate and moves with price and weight.")}</li>
+            </ul>
+          </section>
+
+          {/* ── 3. each partner ── */}
+          <section className="rounded-xl border border-border bg-card shadow-card" aria-label={L("অংশীদারদের হিসাব", "Partners")}>
+            <div className="border-b border-border/60 px-5 py-4">
+              <h2 className="text-sm font-semibold">{L("অংশীদারদের হিসাব", "Partners")}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">{L("আজ সব গরু বাজারদরে বিক্রি হলে কে কত পেতেন", "What each would have if every animal were sold today")}</p>
+            </div>
+            <ul className="divide-y divide-border/60">
+              {positions.map((p) => {
+                const share = p.realizedShare + p.estimateShare;
+                return (
+                  <li key={p.id}>
+                    <Link href={`/dashboard/partners/${p.id}`} className="grid gap-3 px-5 py-4 transition-colors hover:bg-muted/30 sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))_auto] sm:items-center">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white", avatarColor(p.name))}>{initials(p.name)}</div>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold">{p.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {partnerTypeLabel(p.partnerType, locale)}
+                            {p.shareMode === "manual" ? L(" · নির্দিষ্ট ভাগ", " · fixed share") : ""}
+                            {!p.bearsLoss ? L(" · ক্ষতি নেই", " · no loss") : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <Cell label={L("মূলধন", "Capital")} value={p.netCapital > 0 ? taka(p.netCapital) : "—"} />
+                      <Cell label={L("লাভের ভাগ", "Profit share")} value={pct(p.profitPct)} sub={p.bearsLoss ? L(`ক্ষতির ভাগ ${pct(p.lossPct)}`, `loss share ${pct(p.lossPct)}`) : undefined} />
+                      <Cell label={L("আজ বিক্রি করলে ভাগ", "Share if sold today")} value={signed(share)} valueCls={tone(share)}
+                        sub={p.realizedShare !== 0 ? L(`পাকা ${signed(p.realizedShare)}`, `final ${signed(p.realizedShare)}`) : L("আনুমানিক", "estimate")} />
+                      <Cell label={L("মোট পাওনা", "Account value")} value={taka(p.balance)} sub={p.profitReceived > 0 ? L(`লাভ পেয়েছেন ${taka(p.profitReceived)}`, `profit paid ${taka(p.profitReceived)}`) : undefined} />
+                      <ChevronRight className="hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            {farm.fee > 0 && (
+              <p className="border-t border-border/60 px-5 py-2.5 text-xs text-muted-foreground">{L(`ম্যানেজমেন্ট ফি: ${taka(farm.fee)}`, `Management fee: ${taka(farm.fee)}`)}</p>
+            )}
+            {Math.abs(farm.unallocated) >= 1 && (
+              <p className="border-t border-border/60 px-5 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+                {L(`${signed(farm.unallocated)} কারও ভাগে যায়নি — ভাগের সেটিং দেখুন।`, `${signed(farm.unallocated)} could not be allocated — check the share settings.`)}
+              </p>
+            )}
+          </section>
+
+          {!farm.herdValued && onFarm.length > 0 && (
+            <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              {L("কিছু গরুর দাম জানা নেই (বাজারদর বা ওজন নেই) — সেগুলো খরচে ধরা হয়েছে। টাকা-পয়সা পাতায় বাজারদর দিন, গরু ওজন করুন।",
+                 "Some animals have no value (no market price or weight) — they count at cost. Enter the market price on the Money page and weigh the cattle.")}
+            </p>
+          )}
+        </>
+      )}
+
       {distOpen && (
         <DeclareDistributionModal
-          partnerAccounts={accounts}
-          netPL={netPL}
+          entries={positions.filter((p) => p.distributable > 0.5).map((p) => ({ id: p.id, name: p.name, distributable: p.distributable }))}
           today={today}
           t={t}
           onClose={() => setDistOpen(false)}
         />
       )}
-
-      {/* ── Equity Distribution (Cap Table) ─────────────────────────── */}
-      {partners.length >= 2 && (
-        <div className="rounded-xl bg-card border border-border shadow-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">{L("মূলধনের ভাগ", "Equity Distribution")}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {L("প্রত্যেকের মূলধন ও লাভের ভাগ", "Capital accounts & profit share allocation")}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">{L("খামারের মূল্য", "Business Value")}</p>
-              <p className="text-sm font-bold tabular-nums">
-                {totalBusinessValue >= 0 ? "" : "−"}৳
-                {Math.round(Math.abs(totalBusinessValue)).toLocaleString("en-IN")}
-              </p>
-            </div>
-          </div>
-          <PartnerEquityChart
-            entries={accounts.map(({ partner: p, sharePct, acc }) => ({
-              id: p.id,
-              name: p.name,
-              equity: acc.equity,
-              sharePct,
-              investedNet: acc.totalInvested - acc.withdrawn,
-            } as EquityEntry))}
-            totalBusinessValue={totalBusinessValue}
-          />
-        </div>
-      )}
-
-      {/* ── Partner cards ────────────────────────────────────────────── */}
-      {partners.length === 0 ? (
-        <EmptyState t={t} />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {accounts.map(({ partner: p, sharePct, acc }) => {
-            const txns = txnsByPartner[p.id] ?? [];
-            const netInv = computeNetInvestment(p, txns);
-            return (
-              <PartnerCard
-                key={p.id}
-                partner={p}
-                transactions={txns}
-                acc={acc}
-                netInvestment={netInv}
-                totalInvested={totalCapital}
-                totalBusinessValue={totalBusinessValue}
-                sharePct={sharePct}
-                cattleValuation={cattleValuation}
-                t={t}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Recent Activity ──────────────────────────────────────────── */}
-      {allRecentTxns.length > 0 && (
-        <div className="rounded-xl bg-card border border-border shadow-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border/60">
-            <h3 className="text-sm font-semibold">{L("সাম্প্রতিক লেনদেন", "Recent Activity")}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {L("সব অংশীদারের সর্বশেষ লেনদেন", "Latest transactions across all partners")}
-            </p>
-          </div>
-          <div className="divide-y divide-border/30">
-            {allRecentTxns.map((txn) => {
-              const meta = TXN_SIGN[txn.type];
-              return (
-                <div
-                  key={txn.id}
-                  className="flex items-center gap-3 px-5 py-3 hover:bg-muted/20 transition-colors"
-                >
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center">
-                    {TXN_ICON[txn.type]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">
-                      {txn.partnerName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {TXN_LABEL(t)[txn.type]}
-                      {txn.notes && (
-                        <span className="ml-1 opacity-70">· {txn.notes}</span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className={cn(
-                        "text-sm font-bold tabular-nums",
-                        TXN_TEXT[txn.type]
-                      )}
-                    >
-                      {meta}{bdt(txn.amount)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(
-                        txn.recorded_at + "T00:00:00"
-                      ).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
+function Tile({ icon: Icon, label, value, note, valueCls }: { icon: React.ElementType; label: string; value: string; note: string; valueCls?: string }) {
+  return (
+    <div className="bg-card px-5 py-4">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Icon className="h-3.5 w-3.5" aria-hidden />{label}</p>
+      <p className={cn("mt-1 text-xl font-bold tabular-nums tracking-tight", valueCls)}>{value}</p>
+      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{note}</p>
+    </div>
+  );
+}
 
+function Cell({ label, value, sub, valueCls }: { label: string; value: string; sub?: string; valueCls?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 sm:block">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <div className="text-right sm:text-left">
+        <p className={cn("text-sm font-semibold tabular-nums", valueCls)}>{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+      </div>
+    </div>
+  );
+}

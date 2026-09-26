@@ -214,3 +214,65 @@ The trial balance also credited cash for feed eaten by an animal. That feed was 
 - The due arithmetic now coerces the numeric columns to numbers.
 
 **Still open:** confirm the production cash against the owner's count. The production read was not allowed in this session.
+
+## 9. Partners: one calculation, no loss before a sale (2026-09-26)
+
+**Problems found**
+- **"Loss" before any sale.** The three partner pages each computed their own "realized P&L": sales − purchases − every running cost − feed. With nothing sold, wages, electricity and feed showed as a partner loss. On a fattening farm these are the cost of the cattle, not a loss.
+- **Half of every loss went nowhere.** Loss was split by the profit shares. Mohiuddin holds 50% of profit and bears no loss, and his half of the loss was not given to anyone.
+- **Omor and Sumaiya showed a profit.** Partners who joined later had an "entry P&L" snapshot subtracted. It came from the old formula (−৳1,33,153), so it produced a profit out of nothing.
+- **The late-joiner valuation counted the herd twice.** "Pre-money valuation" = capital + P&L + cattle value + assets, but the capital had already been spent on those cattle.
+- **The three pages disagreed.** The profile left vet fees out of costs and the statement counted them. The weights used 0.6 kg/day instead of the growth engine the Home page uses.
+- **The "bears loss" box on the add-partner form was never saved.**
+- **Money could be paid out that did not exist.** Distribution had no server check: an estimate could be paid out, and losses were "distributed" as records.
+- **The running balance counted profit payouts as capital.**
+
+**Now: `src/lib/partners/position.ts` (pure) and `load-positions.ts` (one loader, used by all three pages)**
+
+*Result by animal.* Each animal has a full cost:
+- purchase;
+- its own costs (vet, its own feed, its own expenses);
+- running costs × its days on the farm ÷ all head-days.
+
+The result of an animal is:
+- **realized**, for animals sold or dead: price − full cost;
+- **estimate**, for animals on the farm: today's value (Home model: weight × latest price) − full cost.
+
+Realized + estimate equals the accounts' figure: retained earnings + profit paid + (herd value − livestock at cost).
+
+*Split (the owner chose "taka × days").*
+- **Profit.** The management fee comes off first. Fixed-share partners take their percent. The rest goes to the other partners by capital-days.
+- **Loss.** 100% is carried by the partners who bear loss, by the same rule.
+- **Per animal.** A sold or dead animal is split with the weights on the day it left. The estimate is split with today's weights.
+- **Late joiners.** A partner shares only from the day their money came in, so no entry valuation is needed.
+
+*Payouts.* Only realized profit not yet paid can be paid out, and the server checks each amount.
+
+**Production figures, 26 Sep (read-only)**
+- Nothing sold.
+- Running costs ৳1,54,120, which is ৳270.86 per head per day.
+- Herd full cost ৳6,79,094; value ৳7,06,805.
+- Estimated result **+৳27,711**, the same as the accounts' figure.
+- Split of the estimate:
+
+  | Partner | Profit share | Estimated share |
+  |---|---|---|
+  | Mohiuddin | 50% | ৳13,856 |
+  | Tanvir | 31.3% | ৳8,685 |
+  | Nanu | 11.8% | ৳3,258 |
+  | Omor | 4.0% | ৳1,119 |
+  | Sumaiya | 2.9% | ৳794 |
+
+- C006 weighed 210 kg on 14 Sep against an estimated 250 kg at purchase. It shows −৳28,150; the purchase weight was probably overestimated.
+
+**UI**
+- The partners page is rebuilt:
+  - the farm today (capital, cattle full cost, value, result if sold today);
+  - an animal-by-animal table;
+  - "how it is split";
+  - one row per partner.
+- The profile and the statement show the same figures.
+- Removed:
+  - the duplicate add-transaction dialog and capital summary cards;
+  - the partner card and equity chart;
+  - the old equity functions and the pass-through service.

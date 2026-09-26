@@ -8,7 +8,8 @@ import { assertResourceOwnership } from "@/lib/auth/ownership";
 import { PERMISSIONS } from "@/constants/roles";
 import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { FinancialEventBus } from "@/lib/financial/events";
-import { PartnerDomainService } from "@/lib/services/partner.service";
+import { PartnerEngine } from "@/lib/partners/partner-engine";
+import { loadPartnerData } from "@/lib/partners/load-positions";
 import type { PartnerTransactionType, PartnerType } from "@/types/database";
 import { todayDhaka } from "@/lib/dates";
 
@@ -33,10 +34,8 @@ export async function createPartner(
     const cliffMonths = parseInt(formData.get("cliff_months") as string, 10) || 0;
     const joinedAt = (formData.get("joined_at") as string) || todayDhaka();
     const notes = (formData.get("notes") as string)?.trim() || null;
-    const rawEntryNetpl = formData.get("entry_netpl");
-    const rawEntryValuation = formData.get("entry_valuation");
-    const entryNetpl = rawEntryNetpl ? parseFloat(rawEntryNetpl as string) : null;
-    const entryValuation = rawEntryValuation ? parseFloat(rawEntryValuation as string) : null;
+    // a labour partner never bears loss; the others as ticked (the box was never saved before)
+    const bearsLoss = partnerType === "labor" ? false : formData.get("bears_loss") === "true";
 
     const { data: existingPartners } = await supabase
       .from("partners")
@@ -44,7 +43,7 @@ export async function createPartner(
       .eq("business_id", ctx.businessId)
       .is("deleted_at", null);
 
-    const validation = PartnerDomainService.validatePartner({
+    const validation = PartnerEngine.validatePartner({
       name,
       partnerType,
       shareMode,
@@ -66,8 +65,7 @@ export async function createPartner(
       labor_value_monthly: laborValueMonthly,
       cliff_months: cliffMonths,
       joined_at: joinedAt,
-      entry_netpl: entryNetpl,
-      entry_valuation: entryValuation,
+      bears_loss: bearsLoss,
       notes,
     }).select("id, name, partner_type").single();
 
@@ -144,7 +142,7 @@ export async function updatePartner(
       .eq("business_id", ctx.businessId)
       .is("deleted_at", null);
 
-    const validation = PartnerDomainService.validatePartner({
+    const validation = PartnerEngine.validatePartner({
       name,
       partnerType,
       shareMode,
@@ -228,7 +226,7 @@ export async function addPartnerTransaction(
     const recordedAt = (formData.get("recorded_at") as string) || todayDhaka();
     const notes = (formData.get("notes") as string)?.trim() || null;
 
-    const validation = PartnerDomainService.validateTransaction({
+    const validation = PartnerEngine.validateTransaction({
       partnerId,
       type,
       amount,
@@ -339,6 +337,18 @@ export async function declareDistribution(
     const entrySum = entries.reduce((s, e) => s + e.amount, 0);
     if (Math.abs(entrySum - totalAmount) > 1)
       return { error: "অংশীদারদের যোগফল মোট পরিমাণের সাথে মিলছে না।" };
+
+    // A loss is not "distributed": each partner's share of it is live (lib/partners/position.ts).
+    if (isLoss) return { error: "ক্ষতি আলাদা করে ভাগ করতে হয় না — প্রত্যেকের হিসাবে নিজে থেকেই দেখানো হয়।" };
+    // Only realized profit not yet paid can go out — never the estimate on animals still on the farm.
+    const { positions } = await loadPartnerData(supabase, ctx.businessId);
+    for (const e of entries) {
+      const due = positions.find((p) => p.id === e.partnerId)?.distributable ?? 0;
+      if (e.amount > due + 0.5) {
+        const name = positions.find((p) => p.id === e.partnerId)?.name ?? "";
+        return { error: `${name}-এর পাকা লাভের পাওনা ৳${Math.floor(due).toLocaleString("en-IN")} — এর বেশি দেওয়া যাবে না।` };
+      }
+    }
 
     const type: PartnerTransactionType = isLoss ? "loss_allocation" : "profit";
     const rows = entries

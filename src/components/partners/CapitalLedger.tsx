@@ -1,12 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
-import { CapitalSummaryCards } from "./CapitalSummaryCards";
 import { CapitalLedgerTable } from "./CapitalLedgerTable";
-import { AddCapitalTxnDialog } from "./AddCapitalTxnDialog";
 import type { CapitalTxn } from "./capital-types";
 import { useL } from "@/i18n/text";
 import { partnerTxnLabel } from "@/lib/partners/labels";
@@ -17,15 +14,12 @@ export type { CapitalTxn };
 
 interface Props {
   transactions: CapitalTxn[];
-  partners: { id: string; name: string }[];
-  mgmtFeeRate: number;
 }
 
-export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
+/** Every capital entry of every partner, with the running total (adding one: the button above). */
+export function CapitalLedger({ transactions }: Props) {
   const L = useL();
   const { locale } = useTranslation();
-  const hasPartners = partners.length > 0;
-  const [open, setOpen] = useState(false);
 
   // Sort oldest → newest for running balance
   const sorted = [...transactions].sort(
@@ -41,14 +35,6 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
 
   // Display newest first
   const displayed = [...withBalance].reverse();
-
-  const totalIn = transactions
-    .filter((t) => t.type === "investment")
-    .reduce((s, t) => s + t.amount, 0);
-  const totalOut = transactions
-    .filter((t) => t.type === "withdrawal")
-    .reduce((s, t) => s + t.amount, 0);
-  const netCapital = totalIn - totalOut;
 
   function exportToCsv() {
     if (displayed.length === 0) {
@@ -105,22 +91,8 @@ export function CapitalLedger({ transactions, partners, mgmtFeeRate }: Props) {
             </Button>
           )}
 
-          {hasPartners && (
-            <AddCapitalTxnDialog
-              open={open}
-              setOpen={setOpen}
-              partners={partners}
-            />
-          )}
         </div>
       </div>
-
-      <CapitalSummaryCards
-        totalIn={totalIn}
-        totalOut={totalOut}
-        netCapital={netCapital}
-        mgmtFeeRate={mgmtFeeRate}
-      />
 
       <CapitalLedgerTable displayed={displayed} />
     </div>

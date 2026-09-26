@@ -22,9 +22,7 @@ import {
 import { createPartner } from "@/app/dashboard/(app)/partners/actions";
 import type { PartnerType } from "@/types/database";
 import type { Dictionary } from "@/i18n/getDictionary";
-import { bdt } from "@/lib/partners/calculations";
 import { FormField } from "@/components/partners/partner-ui";
-import type { CattleValuation } from "@/components/partners/PartnerCard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useL } from "@/i18n/text";
@@ -32,26 +30,14 @@ import { useL } from "@/i18n/text";
 interface Props {
   today: string;
   t: Dictionary;
-  totalPartnerCapital: number;
-  netPLAfterFee: number;
-  cattleValuation: CattleValuation;
-  totalAssetValue: number;
 }
 
-export function AddPartnerDialog({
-  today,
-  t,
-  totalPartnerCapital,
-  netPLAfterFee,
-  cattleValuation,
-  totalAssetValue,
-}: Props) {
+export function AddPartnerDialog({ today, t }: Props) {
   const L = useL();
   const [open, setOpen] = useState(false);
   const [partnerTypeField, setPartnerTypeField] = useState<PartnerType>("capital");
   const [shareModeField, setShareModeField] = useState<"auto" | "manual">("auto");
   const [bearsLossField, setBearsLossField] = useState(true);
-  const [newInvestmentAmt, setNewInvestmentAmt] = useState("");
   const [state, action, pending] = useActionState(createPartner, undefined);
 
   useEffect(() => {
@@ -59,25 +45,9 @@ export function AddPartnerDialog({
       setTimeout(() => {
         toast.success(L("অংশীদার যোগ হলো", "Partner added"));
         setOpen(false);
-        setNewInvestmentAmt("");
       }, 0);
     }
   }, [state, L]);
-
-  const cattleMarketValue = cattleValuation.hasMarketPrice
-    ? cattleValuation.totalEstimatedValue
-    : cattleValuation.totalActiveCostBasis;
-  const preMoneyValuation = Math.max(
-    0,
-    totalPartnerCapital + netPLAfterFee + cattleMarketValue + totalAssetValue
-  );
-
-  const newInvNum = parseFloat(newInvestmentAmt) || 0;
-  const postMoneyVal = preMoneyValuation + newInvNum;
-  const suggestedPct =
-    postMoneyVal > 0 && newInvNum > 0
-      ? Math.min(100, (newInvNum / postMoneyVal) * 100)
-      : 0;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -93,56 +63,14 @@ export function AddPartnerDialog({
           action={(fd) => {
             fd.set("partner_type", partnerTypeField);
             fd.set("share_mode", shareModeField);
-            fd.set("entry_netpl", String(netPLAfterFee));
-            fd.set("entry_valuation", String(preMoneyValuation));
             action(fd);
           }}
           className="space-y-4"
         >
-          {/* Valuation Calculator */}
-          <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-2">
-            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wide">
-              {L("খামারের মূল্য", "Business Valuation")}
-            </p>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-              <span className="text-muted-foreground">{L("অংশীদারদের মূলধন", "Partner capital")}</span>
-              <span className="text-right tabular-nums font-medium">{bdt(totalPartnerCapital)}</span>
-              <span className="text-muted-foreground">{L("ভাগ না হওয়া লাভ/ক্ষতি", "Undistributed P&L")}</span>
-              <span className={cn("text-right tabular-nums font-medium", netPLAfterFee >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
-                {netPLAfterFee >= 0 ? "+" : "−"}{bdt(netPLAfterFee)}
-              </span>
-              <span className="text-muted-foreground">{L("গরুর মূল্য", "Cattle value")}</span>
-              <span className="text-right tabular-nums font-medium">{bdt(cattleMarketValue)}</span>
-              {totalAssetValue > 0 && (
-                <>
-                  <span className="text-muted-foreground">{L("স্থায়ী সম্পদ", "Fixed assets")}</span>
-                  <span className="text-right tabular-nums font-medium">{bdt(totalAssetValue)}</span>
-                </>
-              )}
-              <span className="font-semibold text-amber-800 dark:text-amber-300 border-t border-amber-200 dark:border-amber-700 pt-1">{L("নতুন জমার আগে", "Pre-money")}</span>
-              <span className="text-right tabular-nums font-bold text-amber-800 dark:text-amber-300 border-t border-amber-200 dark:border-amber-700 pt-1">{bdt(preMoneyValuation)}</span>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">{L("নতুন জমার পরিমাণ", "New investment amount")}</label>
-              <Input
-                type="number"
-                min="0"
-                step="1000"
-                placeholder="e.g. 200000"
-                value={newInvestmentAmt}
-                onChange={(e) => setNewInvestmentAmt(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-            {newInvNum > 0 && (
-              <div className="rounded-md bg-amber-100 dark:bg-amber-900/30 px-2.5 py-2 flex items-center justify-between">
-                <span className="text-xs text-amber-800 dark:text-amber-300">{L("প্রস্তাবিত ভাগ %", "Suggested share %")}</span>
-                <span className="text-sm font-bold tabular-nums text-amber-800 dark:text-amber-300">
-                  {suggestedPct.toFixed(1)}%
-                </span>
-              </div>
-            )}
-          </div>
+          <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            {L("নতুন অংশীদার টাকা জমার দিন থেকে লাভ-ক্ষতির ভাগ পান (টাকা × দিন) — আগের সময়ের ফল আগের অংশীদারদের থাকে। আলাদা মূল্যায়ন লাগে না।",
+               "A new partner shares profit and loss from the day their money comes in (taka × days) — the result before that stays with the earlier partners. No separate valuation is needed.")}
+          </p>
 
           <FormField label={`${t.partners.name} *`} id="pname">
             <Input id="pname" name="name" required />
@@ -220,14 +148,8 @@ export function AddPartnerDialog({
                   min="0"
                   max="100"
                   step="0.1"
-                  defaultValue={suggestedPct > 0 ? suggestedPct.toFixed(1) : "0"}
-                  key={suggestedPct.toFixed(1)}
+                  defaultValue="0"
                 />
-                {suggestedPct > 0 && (
-                  <span className="text-xs text-amber-700 dark:text-amber-400 whitespace-nowrap">
-                    ← suggested
-                  </span>
-                )}
               </div>
             </FormField>
           )}

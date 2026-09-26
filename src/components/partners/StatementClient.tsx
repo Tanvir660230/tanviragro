@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Printer, ArrowLeft, Building2, CheckCircle2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Partner, PartnerTransaction, PartnerTransactionType } from "@/types/database";
-import type { AccountSummary } from "@/app/dashboard/(app)/partners/[id]/statement/page";
+import type { PartnerPosition } from "@/lib/partners/position";
 import { useL } from "@/i18n/text";
 import { Tr } from "@/i18n/Tr";
 import { partnerTxnLabel, partnerTypeLabel } from "@/lib/partners/labels";
@@ -31,8 +31,7 @@ interface Props {
   businessName: string;
   partner: Partner;
   transactions: PartnerTransaction[];
-  acc: AccountSummary;
-  sharePct: number;
+  position: PartnerPosition;
   statementDate: string;
   backUrl: string;
 }
@@ -43,8 +42,7 @@ export function StatementClient({
   businessName,
   partner: p,
   transactions,
-  acc,
-  sharePct,
+  position: pos,
   statementDate,
   backUrl,
 }: Props) {
@@ -62,18 +60,20 @@ export function StatementClient({
       ["Statement Date", `"${statementDate}"`],
       ["Business Name", `"${businessName.replace(/"/g, '""')}"`],
       ["Partner Type", `"${partnerTypeLabel(p.partner_type, locale)}"`],
-      ["Profit Share", `"${sharePct.toFixed(1)}%"`],
-      ["Total Invested", acc.totalInvested],
-      ["Total Withdrawn", acc.withdrawn],
-      ["Profit Received", acc.profitReceived],
-      ["Loss Allocated", acc.lossBorne],
-      ["Current Capital Equity", acc.equity],
+      ["Profit Share", `"${pos.profitPct.toFixed(1)}%"`],
+      ["Loss Share", `"${pos.lossPct.toFixed(1)}%"`],
+      ["Total Invested", pos.capitalIn],
+      ["Total Withdrawn", pos.capitalOut],
+      ["Share of final result", pos.realizedShare],
+      ["Estimated share (animals on the farm)", pos.estimateShare],
+      ["Profit Received", pos.profitReceived],
+      ["Account value", pos.balance],
       [],
       ["Date", "Type", "Notes", "Debit (Out)", "Credit (In)", "Balance"],
     ];
 
     const txnRows = withBalance.map((t) => {
-      const isCredit = t.type === "investment" || t.type === "profit";
+      const isCredit = t.type === "investment";
       return [
         `"${t.recorded_at}"`,
         `"${partnerTxnLabel(t.type, locale)}"`,
@@ -103,22 +103,17 @@ export function StatementClient({
   const withBalance = transactions.reduce(
     (arr, txn) => {
       const last = arr.length > 0 ? arr[arr.length - 1].balance : 0;
-      const delta =
-        txn.type === "investment" || txn.type === "profit"
-          ? txn.amount
-          : -txn.amount;
+      // capital balance: money put in less money taken out (a profit payout is not capital)
+      const delta = txn.type === "investment" ? txn.amount : txn.type === "withdrawal" ? -txn.amount : 0;
       arr.push({ ...txn, balance: last + delta });
       return arr;
     },
     [] as (PartnerTransaction & { balance: number })[]
   );
 
-  const roi =
-    acc.totalInvested > 0
-      ? ((acc.equity - acc.totalInvested) / acc.totalInvested) * 100
-      : null;
-
-  const isEquityPositive = acc.equity >= 0;
+  const capital = pos.netCapital + pos.laborValue;
+  const roi = capital > 0 ? ((pos.balance + pos.profitReceived - capital) / capital) * 100 : null;
+  const isEquityPositive = pos.balance >= 0;
 
   return (
     <>
@@ -198,7 +193,7 @@ export function StatementClient({
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               {L("লাভের ভাগ", "Profit Share")}
             </p>
-            <p className="text-sm font-bold mt-0.5">{sharePct.toFixed(2)}%</p>
+            <p className="text-sm font-bold mt-0.5">{pos.profitPct.toFixed(2)}%</p>
           </div>
         </div>
 
@@ -211,62 +206,27 @@ export function StatementClient({
           <div className="rounded-xl border border-border overflow-hidden">
             <table className="w-full text-sm">
               <tbody className="divide-y divide-border/40">
-                {p.partner_type !== "labor" && (
-                  <SummaryRow
-                    label={L("মোট জমা", "Total Capital Invested")}
-                    value={bdt(acc.totalInvested)}
-                    positive
-                  />
+                {pos.capitalIn > 0 && (
+                  <SummaryRow label={L("মোট জমা", "Total Capital Invested")} value={bdt(pos.capitalIn)} positive />
                 )}
-                {acc.laborValue > 0 && (
-                  <SummaryRow
-                    label={`Labor Value (${acc.months} months × ৳${(p.labor_value_monthly ?? 0).toLocaleString("en-IN")}/mo)`}
-                    value={bdt(acc.laborValue)}
-                    positive
-                  />
+                {pos.laborValue > 0 && (
+                  <SummaryRow label={L("শ্রমের মূল্য", `Labour value (৳${(p.labor_value_monthly ?? 0).toLocaleString("en-IN")}/month)`)} value={bdt(pos.laborValue)} positive />
                 )}
-                {acc.withdrawn > 0 && (
-                  <SummaryRow
-                    label={L("মোট তোলা", "Total Withdrawn")}
-                    value={"(" + bdt(acc.withdrawn) + ")"}
-                    negative
-                  />
+                {pos.capitalOut > 0 && (
+                  <SummaryRow label={L("মোট তোলা", "Total Withdrawn")} value={"(" + bdt(pos.capitalOut) + ")"} negative />
                 )}
-                {acc.profitReceived > 0 && (
-                  <SummaryRow
-                    label={L("পাওয়া লাভ", "Profit Distributions Received")}
-                    value={bdt(acc.profitReceived)}
-                    positive
-                  />
-                )}
-                {acc.lossBorne > 0 && (
-                  <SummaryRow
-                    label={L("বহন করা ক্ষতি", "Loss Allocations Borne")}
-                    value={"(" + bdt(acc.lossBorne) + ")"}
-                    negative
-                  />
-                )}
-                {acc.pendingProfit > 0 && (
-                  <SummaryRow
-                    label={L("বাকি লাভ", "Undistributed Profit (Pending)")}
-                    value={bdt(acc.pendingProfit)}
-                    positive
-                    pending
-                  />
-                )}
-                {acc.pendingLoss > 0 && (
-                  <SummaryRow
-                    label={L("বাকি ক্ষতি", "Unallocated Loss (Pending)")}
-                    value={"(" + bdt(acc.pendingLoss) + ")"}
-                    negative
-                    pending
-                  />
+                <SummaryRow label={L("পাকা লাভ/ক্ষতির ভাগ (বিক্রি হওয়া গরু)", "Share of final result (animals sold)")}
+                  value={pos.realizedShare >= 0 ? bdt(pos.realizedShare) : "(" + bdt(pos.realizedShare) + ")"} positive={pos.realizedShare >= 0} negative={pos.realizedShare < 0} />
+                <SummaryRow label={L("আনুমানিক ভাগ (খামারে থাকা গরু, আজকের বাজারদরে)", "Estimated share (animals on the farm, at today's price)")}
+                  value={pos.estimateShare >= 0 ? bdt(pos.estimateShare) : "(" + bdt(pos.estimateShare) + ")"} positive={pos.estimateShare >= 0} negative={pos.estimateShare < 0} pending />
+                {pos.profitReceived > 0 && (
+                  <SummaryRow label={L("লাভ পেয়ে গেছেন", "Profit already paid out")} value={"(" + bdt(pos.profitReceived) + ")"} negative />
                 )}
               </tbody>
               <tfoot>
                 <tr className="bg-muted/40 border-t-2 border-foreground/20">
                   <td className="px-4 py-3 text-sm font-bold uppercase tracking-wide">
-                    {L("বর্তমান মূলধন", "Current Equity")}
+                    {L("মোট পাওনা (আজ বিক্রি করলে)", "Account value (if sold today)")}
                   </td>
                   <td
                     className={cn(
@@ -277,7 +237,7 @@ export function StatementClient({
                     )}
                   >
                     {isEquityPositive ? "" : "−"}
-                    {bdt(acc.equity)}
+                    {bdt(pos.balance)}
                   </td>
                 </tr>
                 {roi !== null && (
