@@ -27,6 +27,7 @@ export function DeclareDistributionModal({ entries, today, t, onClose }: Props) 
   const [amounts, setAmounts] = useState<Record<string, string>>(Object.fromEntries(entries.map((e) => [e.id, String(Math.floor(e.distributable))])));
   const [date, setDate] = useState(today);
   const [error, setError] = useState<string | null>(null);
+  const [lockBooks, setLockBooks] = useState(true);
   const [isPending, startTransition] = useTransition();
 
   const rows = entries.map((e) => ({ ...e, amount: parseFloat(amounts[e.id] ?? "0") || 0 }));
@@ -40,7 +41,7 @@ export function DeclareDistributionModal({ entries, today, t, onClose }: Props) 
     const paid = rows.filter((r) => r.amount > 0).map((r) => ({ partnerId: r.id, amount: r.amount }));
     if (!paid.length) return setError(L("কোনো পরিমাণ নেই", "Nothing to pay"));
     startTransition(async () => {
-      const res = await declareDistribution({ totalAmount: total, date, isLoss: false, entries: paid });
+      const res = await declareDistribution({ totalAmount: total, date, isLoss: false, entries: paid, lockBooks });
       if (res.error) setError(res.error);
       else onClose();
     });
@@ -74,6 +75,14 @@ export function DeclareDistributionModal({ entries, today, t, onClose }: Props) 
             <span>{L("মোট", "Total")}</span><span>{bdt(total)}</span>
           </div>
         </div>
+        <label className="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs">
+          <input type="checkbox" checked={lockBooks} onChange={(e) => setLockBooks(e.target.checked)} className="mt-0.5 h-4 w-4" />
+          <span>
+            <span className="font-medium">{L(`${date} পর্যন্ত হিসাব বন্ধ করুন (সুপারিশ)`, `Lock the books up to ${date} (recommended)`)}</span>
+            <span className="block text-muted-foreground">{L("এরপর ওই তারিখ বা আগের তারিখে কোনো খরচ, বিক্রি বা লেনদেন লেখা যাবে না — তাই যে লাভ দেওয়া হলো তা পরে বদলাবে না। দরকার হলে হিসাব পাতা থেকে লক খোলা যায়।",
+              "After this, nothing can be entered on or before that date — so the profit paid cannot change later. The lock can be removed on the Accounts page if needed.")}</span>
+          </span>
+        </label>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={isPending}>{t.partners.cancel}</Button>

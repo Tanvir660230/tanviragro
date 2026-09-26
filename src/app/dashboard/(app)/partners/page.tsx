@@ -20,7 +20,7 @@ export default async function PartnersPage() {
   const businessId = (await getCachedBusinessId()) ?? "";
 
   // one calculation for every partner page (lib/partners/position.ts)
-  const { farm, positions, partners, txnsByPartner, feePct } = await loadPartnerData(supabase, businessId);
+  const { farm, positions, partners, txnsByPartner } = await loadPartnerData(supabase, businessId);
 
   const nameById = Object.fromEntries(partners.map((p) => [p.id, p.name]));
   const capitalTxns: CapitalTxn[] = Object.values(txnsByPartner).flat()
@@ -33,7 +33,7 @@ export default async function PartnersPage() {
   return (
     <div className="space-y-5">
       <PageHeader title={dict.partners.title} subtitle={dict.partners.subtitle} icon={Users} />
-      <PartnerDashboard farm={farm} positions={positions} partners={partners} feePct={feePct} />
+      <PartnerDashboard farm={farm} positions={positions} partners={partners} />
       {capitalTxns.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-card px-6 py-5 shadow-card">
           <CapitalLedger transactions={capitalTxns} />

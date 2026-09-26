@@ -2,62 +2,111 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
 import type { Partner, PartnerTransaction } from "@/types/database";
 import { getAccountingData, getCachedDbData } from "@/lib/accounting/engine";
+import { unallocatedCostOf } from "@/lib/accounting/inventory-ledger";
 import { loadHomeInputs } from "@/lib/home/home-data";
 import { buildHomeModel } from "@/lib/home/home-model";
 import { todayDhaka } from "@/lib/dates";
-import { buildPartnerPositions, type FarmPosition, type PartnerPosition, type PositionAnimal } from "@/lib/partners/position";
+import {
+  buildPartnerPositions, type FarmPosition, type FeeRate, type PartnerPosition, type PositionAnimal,
+  type PositionPartner, type ShareRule,
+} from "@/lib/partners/position";
+
+export type ShareRuleRow = ShareRule & { id: string; note: string | null; createdAt: string };
 
 export type PartnerData = {
   farm: FarmPosition;
   positions: PartnerPosition[];
   partners: Partner[];
+  positionPartners: PositionPartner[];
+  rules: ShareRuleRow[];
+  /** false until migration 20260927090000 is applied (then the partner rows' own setting is used) */
+  rulesEnabled: boolean;
+  feeRates: FeeRate[];
   txnsByPartner: Record<string, PartnerTransaction[]>;
-  feePct: number;
   /** the accounts' own figure for the same result (retained earnings + profit paid + herd revaluation) */
   accountsCheck: number;
+  /** last day the books are locked (financial lock) — rules and entries cannot start on or before it */
+  lockedUntil: string | null;
 };
 
+const DAY = 86400000;
+const dayNum = (d: string) => Math.floor(Date.parse(`${d.slice(0, 10)}T00:00:00Z`) / DAY);
+const dayStr = (n: number) => new Date(n * DAY).toISOString().slice(0, 10);
+const missingTable = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table/i.test(e.message ?? ""));
+
+/** Spread an amount evenly over the days from `from` to `to` (both included). */
+function spread(out: { date: string; amount: number }[], amount: number, from: string, to: string) {
+  const a = dayNum(from), b = dayNum(to);
+  if (!(amount) || b < a) return;
+  const per = amount / (b - a + 1);
+  for (let d = a; d <= b; d++) out.push({ date: dayStr(d), amount: per });
+}
+
 /**
- * Everything the partner pages show, from the central sources:
- * the accounting engine (running costs, costs per animal, sales) and the home model (each
- * animal's value today). Once per request.
+ * Everything the partner pages show, from the central sources: the accounting engine
+ * (running costs day by day, costs per animal, sales), the home model (each animal's value
+ * today) and the partner share rules. Once per request.
  */
 export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, businessId: string): Promise<PartnerData> => {
   const today = todayDhaka();
-  const [acc, db, home, partnersRes, txnsRes, feeRes] = await Promise.all([
+  const [acc, db, home, partnersRes, txnsRes, feeRes, rulesRes, deathRes, lockRes] = await Promise.all([
     getAccountingData(supabase),
     getCachedDbData(supabase, businessId),
     loadHomeInputs(supabase, businessId, today, { money: false }),
     supabase.from("partners").select("*").eq("business_id", businessId).is("deleted_at", null).order("joined_at", { ascending: true }),
     supabase.from("partner_transactions").select("*, partners!inner(business_id)").eq("partners.business_id", businessId).is("deleted_at", null).order("recorded_at", { ascending: false }),
-    supabase.from("management_fee_rates").select("rate_percent").eq("business_id", businessId).is("deleted_at", null).order("effective_from", { ascending: false }).limit(1),
+    supabase.from("management_fee_rates").select("rate_percent, effective_from").eq("business_id", businessId).is("deleted_at", null),
+    supabase.from("partner_share_rules").select("id, partner_id, effective_from, share_mode, fixed_pct, bears_loss, note, created_at").eq("business_id", businessId).is("deleted_at", null),
+    supabase.from("cattle_death_records").select("cattle_id, death_date").eq("business_id", businessId),
+    supabase.from("financial_locks").select("locked_until").eq("business_id", businessId).order("locked_until", { ascending: false }).limit(1),
   ]);
   if (partnersRes.error) throw new Error(`partners: ${partnersRes.error.message}`);
   if (txnsRes.error) throw new Error(`partner entries: ${txnsRes.error.message}`);
+  if (rulesRes.error && !missingTable(rulesRes.error)) throw new Error(`share rules: ${rulesRes.error.message}`);
 
-  const partners = (partnersRes.data ?? []) as Partner[];
+  const partners = (partnersRes.data ?? []) as (Partner & { left_at?: string | null })[];
   const ids = new Set(partners.map((p) => p.id));
   const txns = ((txnsRes.data ?? []) as PartnerTransaction[]).filter((t) => ids.has(t.partner_id));
   const txnsByPartner: Record<string, PartnerTransaction[]> = {};
   for (const t of txns) (txnsByPartner[t.partner_id] ??= []).push(t);
-  const feePct = Number((feeRes.data as { rate_percent: number }[] | null)?.[0]?.rate_percent ?? 0);
+  const feeRates: FeeRate[] = ((feeRes.data ?? []) as { rate_percent: number; effective_from: string | null }[])
+    .map((f) => ({ from: String(f.effective_from ?? "0000-01-01").slice(0, 10), pct: Number(f.rate_percent) || 0 }));
+  const rulesEnabled = !rulesRes.error;
+  const rules: ShareRuleRow[] = ((rulesRes.data ?? []) as { id: string; partner_id: string; effective_from: string; share_mode: string; fixed_pct: number; bears_loss: boolean; note: string | null; created_at: string }[])
+    .filter((r) => ids.has(r.partner_id))
+    .map((r) => ({ id: r.id, partnerId: r.partner_id, from: String(r.effective_from).slice(0, 10), shareMode: (r.share_mode === "manual" ? "manual" : "auto") as "auto" | "manual",
+      fixedPct: Number(r.fixed_pct) || 0, bearsLoss: !!r.bears_loss, note: r.note, createdAt: r.created_at }))
+    .sort((a, b) => a.from.localeCompare(b.from));
 
-  // ── running costs: what the accounts expense that is not tied to one animal (all time) ──
-  const is = acc.incomeStatement;
-  const runningCosts = is.feedExpenses + is.vetMedical + is.laborWages + is.utilities + is.rentLease + is.transport
-    + is.repairsMaintenance + is.generalExpenses + is.depreciation + is.interestExpense;
+  // ── running costs by day — the same rows and totals the accounts expense ──
+  const dailyCosts: { date: string; amount: number }[] = [];
+  for (const c of db.costs) {
+    if ((c.entry_class ?? "expense") === "asset" || (c.cattle_id && c.type === "variable")) continue;
+    dailyCosts.push({ date: String(c.recorded_at).slice(0, 10), amount: Number(c.amount) });
+  }
+  for (const t of db.invTx) {
+    const v = unallocatedCostOf({ ...t, category: t.inventory_items?.category ?? null });
+    if (v) dailyCosts.push({ date: String(t.recorded_at).slice(0, 10), amount: v });
+  }
+  for (const a of acc.fixedAssets) {
+    const end = a.disposedAt && a.disposedAt < today ? a.disposedAt : today;
+    spread(dailyCosts, a.accumulatedDepreciation, a.purchaseDate, end);   // the depreciation to date, over the days it built up
+  }
+  const firstLoan = db.loansData.map((l) => String(l.loan_date).slice(0, 10)).sort()[0];
+  if (firstLoan) spread(dailyCosts, acc.incomeStatement.interestExpense, firstLoan, today);
 
-  // ── costs recorded on each animal (the same rows the engine capitalises) ──
+  // ── costs recorded on each animal (the rows the engine capitalises) ──
   const own: Record<string, number> = {};
   const add = (id: string | null | undefined, v: number) => { if (id) own[id] = (own[id] ?? 0) + v; };
   for (const c of db.costs) if (c.cattle_id && c.type === "variable" && (c.entry_class ?? "expense") !== "asset") add(c.cattle_id, Number(c.amount));
   for (const t of db.treatments) add(t.cattle_id, Number(t.vet_fee ?? 0) + Number(t.additional_medical_cost ?? 0));
   for (const f of db.rpcFeedData as { cattle_id: string | null; total_cost: number }[]) add(f.cattle_id, Number(f.total_cost));
 
-  // ── each animal's value today: the home model (measured weight × latest market price) ──
+  // ── each animal: value today (home model), sale, death date ──
   const valueById = new Map(buildHomeModel(home.input).cattle.map((c) => [c.id, c.valueToday]));
   const saleBy = new Map(db.sales.map((s) => [s.cattle_id, s]));
-
+  const deathBy = new Map(((deathRes.data ?? []) as { cattle_id: string; death_date: string }[]).map((d) => [d.cattle_id, String(d.death_date).slice(0, 10)]));
   const animals: PositionAnimal[] = db.cattle
     .filter((c) => c.status === "active" || c.status === "sold" || c.status === "dead")
     .map((c) => {
@@ -66,7 +115,8 @@ export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, busin
       return {
         id: c.id, tag: c.tag_id ?? "?", status,
         purchaseDate: String(c.purchase_date).slice(0, 10),
-        endDate: status === "sold" ? String(sale?.sold_at ?? today).slice(0, 10) : status === "dead" ? String(c.updated_at ?? today).slice(0, 10) : null,
+        endDate: status === "sold" ? String(sale?.sold_at ?? today).slice(0, 10)
+          : status === "dead" ? (deathBy.get(c.id) ?? String(c.updated_at ?? today).slice(0, 10)) : null,
         purchasePrice: Number(c.purchase_price ?? 0),
         ownCost: own[c.id] ?? 0,
         salePrice: status === "sold" ? Number(sale?.sale_price_total ?? 0) : status === "dead" ? 0 : null,
@@ -74,21 +124,21 @@ export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, busin
       };
     });
 
+  const positionPartners: PositionPartner[] = partners.map((p) => ({
+    id: p.id, name: p.name, partnerType: p.partner_type ?? "capital", joinedAt: String(p.joined_at).slice(0, 10),
+    leftAt: p.left_at ? String(p.left_at).slice(0, 10) : null,
+    laborValueMonthly: p.labor_value_monthly == null ? null : Number(p.labor_value_monthly), cliffMonths: Number(p.cliff_months ?? 0),
+    shareMode: p.share_mode === "manual" ? "manual" : "auto", fixedPct: Number(p.profit_share_pct ?? 0),
+    bearsLoss: p.partner_type === "labor" ? false : p.bears_loss !== false,
+  }));
+
   const { farm, partners: positions } = buildPartnerPositions({
-    asOf: today,
-    partners: partners.map((p) => ({
-      id: p.id, name: p.name, partnerType: p.partner_type ?? "capital", shareMode: p.share_mode === "manual" ? "manual" : "auto",
-      fixedPct: Number(p.profit_share_pct ?? 0), bearsLoss: p.bears_loss !== false, joinedAt: String(p.joined_at).slice(0, 10),
-      laborValueMonthly: p.labor_value_monthly == null ? null : Number(p.labor_value_monthly), cliffMonths: Number(p.cliff_months ?? 0),
-    })),
+    asOf: today, partners: positionPartners, rules, feeRates,
     txns: txns.map((t) => ({ partnerId: t.partner_id, type: t.type, amount: Number(t.amount), date: String(t.recorded_at).slice(0, 10) })),
-    feePct,
-    runningCosts,
-    animals,
-    marketPricePerKg: home.input.marketPricePerKg,
+    dailyCosts, animals, marketPricePerKg: home.input.marketPricePerKg,
   });
 
-  const herdValueAll = farm.herdValue;
-  const accountsCheck = acc.balanceSheet.retainedEarnings + farm.profitPaid + (herdValueAll - acc.balanceSheet.livestock);
-  return { farm, positions, partners, txnsByPartner, feePct, accountsCheck };
+  const accountsCheck = acc.balanceSheet.retainedEarnings + farm.profitPaid + (farm.herdValue - acc.balanceSheet.livestock);
+  const lockedUntil = ((lockRes.data ?? []) as { locked_until: string }[])[0]?.locked_until?.slice(0, 10) ?? null;
+  return { farm, positions, partners, positionPartners, rules, rulesEnabled, feeRates, txnsByPartner, accountsCheck, lockedUntil };
 });

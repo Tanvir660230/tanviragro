@@ -10,10 +10,149 @@ import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { FinancialEventBus } from "@/lib/financial/events";
 import { PartnerEngine } from "@/lib/partners/partner-engine";
 import { loadPartnerData } from "@/lib/partners/load-positions";
-import type { PartnerTransactionType, PartnerType } from "@/types/database";
+import type { Partner, PartnerTransactionType, PartnerType } from "@/types/database";
+import { checkRule, termsOn, type PositionPartner } from "@/lib/partners/position";
 import { todayDhaka } from "@/lib/dates";
 
 export type PartnerFormState = { error?: string; success?: boolean } | undefined;
+
+const isMissingTable = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table/i.test(e.message ?? ""));
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+async function lockedUntil(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string): Promise<string | null> {
+  const { data } = await supabase.from("financial_locks").select("locked_until").eq("business_id", businessId)
+    .order("locked_until", { ascending: false }).limit(1).maybeSingle();
+  return data?.locked_until ? String(data.locked_until).slice(0, 10) : null;
+}
+
+/** Partners and rules as the calculation sees them (for checking a planned change). */
+async function loadRuleContext(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string) {
+  const [{ data: ps }, rulesRes] = await Promise.all([
+    supabase.from("partners").select("*").eq("business_id", businessId).is("deleted_at", null),
+    supabase.from("partner_share_rules").select("id, partner_id, effective_from, share_mode, fixed_pct, bears_loss").eq("business_id", businessId).is("deleted_at", null),
+  ]);
+  if (rulesRes.error) {
+    if (isMissingTable(rulesRes.error)) throw new Error("ভাগের নিয়মের টেবিল এখনো তৈরি হয়নি (migration 20260927090000 চালাতে হবে)।");
+    throw new Error(rulesRes.error.message);
+  }
+  const partners: PositionPartner[] = ((ps ?? []) as (Partner & { left_at?: string | null })[]).map((p) => ({
+    id: p.id, name: p.name, partnerType: p.partner_type ?? "capital", joinedAt: String(p.joined_at).slice(0, 10),
+    leftAt: p.left_at ? String(p.left_at).slice(0, 10) : null, laborValueMonthly: p.labor_value_monthly, cliffMonths: p.cliff_months ?? 0,
+    shareMode: p.share_mode === "manual" ? "manual" : "auto", fixedPct: Number(p.profit_share_pct ?? 0), bearsLoss: p.bears_loss !== false,
+  }));
+  const rules = ((rulesRes.data ?? []) as { id: string; partner_id: string; effective_from: string; share_mode: string; fixed_pct: number; bears_loss: boolean }[])
+    .map((r) => ({ id: r.id, partnerId: r.partner_id, from: String(r.effective_from).slice(0, 10), shareMode: (r.share_mode === "manual" ? "manual" : "auto") as "auto" | "manual", fixedPct: Number(r.fixed_pct), bearsLoss: !!r.bears_loss }));
+  return { partners, rules };
+}
+
+/** Keep the partner row's own share fields equal to the rule in force today (older screens read them). */
+async function syncPartnerRow(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string, partnerId: string) {
+  const { partners, rules } = await loadRuleContext(supabase, businessId);
+  const t = termsOn(partners, rules, todayDhaka())[partnerId];
+  if (!t) return;
+  await supabase.from("partners").update({ share_mode: t.shareMode, profit_share_pct: t.shareMode === "manual" ? t.fixedPct : 0, bears_loss: t.bearsLoss }).eq("id", partnerId);
+}
+
+/**
+ * Add or change a partner's share from a date: fixed % of profit or taka × days, and whether they
+ * bear loss. Applies from `effective_from` until their next rule; earlier days keep the rule that
+ * was in force. Checked: not inside locked books, fixed shares never above 100% on any day.
+ */
+export async function saveShareRule(input: {
+  partnerId: string; effectiveFrom: string; shareMode: "auto" | "manual"; fixedPct: number; bearsLoss: boolean; note?: string;
+}): Promise<{ error?: string }> {
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
+    await assertResourceOwnership(supabase, "partners", input.partnerId, ctx.businessId);
+
+    const from = String(input.effectiveFrom ?? "").slice(0, 10);
+    if (!ISO.test(from)) return { error: "কবে থেকে — তারিখ দিন" };
+    const shareMode: "auto" | "manual" = input.shareMode === "manual" ? "manual" : "auto";
+    const fixedPct = shareMode === "manual" ? Math.round(Number(input.fixedPct) * 1000) / 1000 : 0;
+    if (shareMode === "manual" && !(fixedPct >= 0 && fixedPct <= 100)) return { error: "ভাগ ০% থেকে ১০০%-এর মধ্যে দিন" };
+
+    const lock = await lockedUntil(supabase, ctx.businessId);
+    if (lock && from <= lock) return { error: `হিসাব ${lock} পর্যন্ত বন্ধ (লাভ বণ্টন বা লক) — নতুন নিয়ম ${lock}-এর পরের তারিখ থেকে দিন।` };
+
+    const { partners, rules } = await loadRuleContext(supabase, ctx.businessId);
+    const partner = partners.find((p) => p.id === input.partnerId);
+    if (!partner) return { error: "অংশীদার পাওয়া যায়নি" };
+    if (from < partner.joinedAt) return { error: `অংশীদার ${partner.joinedAt}-এ যোগ দিয়েছেন — এর আগের তারিখ দেওয়া যাবে না।` };
+    const bearsLoss = partner.partnerType === "labor" ? false : !!input.bearsLoss;
+    const problem = checkRule(partners, rules, { partnerId: input.partnerId, from, shareMode, fixedPct, bearsLoss });
+    if (problem) return { error: problem.replace(/^On (\S+) the fixed shares would add up to (\S+)% \(more than 100%\)$/, "$1 তারিখে নির্দিষ্ট ভাগগুলোর যোগফল $2% হয়ে যাবে (১০০%-এর বেশি)।") };
+
+    const same = rules.find((r) => r.partnerId === input.partnerId && r.from === from);
+    const row = { share_mode: shareMode, fixed_pct: fixedPct, bears_loss: bearsLoss, note: input.note?.trim() || null };
+    const { error } = same
+      ? await supabase.from("partner_share_rules").update(row).eq("id", same.id)
+      : await supabase.from("partner_share_rules").insert({ ...row, business_id: ctx.businessId, partner_id: input.partnerId, effective_from: from });
+    if (error) return { error: isMissingTable(error) ? "ভাগের নিয়মের টেবিল এখনো তৈরি হয়নি (migration চালাতে হবে)।" : "নিয়ম সেভ হয়নি" };
+
+    await syncPartnerRow(supabase, ctx.businessId, input.partnerId);
+    revalidatePath("/dashboard/partners");
+    revalidatePath(`/dashboard/partners/${input.partnerId}`);
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "নিয়ম সেভ হয়নি" };
+  }
+}
+
+/** Remove a share rule that has not become part of locked books; the first rule always stays. */
+export async function deleteShareRule(ruleId: string): Promise<{ error?: string }> {
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
+    const { data: rule } = await supabase.from("partner_share_rules").select("id, partner_id, effective_from, business_id").eq("id", ruleId).is("deleted_at", null).maybeSingle();
+    if (!rule || rule.business_id !== ctx.businessId) return { error: "নিয়ম পাওয়া যায়নি" };
+    const from = String(rule.effective_from).slice(0, 10);
+    const lock = await lockedUntil(supabase, ctx.businessId);
+    if (lock && from <= lock) return { error: `এই নিয়ম ${lock} পর্যন্ত বন্ধ হিসাবের অংশ — মোছা যাবে না।` };
+    const { partners, rules } = await loadRuleContext(supabase, ctx.businessId);
+    const mine = rules.filter((r) => r.partnerId === rule.partner_id).sort((a, b) => a.from.localeCompare(b.from));
+    if (mine[0]?.id === rule.id) return { error: "প্রথম নিয়ম (যোগ দেওয়ার দিনের) মোছা যায় না — বদলাতে চাইলে নতুন নিয়ম দিন।" };
+    // after removing, the previous rule runs on: it must still fit under 100% on every day
+    const prev = mine.filter((r) => r.from < from).at(-1);
+    const rest = rules.filter((r) => r.id !== rule.id);
+    if (prev) {
+      const problem = checkRule(partners, rest, prev);
+      if (problem) return { error: "এই নিয়ম মুছলে কোনো দিন নির্দিষ্ট ভাগের যোগফল ১০০%-এর বেশি হয়ে যাবে।" };
+    }
+    const { error } = await supabase.from("partner_share_rules").update({ deleted_at: new Date().toISOString() }).eq("id", ruleId);
+    if (error) return { error: "মোছা যায়নি" };
+    await syncPartnerRow(supabase, ctx.businessId, rule.partner_id);
+    revalidatePath("/dashboard/partners");
+    revalidatePath(`/dashboard/partners/${rule.partner_id}`);
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "মোছা যায়নি" };
+  }
+}
+
+/** A partner leaves on `date`: no share from that day; their history stays. `date = null` brings them back. */
+export async function retirePartner(partnerId: string, date: string | null): Promise<{ error?: string }> {
+  try {
+    const supabase = await createClient();
+    const ctx = await getBusinessContext(supabase);
+    requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
+    await assertResourceOwnership(supabase, "partners", partnerId, ctx.businessId);
+    const d = date ? String(date).slice(0, 10) : null;
+    if (d && !ISO.test(d)) return { error: "তারিখ দিন" };
+    const lock = await lockedUntil(supabase, ctx.businessId);
+    if (lock && d && d <= lock) return { error: `হিসাব ${lock} পর্যন্ত বন্ধ — এর পরের তারিখ দিন।` };
+    const { error } = await supabase.from("partners").update({ left_at: d }).eq("id", partnerId);
+    if (error) return { error: isMissingTable(error) || /left_at/.test(error.message) ? "অবসরের ঘর এখনো তৈরি হয়নি (migration চালাতে হবে)।" : "সেভ হয়নি" };
+    revalidatePath("/dashboard/partners");
+    revalidatePath(`/dashboard/partners/${partnerId}`);
+    return {};
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "সেভ হয়নি" };
+  }
+}
 
 export async function createPartner(
   _prev: PartnerFormState,
@@ -71,6 +210,14 @@ export async function createPartner(
 
     if (error || !newPartner) return { error: "সংরক্ষণ ব্যর্থ হয়েছে" };
 
+    // the partner's first share rule, from the day they join (later changes are new rules)
+    const { error: ruleErr } = await supabase.from("partner_share_rules").insert({
+      business_id: ctx.businessId, partner_id: newPartner.id, effective_from: joinedAt,
+      share_mode: shareMode, fixed_pct: shareMode === "manual" ? profitSharePct : 0, bears_loss: bearsLoss,
+      note: "যোগ দেওয়ার সময়ের নিয়ম",
+    });
+    if (ruleErr && !isMissingTable(ruleErr)) return { error: "ভাগের নিয়ম সেভ হয়নি" };
+
     if (investmentAmount > 0) {
       await verifyFinancialLock(supabase, ctx.businessId, joinedAt);
 
@@ -126,41 +273,24 @@ export async function updatePartner(
 
     await assertResourceOwnership(supabase, "partners", partnerId, ctx.businessId);
 
+    // The share (fixed % / taka × days) and loss bearing are dated share rules (saveShareRule);
+    // this form changes the partner's details only.
     const name = (formData.get("name") as string)?.trim();
+    if (!name) return { error: "নাম দিন" };
     const partnerType = (formData.get("partner_type") as PartnerType) || "capital";
-    const shareMode = (formData.get("share_mode") as string) === "manual" ? "manual" : "auto";
-    const rawProfitShare = parseFloat(formData.get("profit_share_pct") as string);
-    const profitSharePct = shareMode === "manual" && !isNaN(rawProfitShare) ? rawProfitShare : 0;
     const laborValueMonthly = parseFloat(formData.get("labor_value_monthly") as string) || null;
     const cliffMonths = parseInt(formData.get("cliff_months") as string, 10) || 0;
-    const joinedAt = formData.get("joined_at") as string;
+    const joinedAt = ((formData.get("joined_at") as string) || "").slice(0, 10);
     const notes = (formData.get("notes") as string)?.trim() || null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(joinedAt)) return { error: "যোগদানের তারিখ দিন" };
 
-    const { data: existingPartners } = await supabase
-      .from("partners")
-      .select("*")
-      .eq("business_id", ctx.businessId)
-      .is("deleted_at", null);
-
-    const validation = PartnerEngine.validatePartner({
-      name,
-      partnerType,
-      shareMode,
-      profitSharePct,
-      existingPartners: existingPartners ?? [],
-      editingPartnerId: partnerId,
-    });
-
-    if (!validation.isValid) {
-      return { error: validation.errors[0] };
-    }
+    const { data: before } = await supabase.from("partners").select("joined_at").eq("id", partnerId).maybeSingle();
+    const oldJoined = before?.joined_at ? String(before.joined_at).slice(0, 10) : null;
 
     const { error } = await supabase.from("partners").update({
       name,
       partner_type: partnerType,
-      share_mode: shareMode,
-      profit_share_pct: profitSharePct,
-      labor_value_monthly: laborValueMonthly,
+      labor_value_monthly: partnerType === "capital" ? null : laborValueMonthly,
       cliff_months: cliffMonths,
       joined_at: joinedAt,
       notes,
@@ -168,13 +298,14 @@ export async function updatePartner(
 
     if (error) return { error: "আপডেট ব্যর্থ হয়েছে" };
 
-    await FinancialEventBus.publish("PartnerUpdated", ctx.businessId, {
-      partnerId,
-      name,
-      partnerType,
-      shareMode,
-      profitSharePct,
-    }, ctx.user.id);
+    // the first share rule starts on the join date: move it with the join date
+    if (oldJoined && oldJoined !== joinedAt) {
+      const { error: moveErr } = await supabase.from("partner_share_rules").update({ effective_from: joinedAt })
+        .eq("partner_id", partnerId).eq("effective_from", oldJoined).is("deleted_at", null);
+      if (moveErr && !isMissingTable(moveErr)) return { error: "ভাগের প্রথম নিয়মের তারিখ বদলানো যায়নি" };
+    }
+
+    await FinancialEventBus.publish("PartnerUpdated", ctx.businessId, { partnerId, name, partnerType }, ctx.user.id);
 
     revalidatePath("/dashboard/partners");
     revalidateTag("accounting", { expire: 0 });
@@ -191,6 +322,14 @@ export async function deletePartner(id: string): Promise<{ error?: string }> {
     requirePermission(ctx, PERMISSIONS.PARTNERS_MANAGE);
 
     await assertResourceOwnership(supabase, "partners", id, ctx.businessId);
+
+    // a partner with money history is never removed: their share of past results would move to
+    // the others. They retire instead (retirePartner) and stay in the books.
+    const { count } = await supabase.from("partner_transactions").select("id", { count: "exact", head: true })
+      .eq("partner_id", id).is("deleted_at", null);
+    if ((count ?? 0) > 0) {
+      return { error: "এই অংশীদারের লেনদেন আছে — মুছলে অতীতের লাভ-ক্ষতির ভাগ বদলে যাবে। মুছবেন না, \"অবসর\" দিন।" };
+    }
 
     const { error } = await supabase
       .from("partners")
@@ -299,6 +438,8 @@ export type DeclareDistributionPayload = {
   date: string;
   isLoss: boolean;
   entries: { partnerId: string; amount: number }[];
+  /** lock the books up to the payout day so a back-dated entry cannot change what was paid */
+  lockBooks?: boolean;
 };
 
 export async function declareDistribution(
@@ -350,7 +491,7 @@ export async function declareDistribution(
       }
     }
 
-    const type: PartnerTransactionType = isLoss ? "loss_allocation" : "profit";
+    const type: PartnerTransactionType = "profit";
     const rows = entries
       .filter((e) => e.amount > 0)
       .map((e) => ({
@@ -365,6 +506,14 @@ export async function declareDistribution(
 
     const { error } = await supabase.from("partner_transactions").insert(rows);
     if (error) return { error: "বিতরণ ব্যর্থ হয়েছে" };
+
+    if (payload.lockBooks) {
+      const { data: lastLock } = await supabase.from("financial_locks").select("locked_until")
+        .eq("business_id", ctx.businessId).order("locked_until", { ascending: false }).limit(1).maybeSingle();
+      if (!lastLock || String(lastLock.locked_until).slice(0, 10) < date) {
+        await supabase.from("financial_locks").insert({ business_id: ctx.businessId, locked_until: date, created_by: ctx.user.id });
+      }
+    }
 
     if (isLoss) {
       await FinancialEventBus.publish("LossDistributed", ctx.businessId, {

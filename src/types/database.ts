@@ -328,7 +328,24 @@ export type Partner = {
   entry_unit_price: number | null;
   entry_netpl: number | null;
   entry_valuation: number | null;
+  /** retired from this day: no share after it; history stays (migration 20260927090000) */
+  left_at?: string | null;
   created_at: string;
+};
+
+/** A partner's share from a date until their next rule (migration 20260927090000). */
+export type PartnerShareRule = {
+  id: string;
+  business_id: string;
+  partner_id: string;
+  effective_from: string;
+  share_mode: "auto" | "manual";
+  fixed_pct: number;
+  bears_loss: boolean;
+  note: string | null;
+  created_at: string;
+  created_by: string | null;
+  deleted_at: string | null;
 };
 
 export type PartnerTransaction = {
@@ -727,6 +744,12 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Partner>;
+        Relationships: [];
+      };
+      partner_share_rules: {
+        Row: PartnerShareRule;
+        Insert: { id?: string; business_id: string; partner_id: string; effective_from: string; share_mode: "auto" | "manual"; fixed_pct?: number; bears_loss?: boolean; note?: string | null; created_at?: string; created_by?: string | null; deleted_at?: string | null };
+        Update: Partial<PartnerShareRule>;
         Relationships: [];
       };
       partner_transactions: {

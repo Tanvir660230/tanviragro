@@ -115,6 +115,22 @@ export function summarizeInventoryLedger(rows: LedgerTxInput[]): InventoryLedger
   return s;
 }
 
+/**
+ * One row's part of `unallocatedInventoryCost` (feed/medicine eaten without an animal, wastage,
+ * count differences, mixing variance; gains and reversals negative). Summed over rows it equals
+ * feedExpense + medicineExpense + otherNet — used to spread running costs day by day.
+ */
+export function unallocatedCostOf(t: LedgerTxInput): number {
+  const v = value(t);
+  const mt = movementOf(t);
+  if (t.type === "purchase") {
+    if (mt === "consumption_reversal") return t.cattle_id ? 0 : -v;
+    return IN_NON_CASH.has(mt) ? -v : 0;
+  }
+  if (mt === "purchase_reversal" || t.cattle_id) return 0;
+  return v;   // consumption, wastage, adjustment_out, feed_mix_input
+}
+
 /** Everything that leaves inventory without going into an animal, net of stock gains and reversals. */
 export function unallocatedInventoryCost(s: InventoryLedgerSummary): number {
   return s.feedExpense + s.medicineExpense + s.otherNet;

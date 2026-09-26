@@ -2,43 +2,45 @@
  * Partner positions — THE partner calculation (pure, no I/O). Every partner page reads this.
  *
  * A fattening farm makes or loses money when an animal leaves: sold (price) or dead (nothing).
- * Until then feed, labour and every other running cost is part of what the animal costs; it is
- * not a loss. So the farm's result has two parts:
+ * Until then feed, labour and every other running cost is part of what the animal costs.
  *
- *   realized  — animals that left:  price − its full cost
- *   estimate  — animals on the farm: today's value (weight × market price) − its full cost
+ *   realized — animals that left:  price − full cost      (never changes after it left)
+ *   estimate — animals on the farm: value today − full cost (weight × market price)
  *
  *   full cost = purchase + costs recorded on the animal (vet, its own feed, its own expenses)
- *             + running costs × its days on the farm ÷ all animals' days on the farm
- *   running costs = everything the accounts expense that is not tied to one animal
- *                   (herd feed eaten, labour, electricity, transport, depreciation …)
+ *             + its share of each day's running costs, shared among the animals on the farm
+ *               THAT day (herd feed, labour, electricity, depreciation …)
+ *   A day's running cost with no animal on the farm is a realized loss of that day.
  *
- * The two parts add up to the accounts: retained earnings + profit paid out + (herd value −
- * livestock at cost). Only the realized part can be paid out; the estimate is shown as one.
+ * Realized + estimate = the accounts' figure (retained earnings + profit paid + herd value −
+ * livestock at cost). Only realized profit can be paid out.
  *
- * Split (owner's rules, per part and per animal):
- *   profit → management fee first; fixed-share partners (e.g. a labour partner's 50%) take their
- *            percent; the rest goes to the other partners by TAKA × DAYS (capital-days) —
- *            money that was in the farm longer earns more, and a partner who joined later shares
- *            only from the day their money came in.
- *   loss   → 100% to the partners who bear loss, fixed-share ones by their percent and the rest
- *            by taka × days. A partner who does not bear loss is never charged.
- * A sold/dead animal's result is split by taka × days up to the day it left; the estimate by
- * taka × days up to today.
+ * Split — on the NET of each part (realized, estimate): a loss on one animal is set against the
+ * profit on another before anybody's share is worked out.
+ *   • the net is spread over the animals' days; the days are cut wherever a share rule, the
+ *     management fee, a partner joining or leaving changes, and each piece is split with what
+ *     was in force then ("50% → 40% from 1 Oct": days before 1 Oct at 50%, after at 40%);
+ *   • profit: fee first; fixed-share partners take their %; the rest by TAKA × DAYS — each
+ *     partner's money in the farm during those days (withdrawn money stops counting);
+ *   • loss: 100% to the partners who bear loss (fixed ones by their %, the rest by taka × days).
  */
 
 export type PositionPartner = {
   id: string;
   name: string;
   partnerType: "capital" | "labor" | "hybrid";
-  shareMode: "auto" | "manual";
-  fixedPct: number;              // manual partners: percent of profit (and of loss if they bear it)
-  bearsLoss: boolean;
   joinedAt: string;              // YYYY-MM-DD
+  leftAt: string | null;         // no share from this day
   laborValueMonthly: number | null;
   cliffMonths: number;
+  /** the setting used when the partner has no share rule yet (from the partner row) */
+  shareMode: "auto" | "manual";
+  fixedPct: number;
+  bearsLoss: boolean;
 };
 
+export type ShareRule = { partnerId: string; from: string; shareMode: "auto" | "manual"; fixedPct: number; bearsLoss: boolean };
+export type FeeRate = { from: string; pct: number };
 export type PositionTxn = { partnerId: string; type: string; amount: number; date: string };
 
 export type PositionAnimal = {
@@ -56,35 +58,40 @@ export type PositionAnimal = {
 export type PositionInput = {
   asOf: string;
   partners: PositionPartner[];
+  rules: ShareRule[];
+  feeRates: FeeRate[];
   txns: PositionTxn[];
-  feePct: number;
-  runningCosts: number;          // all-time, from the accounting engine
+  /** running costs by day (all dated rows the accounts expense that are not on one animal) */
+  dailyCosts: { date: string; amount: number }[];
   animals: PositionAnimal[];
   marketPricePerKg: number | null;
 };
 
 export type AnimalResult = PositionAnimal & { days: number; runningShare: number; fullCost: number; result: number };
 
+/** What a partner's share is on a given day (after rules, joining and leaving). */
+export type Terms = { shareMode: "auto" | "manual"; fixedPct: number; bearsLoss: boolean; active: boolean };
+
 export type PartnerPosition = {
   id: string;
   name: string;
   partnerType: PositionPartner["partnerType"];
-  shareMode: PositionPartner["shareMode"];
-  bearsLoss: boolean;
+  leftAt: string | null;
+  terms: Terms;                  // today
+  nextChange: (ShareRule & { kind: "rule" }) | null;   // a rule that starts after today
   capitalIn: number;
   capitalOut: number;
   netCapital: number;
   laborValue: number;
-  capitalDays: number;
-  profitPct: number;             // of the farm's profit today (after the fee)
-  lossPct: number;               // of the farm's loss today
+  capitalDays: number;           // over the days of the animals on the farm now
+  profitPct: number;             // of a profit on the current herd (after the fee)
+  lossPct: number;
   realizedShare: number;
   estimateShare: number;
   profitReceived: number;
-  /** capital + labour value + share of realized + share of estimate − profit already paid */
-  balance: number;
-  /** realized profit share not yet paid out (the only amount that can be distributed) */
-  distributable: number;
+  balance: number;               // capital + labour value + realized + estimate − profit paid
+  distributable: number;         // realized profit share not yet paid
+  overpaid: number;              // paid more than the realized share (after later corrections)
 };
 
 export type FarmPosition = {
@@ -92,22 +99,25 @@ export type FarmPosition = {
   capitalIn: number;
   capitalOut: number;
   runningCosts: number;
-  costPerHeadDay: number;
-  herdCost: number;              // full cost of the animals on the farm
-  herdValue: number;             // estimate (animals without a value count at cost)
-  herdValued: boolean;           // every animal on the farm has a value
+  costPerHeadDay: number;        // running costs ÷ head-days (for display)
+  herdCost: number;
+  herdValue: number;
+  herdValued: boolean;
   realized: number;
   estimate: number;
   total: number;
-  fee: number;                   // management fee on the positive parts
+  fee: number;
+  feePctToday: number;
   profitPaid: number;
-  unallocated: number;           // could not be allocated (no eligible partner)
+  unallocated: number;
+  orphanRunning: number;         // running costs on days with no animal
   animals: AnimalResult[];
   marketPricePerKg: number | null;
 };
 
 const DAY = 86400000;
 const dayNum = (d: string) => Math.floor(Date.parse(`${d.slice(0, 10)}T00:00:00Z`) / DAY);
+const dayStr = (n: number) => new Date(n * DAY).toISOString().slice(0, 10);
 const r2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
 
 function addMonths(date: string, n: number): string {
@@ -120,35 +130,51 @@ function addMonths(date: string, n: number): string {
 function laborContributions(p: PositionPartner, asOf: string): { amount: number; date: string }[] {
   if (p.partnerType === "capital" || !p.laborValueMonthly || p.laborValueMonthly <= 0) return [];
   const out: { amount: number; date: string }[] = [];
-  for (let m = Math.max(1, p.cliffMonths); ; m++) {
+  const first = Math.max(1, p.cliffMonths);
+  for (let m = first; ; m++) {
     const date = addMonths(p.joinedAt, m);
-    if (date > asOf) break;
-    // the cliff month releases the months before it too
-    out.push({ amount: m === Math.max(1, p.cliffMonths) ? p.laborValueMonthly * m : p.laborValueMonthly, date });
+    if (date > asOf || (p.leftAt && date >= p.leftAt)) break;
+    out.push({ amount: p.laborValueMonthly * (m === first ? m : 1), date });
   }
   return out;
 }
 
-/** Taka × days of each partner's money up to `at` (the day money came in counts). */
-export function capitalDays(partners: PositionPartner[], txns: PositionTxn[], at: string): Record<string, number> {
-  const w: Record<string, number> = Object.fromEntries(partners.map((p) => [p.id, 0]));
-  const end = dayNum(at);
-  for (const t of txns) {
-    if (!(t.partnerId in w) || t.date > at) continue;
-    const days = end - dayNum(t.date) + 1;
-    if (t.type === "investment") w[t.partnerId] += t.amount * days;
-    else if (t.type === "withdrawal") w[t.partnerId] -= t.amount * days;
+/** The terms of each partner on day `d`. */
+export function termsOn(partners: PositionPartner[], rules: ShareRule[], d: string): Record<string, Terms> {
+  const out: Record<string, Terms> = {};
+  for (const p of partners) {
+    const rule = rules.filter((r) => r.partnerId === p.id && r.from <= d).sort((a, b) => a.from.localeCompare(b.from)).at(-1);
+    const base = rule ?? { shareMode: p.shareMode, fixedPct: p.fixedPct, bearsLoss: p.bearsLoss };
+    // a money partner shares through taka × days (nothing before their money comes in); a fixed
+    // share starts on the join day. Nobody shares from the day they leave.
+    const active = !(p.leftAt && d >= p.leftAt) && (base.shareMode !== "manual" || p.joinedAt <= d);
+    out[p.id] = { shareMode: base.shareMode, fixedPct: Math.max(0, Number(base.fixedPct) || 0), bearsLoss: base.bearsLoss, active };
   }
-  for (const p of partners) for (const c of laborContributions(p, at)) w[p.id] += c.amount * (end - dayNum(c.date) + 1);
+  return out;
+}
+
+/** Taka × days of each partner's money in the farm between `from` and `to` (both included). */
+export function capitalDays(partners: PositionPartner[], txns: PositionTxn[], from: string, to: string, asOf = to): Record<string, number> {
+  const w: Record<string, number> = Object.fromEntries(partners.map((p) => [p.id, 0]));
+  const a = dayNum(from), b = dayNum(to);
+  const overlap = (date: string) => Math.max(0, b - Math.max(a, dayNum(date)) + 1);
+  for (const t of txns) {
+    if (!(t.partnerId in w) || t.date > to) continue;
+    if (t.type === "investment") w[t.partnerId] += t.amount * overlap(t.date);
+    else if (t.type === "withdrawal") w[t.partnerId] -= t.amount * overlap(t.date);
+  }
+  for (const p of partners) for (const c of laborContributions(p, asOf)) if (c.date <= to) w[p.id] += c.amount * overlap(c.date);
   for (const k of Object.keys(w)) w[k] = Math.max(0, w[k]);
   return w;
 }
 
-/** Percent of a profit (after the fee) and of a loss for each partner, with weights at one date. */
-export function splitPercents(partners: PositionPartner[], weights: Record<string, number>): { profit: Record<string, number>; loss: Record<string, number> } {
+/** Percent of a profit (after the fee) and of a loss for each partner, given terms and weights. */
+export function splitPercents(partners: PositionPartner[], terms: Record<string, Terms>, weights: Record<string, number>): { profit: Record<string, number>; loss: Record<string, number> } {
   const profit: Record<string, number> = {};
   const loss: Record<string, number> = {};
   for (const p of partners) { profit[p.id] = 0; loss[p.id] = 0; }
+  const live = partners.filter((p) => terms[p.id]?.active);
+  const t = (p: PositionPartner) => terms[p.id];
 
   const byWeight = (pool: number, group: PositionPartner[], into: Record<string, number>) => {
     const total = group.reduce((s, p) => s + (weights[p.id] ?? 0), 0);
@@ -158,74 +184,139 @@ export function splitPercents(partners: PositionPartner[], weights: Record<strin
   };
 
   // profit
-  const manual = partners.filter((p) => p.shareMode === "manual");
-  const auto = partners.filter((p) => p.shareMode !== "manual");
-  const manualTotal = Math.min(100, manual.reduce((s, p) => s + Math.max(0, p.fixedPct), 0));
-  const scale = manualTotal > 0 ? manualTotal / manual.reduce((s, p) => s + Math.max(0, p.fixedPct), 0) : 0;
-  for (const p of manual) profit[p.id] = Math.max(0, p.fixedPct) * scale;
+  const manual = live.filter((p) => t(p).shareMode === "manual");
+  const auto = live.filter((p) => t(p).shareMode !== "manual");
+  const rawManual = manual.reduce((s, p) => s + t(p).fixedPct, 0);
+  const manualTotal = Math.min(100, rawManual);
+  for (const p of manual) profit[p.id] = rawManual > 0 ? (t(p).fixedPct * manualTotal) / rawManual : 0;
   if (!byWeight(100 - manualTotal, auto, profit) && manualTotal > 0 && manualTotal < 100) {
-    // nobody to take the rest: the fixed shares take it in proportion
-    for (const p of manual) profit[p.id] = (profit[p.id] / manualTotal) * 100;
+    for (const p of manual) profit[p.id] = (profit[p.id] / manualTotal) * 100;   // nobody else: the fixed shares take the rest
   }
 
-  // loss: only partners who bear loss; always 100% when anybody can bear it
-  const bearers = partners.filter((p) => p.bearsLoss);
-  const manualBearers = bearers.filter((p) => p.shareMode === "manual");
-  const autoBearers = bearers.filter((p) => p.shareMode !== "manual");
-  const mbRaw = manualBearers.reduce((s, p) => s + Math.max(0, p.fixedPct), 0);
-  const mb = Math.min(100, mbRaw);
-  const hasAutoWeight = autoBearers.some((p) => (weights[p.id] ?? 0) > 0);
-  if (hasAutoWeight) {
-    for (const p of manualBearers) loss[p.id] = mbRaw > 0 ? (Math.max(0, p.fixedPct) * mb) / mbRaw : 0;
-    byWeight(100 - mb, autoBearers, loss);
-  } else if (mbRaw > 0) {
-    for (const p of manualBearers) loss[p.id] = (Math.max(0, p.fixedPct) / mbRaw) * 100;
+  // loss: always 100% while anybody can carry it
+  const bearers = live.filter((p) => t(p).bearsLoss);
+  const manualB = bearers.filter((p) => t(p).shareMode === "manual");
+  const autoB = bearers.filter((p) => t(p).shareMode !== "manual");
+  const rawMB = manualB.reduce((s, p) => s + t(p).fixedPct, 0);
+  const mb = Math.min(100, rawMB);
+  if (autoB.some((p) => (weights[p.id] ?? 0) > 0)) {
+    for (const p of manualB) loss[p.id] = rawMB > 0 ? (t(p).fixedPct * mb) / rawMB : 0;
+    byWeight(100 - mb, autoB, loss);
+  } else if (rawMB > 0) {
+    for (const p of manualB) loss[p.id] = (t(p).fixedPct / rawMB) * 100;
   } else {
-    // nobody marked as bearing loss: the money partners carry it (a loss cannot vanish)
-    byWeight(100, auto, loss);
+    byWeight(100, auto, loss);   // nobody marked as bearing loss: the money partners carry it (a loss cannot vanish)
   }
   return { profit, loss };
 }
 
-export function buildPartnerPositions(input: PositionInput): { farm: FarmPosition; partners: PartnerPosition[] } {
-  const { asOf, partners, txns, feePct } = input;
-  const feeRate = Math.max(0, feePct) / 100;
+/** Days from `from` to `to` cut at every date where terms, the fee, or a partner's joining/leaving changes. */
+function segments(from: string, to: string, cuts: string[]): { from: string; to: string; days: number }[] {
+  const inside = [...new Set(cuts)].filter((c) => c > from && c <= to).sort();
+  const out: { from: string; to: string; days: number }[] = [];
+  let start = from;
+  for (const c of inside) {
+    const end = dayStr(dayNum(c) - 1);
+    out.push({ from: start, to: end, days: dayNum(end) - dayNum(start) + 1 });
+    start = c;
+  }
+  out.push({ from: start, to, days: dayNum(to) - dayNum(start) + 1 });
+  return out.filter((s) => s.days > 0);
+}
 
-  // ── animals: full cost by days on the farm ──
-  const days = (a: PositionAnimal) => Math.max(1, dayNum(a.endDate ?? asOf) - dayNum(a.purchaseDate) + 1);
-  const totalDays = input.animals.reduce((s, a) => s + days(a), 0);
-  const perDay = totalDays > 0 ? input.runningCosts / totalDays : 0;
+const feeOn = (rates: FeeRate[], d: string) => rates.filter((r) => r.from <= d).sort((a, b) => a.from.localeCompare(b.from)).at(-1)?.pct ?? 0;
+
+export function buildPartnerPositions(input: PositionInput): { farm: FarmPosition; partners: PartnerPosition[] } {
+  const { asOf, partners, txns, rules, feeRates } = input;
+
+  // ── 1. running costs, day by day, among the animals on the farm that day ──
+  const lastDay = (a: PositionAnimal) => (a.endDate && a.endDate < asOf ? a.endDate : asOf);
+  const costByDay = new Map<number, number>();
+  for (const c of input.dailyCosts) {
+    if (c.date > asOf) continue;
+    costByDay.set(dayNum(c.date), (costByDay.get(dayNum(c.date)) ?? 0) + c.amount);
+  }
+  const running: Record<string, number> = Object.fromEntries(input.animals.map((a) => [a.id, 0]));
+  const orphanByDay: { date: string; amount: number }[] = [];
+  const spans = input.animals.map((a) => ({ id: a.id, from: dayNum(a.purchaseDate), to: dayNum(lastDay(a)) }));
+  for (const [d, amount] of costByDay) {
+    const here = spans.filter((s) => s.from <= d && d <= s.to);
+    if (here.length === 0) { orphanByDay.push({ date: dayStr(d), amount }); continue; }
+    for (const s of here) running[s.id] += amount / here.length;
+  }
+  const runningTotal = [...costByDay.values()].reduce((s, x) => s + x, 0);
+  const headDays = spans.reduce((s, x) => s + Math.max(0, x.to - x.from + 1), 0);
+
   const animals: AnimalResult[] = input.animals.map((a) => {
-    const d = days(a);
-    const runningShare = perDay * d;
+    const days = Math.max(1, dayNum(lastDay(a)) - dayNum(a.purchaseDate) + 1);
+    const runningShare = running[a.id] ?? 0;
     const fullCost = a.purchasePrice + a.ownCost + runningShare;
     const worth = a.status === "active" ? (a.valueToday ?? fullCost) : (a.salePrice ?? 0);
-    return { ...a, days: d, runningShare, fullCost, result: worth - fullCost };
+    return { ...a, days, runningShare, fullCost, result: worth - fullCost };
   });
-  // running costs with no animal at all (e.g. before the first purchase) are a realized loss
-  const orphanRunning = totalDays > 0 ? 0 : input.runningCosts;
 
-  // ── split ──
+  // ── 2. split each result over its days, with the terms of each piece ──
+  // cut only where something really changes (so "every taka-day counts the same" holds inside a piece)
+  const same = (a: Record<string, Terms>, b: Record<string, Terms>) =>
+    partners.every((p) => a[p.id].active === b[p.id].active && a[p.id].shareMode === b[p.id].shareMode && a[p.id].fixedPct === b[p.id].fixedPct && a[p.id].bearsLoss === b[p.id].bearsLoss);
+  const candidates = [...new Set([...rules.map((r) => r.from), ...partners.map((p) => p.joinedAt), ...partners.flatMap((p) => (p.leftAt ? [p.leftAt] : []))])];
+  const cuts = [
+    ...candidates.filter((d) => !same(termsOn(partners, rules, d), termsOn(partners, rules, dayStr(dayNum(d) - 1)))),
+    ...feeRates.map((f) => f.from),
+  ];
   const alloc: Record<string, { realized: number; estimate: number }> = Object.fromEntries(partners.map((p) => [p.id, { realized: 0, estimate: 0 }]));
   let fee = 0;
   let unallocated = 0;
-  const allocate = (amount: number, at: string, part: "realized" | "estimate") => {
-    if (Math.abs(amount) < 1e-9) return;
-    let net = amount;
-    if (amount > 0) { const f = amount * feeRate; fee += f; net -= f; }
-    const pct = splitPercents(partners, capitalDays(partners, txns, at));
-    const table = amount > 0 ? pct.profit : pct.loss;
-    const sum = Object.values(table).reduce((s, x) => s + x, 0);
-    for (const p of partners) alloc[p.id][part] += (net * table[p.id]) / 100;
-    unallocated += net * (1 - sum / 100);
+  type Window = { from: string; to: string };
+  const overlapDays = (w: Window, s: Window) => Math.max(0, Math.min(dayNum(w.to), dayNum(s.to)) - Math.max(dayNum(w.from), dayNum(s.from)) + 1);
+  /** taka × days of each partner during each window, added up (the money that financed those animals) */
+  const windowWeights = (ws: Window[]) => {
+    const total: Record<string, number> = Object.fromEntries(partners.map((p) => [p.id, 0]));
+    for (const w of ws) {
+      const cd = capitalDays(partners, txns, w.from, w.to, asOf);
+      for (const k of Object.keys(total)) total[k] += cd[k];
+    }
+    return total;
   };
-  for (const a of animals) if (a.status !== "active") allocate(a.result, a.endDate ?? asOf, "realized");
-  allocate(-orphanRunning, asOf, "realized");
-  const estimate = animals.filter((a) => a.status === "active").reduce((s, a) => s + a.result, 0);
-  allocate(estimate, asOf, "estimate");
+  /**
+   * A part (realized or estimate) is settled on its NET: the animals' results are added first, so
+   * a fixed share (e.g. the labour partner's 50%) is a share of the net profit, and a loss on one
+   * animal is set against the profit on another. The net is spread over the animals' days, the
+   * days are cut where the terms change, and each piece is split with the terms and the taka × days
+   * of the money in the farm during those animals' days.
+   */
+  const allocatePart = (items: { result: number; from: string; to: string }[], part: "realized" | "estimate") => {
+    const net = items.reduce((s, x) => s + x.result, 0);
+    if (Math.abs(net) < 1e-9) return;
+    const first = items.map((x) => x.from).sort()[0];
+    const last = items.map((x) => x.to).sort().at(-1)!;
+    const segs = segments(first, last, cuts);
+    const animalDays = segs.map((seg) => items.reduce((s, x) => s + overlapDays(x, seg), 0));
+    const totalAnimalDays = animalDays.reduce((s, x) => s + x, 0);
+    segs.forEach((seg, i) => {
+      if (!animalDays[i]) return;
+      let piece = (net * animalDays[i]) / totalAnimalDays;
+      if (piece > 0) { const f = (piece * feeOn(feeRates, seg.from)) / 100; fee += f; piece -= f; }
+      const windows = items.map((x) => ({ from: x.from > seg.from ? x.from : seg.from, to: x.to < seg.to ? x.to : seg.to })).filter((w) => w.from <= w.to);
+      const pct = splitPercents(partners, termsOn(partners, rules, seg.from), windowWeights(windows));
+      const table = piece > 0 ? pct.profit : pct.loss;
+      const sum = Object.values(table).reduce((s, x) => s + x, 0);
+      for (const p of partners) alloc[p.id][part] += (piece * table[p.id]) / 100;
+      unallocated += piece * (1 - sum / 100);
+    });
+  };
+  allocatePart([
+    ...animals.filter((a) => a.status !== "active").map((a) => ({ result: a.result, from: a.purchaseDate, to: lastDay(a) })),
+    ...orphanByDay.map((o) => ({ result: -o.amount, from: o.date, to: o.date })),
+  ], "realized");
+  allocatePart(animals.filter((a) => a.status === "active").map((a) => ({ result: a.result, from: a.purchaseDate, to: asOf })), "estimate");
 
-  const weightsToday = capitalDays(partners, txns, asOf);
-  const pctToday = splitPercents(partners, weightsToday);
+  // ── 3. each partner ──
+  const active = animals.filter((a) => a.status === "active");
+  // today's percents: the money that financed the animals on the farm now
+  const weightsNow = active.length ? windowWeights(active.map((a) => ({ from: a.purchaseDate, to: asOf }))) : capitalDays(partners, txns, asOf, asOf, asOf);
+  const termsToday = termsOn(partners, rules, asOf);
+  const pctNow = splitPercents(partners, termsToday, weightsNow);
 
   const positions: PartnerPosition[] = partners.map((p) => {
     const mine = txns.filter((t) => t.partnerId === p.id && t.date <= asOf);
@@ -234,28 +325,31 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
     const capitalOut = sum("withdrawal");
     const profitReceived = sum("profit");
     const laborValue = laborContributions(p, asOf).reduce((s, c) => s + c.amount, 0);
-    const realizedShare = alloc[p.id].realized;
-    const estimateShare = alloc[p.id].estimate;
+    const { realized, estimate } = alloc[p.id];
+    const next = rules.filter((r) => r.partnerId === p.id && r.from > asOf).sort((a, b) => a.from.localeCompare(b.from))[0];
     return {
-      id: p.id, name: p.name, partnerType: p.partnerType, shareMode: p.shareMode, bearsLoss: p.bearsLoss,
+      id: p.id, name: p.name, partnerType: p.partnerType, leftAt: p.leftAt,
+      terms: termsToday[p.id], nextChange: next ? { ...next, kind: "rule" as const } : null,
       capitalIn: r2(capitalIn), capitalOut: r2(capitalOut), netCapital: r2(capitalIn - capitalOut), laborValue: r2(laborValue),
-      capitalDays: Math.round(weightsToday[p.id] ?? 0),
-      profitPct: r2(pctToday.profit[p.id]), lossPct: r2(pctToday.loss[p.id]),
-      realizedShare: r2(realizedShare), estimateShare: r2(estimateShare), profitReceived: r2(profitReceived),
-      balance: r2(capitalIn - capitalOut + laborValue + realizedShare + estimateShare - profitReceived),
-      distributable: r2(Math.max(0, realizedShare - profitReceived)),
+      capitalDays: Math.round(weightsNow[p.id] ?? 0),
+      profitPct: r2(pctNow.profit[p.id]), lossPct: r2(pctNow.loss[p.id]),
+      realizedShare: r2(realized), estimateShare: r2(estimate), profitReceived: r2(profitReceived),
+      balance: r2(capitalIn - capitalOut + laborValue + realized + estimate - profitReceived),
+      distributable: r2(Math.max(0, realized - profitReceived)),
+      overpaid: r2(Math.max(0, profitReceived - Math.max(0, realized))),
     };
   });
 
-  const active = animals.filter((a) => a.status === "active");
+  const orphanRunning = orphanByDay.reduce((s, o) => s + o.amount, 0);
   const realized = animals.filter((a) => a.status !== "active").reduce((s, a) => s + a.result, 0) - orphanRunning;
+  const estimate = active.reduce((s, a) => s + a.result, 0);
   return {
     farm: {
       asOf,
       capitalIn: r2(positions.reduce((s, p) => s + p.capitalIn, 0)),
       capitalOut: r2(positions.reduce((s, p) => s + p.capitalOut, 0)),
-      runningCosts: r2(input.runningCosts),
-      costPerHeadDay: r2(perDay),
+      runningCosts: r2(runningTotal),
+      costPerHeadDay: r2(headDays > 0 ? (runningTotal - orphanRunning) / headDays : 0),
       herdCost: r2(active.reduce((s, a) => s + a.fullCost, 0)),
       herdValue: r2(active.reduce((s, a) => s + (a.valueToday ?? a.fullCost), 0)),
       herdValued: active.every((a) => a.valueToday != null),
@@ -263,11 +357,30 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
       estimate: r2(estimate),
       total: r2(realized + estimate),
       fee: r2(fee),
+      feePctToday: feeOn(feeRates, asOf),
       profitPaid: r2(positions.reduce((s, p) => s + p.profitReceived, 0)),
       unallocated: r2(unallocated),
+      orphanRunning: r2(orphanRunning),
       animals,
       marketPricePerKg: input.marketPricePerKg,
     },
     partners: positions,
   };
+}
+
+/**
+ * Check a planned share rule against every day it would apply: fixed shares may not add up to
+ * more than 100% on any day (other partners' later rules included).
+ */
+export function checkRule(partners: PositionPartner[], rules: ShareRule[], rule: ShareRule): string | null {
+  if (rule.fixedPct < 0 || rule.fixedPct > 100) return "The share must be between 0% and 100%";
+  const next = rules.filter((r) => r.partnerId === rule.partnerId && r.from > rule.from).map((r) => r.from).sort()[0] ?? "9999-12-31";
+  const merged = [...rules.filter((r) => !(r.partnerId === rule.partnerId && r.from === rule.from)), rule];
+  const days = [rule.from, ...merged.map((r) => r.from).filter((d) => d > rule.from && d < next), ...partners.map((p) => p.joinedAt).filter((d) => d > rule.from && d < next)];
+  for (const d of days) {
+    const terms = termsOn(partners, merged, d);
+    const fixed = partners.filter((p) => terms[p.id].active && terms[p.id].shareMode === "manual").reduce((s, p) => s + terms[p.id].fixedPct, 0);
+    if (fixed > 100 + 1e-9) return `On ${d} the fixed shares would add up to ${fixed.toFixed(1)}% (more than 100%)`;
+  }
+  return null;
 }

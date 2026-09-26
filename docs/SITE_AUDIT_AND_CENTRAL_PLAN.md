@@ -276,3 +276,49 @@ Realized + estimate equals the accounts' figure: retained earnings + profit paid
   - the duplicate add-transaction dialog and capital summary cards;
   - the partner card and equity chart;
   - the old equity functions and the pass-through service.
+
+## 10. Partner shares that can change over time, and results that stay settled (2026-09-27)
+
+**Share rules with a start date** (`partner_share_rules`, migration 20260927090000).
+- On the profile, "Share rules" → "Change share" sets:
+  - from which date (past, today or future);
+  - fixed % of profit, or taka × days;
+  - whether the partner bears loss;
+  - a note.
+- A rule runs until the partner's next rule; earlier days keep the earlier rule.
+- Checked before saving (on screen and on the server):
+  - not on or before the locked books;
+  - not before the join date;
+  - fixed shares may never pass 100% on any day, counting other partners' later rules and later joiners.
+- The first rule (join day) cannot be removed. A rule inside locked books cannot be removed.
+- The partner's own share fields follow the rule in force today (older screens read them).
+- The edit form no longer changes the share.
+
+**The calculation (`lib/partners/position.ts`)**
+- **Running costs are shared day by day** among the animals on the farm that day. A sold or dead animal's result never changes after it leaves. Costs on a day with no animal are a realized loss.
+- **Each part is settled on its NET** (realized, estimate). A loss on one animal is set against profit on another, so a fixed 50% is 50% of the net.
+- **Taka × days count only during the animals' days.** Withdrawn money stops counting.
+- **Days are cut only where terms really change:**
+  - a share rule;
+  - the management fee (its own dated rates);
+  - a fixed-share partner joining;
+  - anyone leaving.
+
+  Example: a 50% → 40% change on 1 Aug splits an animal kept Jun–Sep by its days (61 days at 50%, 61 days at 40%).
+- **The dead date** comes from `cattle_death_records`.
+
+**Leaving and paying out**
+- A partner with money history cannot be deleted; they **retire** (`partners.left_at`). They get no share from that day and keep their history. They can be made active again.
+- Profit payout offers to **lock the books up to the payout day** (financial lock, on by default).
+- An overpaid share (after a later correction) is shown.
+- A negative account is shown as "owes the farm".
+
+**Checked on production data (read-only snapshot)**
+- Running costs by day ৳1,54,120, the same as the accounts.
+- Estimate +৳27,711, the same as the accounts.
+- Mohiuddin: ৳13,856, which is 50% of the net. If 40% applied from 1 Sep, it would be ৳13,096.
+- The migration was dry-run on production inside a rolled-back transaction: it backfills five rules and nothing stayed.
+
+**Found:** production does not have migration 20260924120000 (`is_business_member`); every policy is owner-only. The new migration works either way.
+
+**To deploy:** apply migration 20260927090000. Until then the pages use each partner's current setting and the rule panel says the update is needed.

@@ -56,6 +56,7 @@ import { Tr } from "@/i18n/Tr";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { todayDhaka } from "@/lib/dates";
 import type { PartnerPosition } from "@/lib/partners/position";
+import { ShareRulesPanel } from "@/components/partners/ShareRulesPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,8 @@ interface Props {
   transactions: PartnerTransaction[];
   position: PartnerPosition;
   farm: ProfileFarm;
+  /** everything the share-rule panel needs (lib/partners/load-positions.ts) */
+  shareRules: Omit<React.ComponentProps<typeof ShareRulesPanel>, "today">;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -170,6 +173,7 @@ export function PartnerProfileClient({
   transactions,
   position: pos,
   farm,
+  shareRules,
 }: Props) {
   const L = useL();
   const { locale } = useTranslation();
@@ -364,11 +368,14 @@ export function PartnerProfileClient({
                 <span>{L("যোগ দিয়েছেন", "Joined")} {fmtDate(p.joined_at)}</span>
                 <span>·</span>
                 <span>{L(`${months} মাস ধরে`, `${months} month${months !== 1 ? "s" : ""} active`)}</span>
-                {!p.bears_loss && p.partner_type !== "labor" && (
+                {pos.leftAt && (
+                  <><span>·</span><span className="font-medium text-muted-foreground">{L(`${pos.leftAt} থেকে অবসর`, `retired ${pos.leftAt}`)}</span></>
+                )}
+                {!pos.terms.bearsLoss && p.partner_type !== "labor" && (
                   <><span>·</span>
                   <span className="text-amber-600 dark:text-amber-400 font-medium">{L("ক্ষতির ভাগ নেই", "No loss sharing")}</span></>
                 )}
-                {p.share_mode === "manual" && (
+                {pos.terms.shareMode === "manual" && (
                   <><span>·</span><span>{L("নির্দিষ্ট ভাগ", "Fixed share")}</span></>
                 )}
               </div>
@@ -390,7 +397,7 @@ export function PartnerProfileClient({
           sub={pos.capitalOut > 0 ? L(`জমা ${bdt(pos.capitalIn)} − তোলা ${bdt(pos.capitalOut)}`, `in ${bdt(pos.capitalIn)} − out ${bdt(pos.capitalOut)}`) : undefined} />
         <ProfileStatCard icon={Layers} label={L("লাভের ভাগ", "Share of profit")} value={`${pos.profitPct.toFixed(1)}%`}
           iconCls="text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-900/30"
-          sub={pos.bearsLoss ? L(`ক্ষতির ভাগ ${pos.lossPct.toFixed(1)}%`, `loss share ${pos.lossPct.toFixed(1)}%`) : L("ক্ষতির ভাগ নেই", "bears no loss")} />
+          sub={pos.terms.bearsLoss ? L(`ক্ষতির ভাগ ${pos.lossPct.toFixed(1)}%`, `loss share ${pos.lossPct.toFixed(1)}%`) : L("ক্ষতির ভাগ নেই", "bears no loss")} />
         <ProfileStatCard icon={share >= 0 ? TrendingUp : TrendingDown} label={L("আজ বিক্রি করলে ভাগ", "Share if sold today")}
           value={(share >= 0 ? "+" : "−") + bdt(share)} valueColor={share >= 0 ? "green" : "red"}
           iconCls={share >= 0 ? "text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30" : "text-destructive bg-red-100 dark:bg-red-900/30"}
@@ -416,7 +423,7 @@ export function PartnerProfileClient({
           {farm.soldCount === 0
             ? L("এখনো কোনো গরু বিক্রি হয়নি — তাই পাকা লাভ বা ক্ষতি নেই। আনুমানিক ভাগ বাজারদর ও ওজনের সাথে বদলায়।", "No animal has been sold yet — so there is no final profit or loss. The estimate moves with price and weight.")
             : L("শুধু পাকা লাভের ভাগ বণ্টন করা যায়।", "Only the share of final profit can be paid out.")}
-          {" "}{p.share_mode === "manual"
+          {" "}{pos.terms.shareMode === "manual"
             ? L(`নির্দিষ্ট ভাগ: লাভের ${pos.profitPct.toFixed(1)}%।`, `Fixed share: ${pos.profitPct.toFixed(1)}% of profit.`)
             : L(`ভাগ টাকা × দিন অনুপাতে (${Math.round(pos.capitalDays).toLocaleString("en-IN")} টাকা-দিন)।`, `Share by taka × days (${Math.round(pos.capitalDays).toLocaleString("en-IN")} taka-days).`)}
         </p>
@@ -424,6 +431,16 @@ export function PartnerProfileClient({
           <p className="text-xs text-amber-600 dark:text-amber-400">{L("কিছু গরুর দাম জানা নেই — টাকা-পয়সা পাতায় বাজারদর দিন ও গরু ওজন করুন।", "Some animals have no value yet — enter the market price and weigh the cattle.")}</p>
         )}
       </div>
+
+      {pos.overpaid > 0.5 && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          {L(`পাকা লাভের ভাগের চেয়ে ${bdt(pos.overpaid)} বেশি দেওয়া হয়ে গেছে (পরে কোনো খরচ বা বিক্রি সংশোধনের কারণে)। পরের বণ্টনে এটা কাটা যাবে।`,
+             `${bdt(pos.overpaid)} more than the realized share has been paid (a later correction to a cost or a sale). It comes off the next payout.`)}
+        </p>
+      )}
+
+      {/* ── Share rules over time ── */}
+      <ShareRulesPanel {...shareRules} today={today} />
 
       {/* ── Capital Timeline Chart ───────────────────────────────────── */}
       {withBalance.length >= 2 && (
@@ -763,7 +780,6 @@ export function PartnerProfileClient({
       {editOpen && (
         <EditPartnerProfileModal
           partner={p}
-          totalInvested={pos.capitalIn}
           onClose={() => setEditOpen(false)}
         />
       )}

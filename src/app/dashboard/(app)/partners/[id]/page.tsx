@@ -8,6 +8,8 @@ import { PERMISSIONS } from "@/constants/roles";
 import { getCachedBusinessId, getServerClient } from "@/lib/supabase/cached";
 import { getL } from "@/i18n/server-text";
 import { loadPartnerData } from "@/lib/partners/load-positions";
+import { getBusinessContext } from "@/lib/context/business-context";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export const metadata: Metadata = { title: "অংশীদার" };
 
@@ -19,7 +21,8 @@ export default async function PartnerProfilePage({ params }: { params: Promise<{
   if (!businessId) notFound();
 
   // the same calculation as the partners page (lib/partners/position.ts)
-  const data = await loadPartnerData(await getServerClient(), businessId);
+  const supabase = await getServerClient();
+  const [data, ctx] = await Promise.all([loadPartnerData(supabase, businessId), getBusinessContext(supabase)]);
   const partner = data.partners.find((p) => p.id === id);
   const position = data.positions.find((p) => p.id === id);
   if (!partner || !position) notFound();
@@ -37,6 +40,14 @@ export default async function PartnerProfilePage({ params }: { params: Promise<{
           realized: data.farm.realized, estimate: data.farm.estimate, total: data.farm.total,
           soldCount: data.farm.animals.filter((a) => a.status !== "active").length,
           marketPricePerKg: data.farm.marketPricePerKg, herdValued: data.farm.herdValued,
+        }}
+        shareRules={{
+          partner: data.positionPartners.find((p) => p.id === id)!,
+          partners: data.positionPartners,
+          rules: data.rules,
+          lockedUntil: data.lockedUntil,
+          rulesEnabled: data.rulesEnabled,
+          canManage: hasPermission(ctx, PERMISSIONS.PARTNERS_MANAGE),
         }}
       />
     </div>

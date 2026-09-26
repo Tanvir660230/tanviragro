@@ -27,10 +27,10 @@ interface Props {
   farm: FarmPosition;
   positions: PartnerPosition[];
   partners: Partner[];
-  feePct: number;
 }
 
-export function PartnerDashboard({ farm, positions, partners, feePct }: Props) {
+export function PartnerDashboard({ farm, positions, partners }: Props) {
+  const feePct = farm.feePctToday;
   const L = useL();
   const { t, locale } = useTranslation();
   const today = todayDhaka();
@@ -41,8 +41,11 @@ export function PartnerDashboard({ farm, positions, partners, feePct }: Props) {
   const onFarm = farm.animals.filter((a) => a.status === "active");
   const netCapital = farm.capitalIn - farm.capitalOut;
   const distributable = positions.reduce((s, p) => s + p.distributable, 0);
-  const fixed = positions.filter((p) => p.shareMode === "manual");
-  const noLoss = positions.filter((p) => !p.bearsLoss);
+  const current = positions.filter((p) => p.terms.active);
+  const former = positions.filter((p) => !p.terms.active);
+  const fixed = current.filter((p) => p.terms.shareMode === "manual");
+  const noLoss = current.filter((p) => !p.terms.bearsLoss);
+  const upcoming = positions.filter((p) => p.nextChange);
 
   return (
     <div className="space-y-5">
@@ -132,13 +135,20 @@ export function PartnerDashboard({ farm, positions, partners, feePct }: Props) {
             <p className="flex items-center gap-1.5 font-semibold"><Info className="h-4 w-4 text-primary" aria-hidden />{L("ভাগের নিয়ম", "How it is split")}</p>
             <ul className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
               {feePct > 0 && <li>• {L(`লাভ থেকে আগে ${feePct}% ম্যানেজমেন্ট ফি।`, `A ${feePct}% management fee comes off profit first.`)}</li>}
-              {fixed.map((p) => <li key={p.id}>• {L(`${p.name} লাভের নির্দিষ্ট ${pct(p.profitPct)} পান${p.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`, `${p.name} takes a fixed ${pct(p.profitPct)} of profit${p.bearsLoss ? "" : " and bears no loss"}.`)}</li>)}
+              {fixed.map((p) => <li key={p.id}>• {L(`${p.name} লাভের নির্দিষ্ট ${pct(p.terms.fixedPct)} পান${p.terms.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`, `${p.name} takes a fixed ${pct(p.terms.fixedPct)} of profit${p.terms.bearsLoss ? "" : " and bears no loss"}.`)}</li>)}
               <li>• {L("বাকি লাভ মূলধনীদের মধ্যে টাকা × দিন অনুপাতে — যার টাকা যত বেশি দিন খামারে, তার ভাগ তত বেশি। পরে যোগ দিলে, টাকা আসার দিন থেকে ভাগ শুরু।",
                        "The rest of the profit goes to the money partners by taka × days — money in the farm longer earns more; a later partner shares from the day their money came in.")}</li>
               <li>• {L(`ক্ষতি হলে পুরো ক্ষতি বহন করেন ক্ষতির ভাগীদাররা, একই টাকা × দিন অনুপাতে${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} ক্ষতি বহন করেন না)` : ""}।`,
                        `A loss is carried in full by the partners who bear loss, by the same taka × days${noLoss.length ? ` (${noLoss.map((p) => p.name).join(", ")} bear no loss)` : ""}.`)}</li>
               <li>• {L("বিক্রি হওয়া গরুর লাভ পাকা — শুধু সেটাই বণ্টন করা যায়। খামারে থাকা গরুর ফল আনুমানিক, বাজারদর ও ওজনের সাথে বদলায়।",
                        "Profit from animals sold is final — only that can be paid out. The result on animals still on the farm is an estimate and moves with price and weight.")}</li>
+              <li>• {L("নিয়ম বদলালে (যেমন ৫০% → ৪০%) বদলের তারিখের আগের দিনগুলো আগের নিয়মে, পরের দিনগুলো নতুন নিয়মে ভাগ হয় — অংশীদারের প্রোফাইলে “ভাগের নিয়ম”।",
+                       "When a rule changes (e.g. 50% → 40%) the days before the change keep the old rule and the days after use the new one — “Share rules” on the partner's profile.")}</li>
+              {upcoming.map((p) => p.nextChange && (
+                <li key={`next-${p.id}`} className="font-medium text-sky-700 dark:text-sky-400">• {L(
+                  `${p.name}: ${p.nextChange.from} থেকে ${p.nextChange.shareMode === "manual" ? `লাভের ${pct(p.nextChange.fixedPct)}` : "টাকা × দিন"}${p.nextChange.bearsLoss ? "" : ", ক্ষতির ভাগ নেই"}।`,
+                  `${p.name}: from ${p.nextChange.from} ${p.nextChange.shareMode === "manual" ? `${pct(p.nextChange.fixedPct)} of profit` : "taka × days"}${p.nextChange.bearsLoss ? "" : ", no loss"}.`)}</li>
+              ))}
             </ul>
           </section>
 
@@ -149,10 +159,13 @@ export function PartnerDashboard({ farm, positions, partners, feePct }: Props) {
               <p className="mt-0.5 text-xs text-muted-foreground">{L("আজ সব গরু বাজারদরে বিক্রি হলে কে কত পেতেন", "What each would have if every animal were sold today")}</p>
             </div>
             <ul className="divide-y divide-border/60">
-              {positions.map((p) => {
+              {[...current, ...former].map((p, i) => {
                 const share = p.realizedShare + p.estimateShare;
                 return (
                   <li key={p.id}>
+                    {i === current.length && former.length > 0 && (
+                      <p className="bg-muted/40 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{L("আগের অংশীদার (অবসর)", "Former partners (retired)")}</p>
+                    )}
                     <Link href={`/dashboard/partners/${p.id}`} className="grid gap-3 px-5 py-4 transition-colors hover:bg-muted/30 sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))_auto] sm:items-center">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white", avatarColor(p.name))}>{initials(p.name)}</div>
@@ -160,16 +173,19 @@ export function PartnerDashboard({ farm, positions, partners, feePct }: Props) {
                           <p className="truncate font-semibold">{p.name}</p>
                           <p className="text-xs text-muted-foreground">
                             {partnerTypeLabel(p.partnerType, locale)}
-                            {p.shareMode === "manual" ? L(" · নির্দিষ্ট ভাগ", " · fixed share") : ""}
-                            {!p.bearsLoss ? L(" · ক্ষতি নেই", " · no loss") : ""}
+                            {p.terms.shareMode === "manual" ? L(` · নির্দিষ্ট ${pct(p.terms.fixedPct)}`, ` · fixed ${pct(p.terms.fixedPct)}`) : ""}
+                            {!p.terms.bearsLoss ? L(" · ক্ষতি নেই", " · no loss") : ""}
+                            {p.leftAt ? L(` · ${p.leftAt} থেকে অবসর`, ` · retired ${p.leftAt}`) : ""}
+                            {p.nextChange ? L(` · ${p.nextChange.from} থেকে বদল`, ` · changes ${p.nextChange.from}`) : ""}
                           </p>
                         </div>
                       </div>
                       <Cell label={L("মূলধন", "Capital")} value={p.netCapital > 0 ? taka(p.netCapital) : "—"} />
-                      <Cell label={L("লাভের ভাগ", "Profit share")} value={pct(p.profitPct)} sub={p.bearsLoss ? L(`ক্ষতির ভাগ ${pct(p.lossPct)}`, `loss share ${pct(p.lossPct)}`) : undefined} />
+                      <Cell label={L("লাভের ভাগ", "Profit share")} value={pct(p.profitPct)} sub={p.terms.bearsLoss ? L(`ক্ষতির ভাগ ${pct(p.lossPct)}`, `loss share ${pct(p.lossPct)}`) : undefined} />
                       <Cell label={L("আজ বিক্রি করলে ভাগ", "Share if sold today")} value={signed(share)} valueCls={tone(share)}
                         sub={p.realizedShare !== 0 ? L(`পাকা ${signed(p.realizedShare)}`, `final ${signed(p.realizedShare)}`) : L("আনুমানিক", "estimate")} />
-                      <Cell label={L("মোট পাওনা", "Account value")} value={taka(p.balance)} sub={p.profitReceived > 0 ? L(`লাভ পেয়েছেন ${taka(p.profitReceived)}`, `profit paid ${taka(p.profitReceived)}`) : undefined} />
+                      <Cell label={L("মোট পাওনা", "Account value")} value={(p.balance < 0 ? "−" : "") + taka(p.balance)} valueCls={p.balance < 0 ? "text-red-600 dark:text-red-400" : undefined}
+                        sub={p.balance < 0 ? L("খামারের কাছে দেনা", "owes the farm") : p.overpaid > 0.5 ? L(`${taka(p.overpaid)} বেশি পেয়েছেন`, `${taka(p.overpaid)} overpaid`) : p.profitReceived > 0 ? L(`লাভ পেয়েছেন ${taka(p.profitReceived)}`, `profit paid ${taka(p.profitReceived)}`) : undefined} />
                       <ChevronRight className="hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden />
                     </Link>
                   </li>
