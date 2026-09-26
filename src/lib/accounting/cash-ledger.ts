@@ -157,3 +157,20 @@ export function cashStatement(rows: CashRow[], openingCash: number, from?: strin
 export function cashOnDate(rows: CashRow[], openingCash: number, date: string): number {
   return openingCash + cashNet(rows.filter((r) => r.date <= date));
 }
+
+/** Display names of the cash ledger categories (statement, Money page). */
+export const CASH_CATEGORY_LABEL: Record<CashCategory, { bn: string; en: string }> = {
+  "Capital In": { bn: "মূলধন জমা", en: "Capital in" },
+  "Capital Out": { bn: "মূলধন তোলা / লাভ দেওয়া", en: "Capital out / profit paid" },
+  "Cattle Sale": { bn: "গরু বিক্রি", en: "Cattle sold" },
+  "Cattle Purchase": { bn: "গরু কেনা", en: "Cattle bought" },
+  "Inventory": { bn: "খাবার/স্টক কেনা", en: "Feed & stock bought" },
+  "Operating Cost": { bn: "খরচ", en: "Expenses" },
+  "Vet Fee": { bn: "ডাক্তার/চিকিৎসা", en: "Vet & treatment" },
+  "Asset Purchase": { bn: "সম্পদ কেনা", en: "Assets bought" },
+  "Supplier Due": { bn: "দোকানে বাকি", en: "Supplier dues" },
+  "Profit Advance": { bn: "লাভের অগ্রিম", en: "Profit advances" },
+  "Partner Loan": { bn: "অংশীদারের ধার", en: "Partner loans" },
+  "Loan Received": { bn: "ঋণ নেওয়া", en: "Loans received" },
+  "Loan Repayment": { bn: "ঋণ শোধ", en: "Loan repayments" },
+};

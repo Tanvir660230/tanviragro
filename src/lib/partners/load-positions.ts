@@ -4,7 +4,7 @@ import type { Partner, PartnerTransaction } from "@/types/database";
 import { getAccountingData, getCachedDbData } from "@/lib/accounting/engine";
 import { unallocatedCostOf } from "@/lib/accounting/inventory-ledger";
 import { loadHomeInputs } from "@/lib/home/home-data";
-import { buildHomeModel } from "@/lib/home/home-model";
+import { buildHomeModel, type HomeModel } from "@/lib/home/home-model";
 import { todayDhaka } from "@/lib/dates";
 import {
   buildPartnerPositions, type FarmPosition, type FeeRate, type PartnerPosition, type PositionAnimal,
@@ -32,6 +32,8 @@ export type PartnerData = {
   cycleRows: { id: string; closedOn: string; note: string | null; createdAt: string }[];
   /** the farm's cash now (for checking a withdrawal) */
   cash: number;
+  /** the home model it used (weights, measured growth, feed per head) — other pages reuse it */
+  home: HomeModel;
 };
 
 const DAY = 86400000;
@@ -117,7 +119,8 @@ export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, busin
   for (const f of db.rpcFeedData as { cattle_id: string | null; total_cost: number }[]) add(f.cattle_id, Number(f.total_cost));
 
   // ── each animal: value today (home model), sale, death date ──
-  const valueById = new Map(buildHomeModel(home.input).cattle.map((c) => [c.id, c.valueToday]));
+  const homeModel = buildHomeModel(home.input);
+  const valueById = new Map(homeModel.cattle.map((c) => [c.id, c.valueToday]));
   const saleBy = new Map(db.sales.map((s) => [s.cattle_id, s]));
   const deathBy = new Map(((deathRes.data ?? []) as { cattle_id: string; death_date: string }[]).map((d) => [d.cattle_id, String(d.death_date).slice(0, 10)]));
   const animals: PositionAnimal[] = db.cattle
@@ -155,5 +158,5 @@ export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, busin
   const accountsCheck = acc.balanceSheet.retainedEarnings + farm.profitPaid + (farm.herdValue - acc.balanceSheet.livestock);
   const lockedUntil = ((lockRes.data ?? []) as { locked_until: string }[])[0]?.locked_until?.slice(0, 10) ?? null;
   return { farm, positions, partners, positionPartners, rules, rulesEnabled, feeRates, txnsByPartner, accountsCheck, lockedUntil,
-    cyclesEnabled, cycleRows, cash: acc.balanceSheet.cashAndBank };
+    cyclesEnabled, cycleRows, cash: acc.balanceSheet.cashAndBank, home: homeModel };
 });

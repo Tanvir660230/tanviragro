@@ -10,6 +10,7 @@ import { DataPagination, DateRangeFilter } from "@/components/ui/data-pagination
 import { useL } from "@/i18n/text";
 import { costCategoryLabel, costTypeLabel } from "@/lib/expenses/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { fmtDay } from "@/lib/format";
 
 export interface CostEntry {
   id: string;
@@ -125,9 +126,7 @@ function fmt(n: number) {
   return `৳${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-function formatDate(s: string) {
-  return s.slice(0, 10);
-}
+const formatDate = (s: string, locale: string | undefined) => fmtDay(s, locale);
 
 function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchaseEntry[] }) {
   const L = useL();
@@ -175,7 +174,7 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
           <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40">
             {visible.map((p) => (
               <tr key={p.id} className="hover:bg-emerald-100/40 dark:hover:bg-emerald-950/30 transition-colors">
-                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{formatDate(p.recorded_at)}</td>
+                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{formatDate(p.recorded_at, locale)}</td>
                 <td className="px-4 py-2.5 font-medium">{p.item_name}</td>
                 <td className="px-4 py-2.5">
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", INV_CATEGORY_STYLE[p.item_category] ?? INV_CATEGORY_STYLE.other)}>
@@ -202,7 +201,7 @@ function InventoryPurchasesSection({ purchases }: { purchases: InventoryPurchase
                   {costCategoryLabel(p.item_category, locale)}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground">{formatDate(p.recorded_at)} · {p.qty} {p.unit} @ {fmt(p.unit_cost)}</p>
+              <p className="text-xs text-muted-foreground">{formatDate(p.recorded_at, locale)} · {p.qty} {p.unit} @ {fmt(p.unit_cost)}</p>
             </div>
             <span className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-300 shrink-0">{fmt(p.amount)}</span>
           </div>
@@ -232,6 +231,7 @@ interface Props { entries: CostEntry[]; inventoryPurchases?: InventoryPurchaseEn
 
 function TreatmentFeesSection({ fees }: { fees: TreatmentFeeEntry[] }) {
   const L = useL();
+  const { locale } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   if (fees.length === 0) return null;
   const VISIBLE = 5;
@@ -252,7 +252,7 @@ function TreatmentFeesSection({ fees }: { fees: TreatmentFeeEntry[] }) {
             <div className="min-w-0">
               <Link href={`/dashboard/cattle/${f.cattle_id}`} className="font-medium hover:underline">#{f.tag ?? "?"}</Link>
               {f.diagnosis && <span className="text-muted-foreground"> · {f.diagnosis}</span>}
-              <p className="text-xs text-muted-foreground">{formatDate(f.date)}</p>
+              <p className="text-xs text-muted-foreground">{formatDate(f.date, locale)}</p>
             </div>
             <span className="shrink-0 font-semibold tabular-nums">{fmt(f.amount)}</span>
           </li>
@@ -328,7 +328,7 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
               const catStyle = getCategoryStyle(a.category);
               return (
                 <tr key={a.id} className="hover:bg-amber-100/40 dark:hover:bg-amber-950/30 transition-colors">
-                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{formatDate(a.recorded_at)}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{formatDate(a.recorded_at, locale)}</td>
                   <td className="px-4 py-2.5">
                     <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", catStyle.badge)}>
                       {costCategoryLabel(a.category, locale)}
@@ -362,7 +362,7 @@ export function AssetRegister({ assets, showEmpty = false }: { assets: CostEntry
                     {costCategoryLabel(a.category, locale)}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">{formatDate(a.recorded_at)}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(a.recorded_at, locale)}</p>
                 {a.description && (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     <ExpandableText text={a.description} maxChars={60} />
@@ -389,12 +389,16 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
   const expenses = useMemo(() => entries.filter((e) => (e.entry_class ?? "expense") === "expense"), [entries]);
   const assets   = useMemo(() => entries.filter((e) => e.entry_class === "asset"), [entries]);
 
-  const [filter, setFilter]             = useState<Filter>("all");
+  // the period is chosen once, above the tabs (the page passes only its rows)
+  const [filter, setFilter]             = useState<string>("all");   // a category, or "all"
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [page, setPage]                 = useState(0);
   const [pageSize, setPageSize]         = useState(25);
-  const [dateFrom, setDateFrom]         = useState("");
-  const [dateTo, setDateTo]             = useState("");
+  const categories = useMemo(() => {
+    const m = new Map<string, { n: number; total: number }>();
+    for (const e of expenses) { const x = m.get(e.category) ?? { n: 0, total: 0 }; x.n++; x.total += Number(e.amount); m.set(e.category, x); }
+    return [...m.entries()].sort((a, b) => b[1].total - a[1].total);
+  }, [expenses]);
 
   const allPersonTags = useMemo(() => {
     const tags = new Set<string>();
@@ -406,58 +410,30 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
   }, [expenses]);
 
   const filtered = useMemo(() => {
-    let list = filter === "all" ? expenses : expenses.filter((e) => e.type === filter);
+    let list = filter === "all" ? expenses : expenses.filter((e) => e.category === filter);
     if (personFilter) list = list.filter((e) => extractPersonTag(e.description) === personFilter);
-    if (dateFrom)     list = list.filter((e) => e.recorded_at.slice(0, 10) >= dateFrom);
-    if (dateTo)       list = list.filter((e) => e.recorded_at.slice(0, 10) <= dateTo);
     return list;
-  }, [expenses, filter, personFilter, dateFrom, dateTo]);
+  }, [expenses, filter, personFilter]);
 
-  const filteredInventoryPurchases = useMemo(() => {
-    let list = inventoryPurchases;
-    if (dateFrom) list = list.filter((p) => p.recorded_at.slice(0, 10) >= dateFrom);
-    if (dateTo)   list = list.filter((p) => p.recorded_at.slice(0, 10) <= dateTo);
-    return list;
-  }, [inventoryPurchases, dateFrom, dateTo]);
-
-  const filteredTreatmentFees = useMemo(() => {
-    let list = treatmentFees;
-    if (dateFrom) list = list.filter((f) => f.date >= dateFrom);
-    if (dateTo)   list = list.filter((f) => f.date <= dateTo);
-    return list;
-  }, [treatmentFees, dateFrom, dateTo]);
+  const filteredInventoryPurchases = inventoryPurchases;
+  const filteredTreatmentFees = treatmentFees;
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(0); }, [filter, personFilter, dateFrom, dateTo]);
+  useEffect(() => { setPage(0); }, [filter, personFilter]);
 
   const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
-  const totalFixed    = expenses.filter((e) => e.type === "fixed").reduce((s, e) => s + e.amount, 0);
-  // vet fees are variable costs kept on the treatment row; they belong in the totals shown here
-  const totalVetFees  = filteredTreatmentFees.reduce((s, f) => s + f.amount, 0);
-  const totalVariable = expenses.filter((e) => e.type === "variable").reduce((s, e) => s + e.amount, 0) + totalVetFees;
-  const totalAssets   = assets.reduce((s, e) => s + e.amount, 0);
+  const totalEntered  = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const totalVetFees  = filteredTreatmentFees.reduce((s, f) => s + f.amount, 0);   // on the treatment rows
 
   return (
     <div className="space-y-5">
-      {/* Summary chips */}
-      <div className="flex flex-wrap gap-3">
-        {[
-          { label: L("নির্দিষ্ট খরচ", "Fixed costs"),    value: totalFixed,    ring: "ring-blue-500/10",    wash: "from-blue-500/[0.06]",    text: "text-blue-700 dark:text-blue-400" },
-          { label: L("পরিবর্তনশীল খরচ", "Variable costs"), value: totalVariable, ring: "ring-purple-500/10",  wash: "from-purple-500/[0.06]",  text: "text-purple-700 dark:text-purple-400" },
-          { label: L("মোট খরচ", "Total expenses"), value: totalFixed + totalVariable, ring: "ring-black/5", wash: "from-foreground/[0.03]", text: "text-foreground" },
-          ...(totalAssets > 0 ? [{ label: L("স্থায়ী সম্পদ", "Capital assets"), value: totalAssets, ring: "ring-amber-500/10", wash: "from-amber-500/[0.06]", text: "text-amber-700 dark:text-amber-400" }] : []),
-        ].map(({ label, value, ring, wash, text }) => (
-          <div key={label} className={cn("relative overflow-hidden rounded-xl bg-card px-4 py-3 sm:px-5 sm:py-3.5 min-w-0 shadow-card ring-1 flex-1 basis-[140px]", ring)}>
-            <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br to-transparent", wash)} />
-            <p className="relative text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">{label}</p>
-            <p className={cn("relative mt-1 text-lg sm:text-xl font-bold tracking-tight tabular-nums", text)}>{fmt(value)}</p>
-          </div>
-        ))}
+      {/* one line of totals for the period (the running costs by kind are on the Overview) */}
+      <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-muted/40 px-4 py-3 text-sm">
+        <span>{L("লেখা খরচ", "Expenses entered")}: <b className="tabular-nums">{fmt(totalEntered)}</b> <span className="text-xs text-muted-foreground">({expenses.length})</span></span>
+        {inventoryPurchases.length > 0 && <span>{L("খাবার/স্টক কেনা", "Feed & stock bought")}: <b className="tabular-nums">{fmt(inventoryPurchases.reduce((s2, x) => s2 + x.amount, 0))}</b></span>}
+        {totalVetFees > 0 && <span>{L("ডাক্তারের খরচ", "Vet fees")}: <b className="tabular-nums">{fmt(totalVetFees)}</b></span>}
       </div>
-
-      {/* Asset register */}
-      <AssetRegister assets={assets} />
 
       {/* Feed & inventory purchases */}
       <InventoryPurchasesSection purchases={filteredInventoryPurchases} />
@@ -465,37 +441,22 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
       {/* Vet fees (treatment records) */}
       <TreatmentFeesSection fees={filteredTreatmentFees} />
 
-      {/* Date range filter */}
-      <DateRangeFilter
-        from={dateFrom}
-        to={dateTo}
-        onFromChange={(v) => { setDateFrom(v); setPage(0); }}
-        onToChange={(v)   => { setDateTo(v);   setPage(0); }}
-        onClear={() => { setDateFrom(""); setDateTo(""); setPage(0); }}
-        filteredCount={filtered.length}
-        totalCount={expenses.length}
-      />
-
       {/* Type tabs + person filter + export */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1 rounded-xl bg-muted/60 p-1.5 ring-1 ring-black/5">
-          {TABS.map((t) => (
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-muted/60 p-1.5 ring-1 ring-black/5 scrollbar-none">
+          {[["all", { n: expenses.length, total: totalEntered }] as const, ...categories].map(([cat, x]) => (
             <button
-              key={t.value}
-              onClick={() => setFilter(t.value)}
+              key={cat}
+              onClick={() => setFilter(cat)}
               className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
-                filter === t.value
+                "shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
+                filter === cat
                   ? "bg-card text-foreground shadow-card ring-1 ring-black/5"
                   : "text-muted-foreground hover:text-foreground hover:bg-card/60"
               )}
             >
-              {L(t.bn, t.label)}
-              {t.value !== "all" && (
-                <span className="ml-1.5 tabular-nums opacity-60">
-                  ({expenses.filter((e) => e.type === t.value).length})
-                </span>
-              )}
+              {cat === "all" ? L("সব", "All") : costCategoryLabel(cat, locale)}
+              <span className="ml-1.5 tabular-nums opacity-60">({x.n})</span>
             </button>
           ))}
         </div>
@@ -533,12 +494,7 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
         </div>
       </div>
 
-      {allPersonTags.length === 0 && expenses.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {L("টিপ: বিবরণ শুরুতে", "Tip: start a description with")} <code className="rounded bg-muted px-1">@Name</code> {L("বা", "or")}{" "}
-          <code className="rounded bg-muted px-1">Name:</code> {L("লিখলে সেই মানুষের নামে খরচ আলাদা দেখা যাবে।", "to tag payments to a person.")}
-        </p>
-      )}
+
 
       {filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
@@ -572,7 +528,7 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
                   const personTag = extractPersonTag(e.description);
                   return (
                     <tr key={e.id} className={cn("border-l-2 hover:bg-muted/20 transition-colors", catStyle.border)}>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(e.recorded_at)}</td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(e.recorded_at, locale)}</td>
                       <td className="px-4 py-3">
                         <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize", TYPE_STYLE[e.type])}>
                           {costTypeLabel(e.type, locale)}
@@ -631,7 +587,7 @@ export function CostList({ entries, inventoryPurchases = [], treatmentFees = [] 
                   </div>
                   <div className="flex items-end justify-between gap-2">
                     <div>
-                      <p className="text-xs text-muted-foreground">{formatDate(e.recorded_at)}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(e.recorded_at, locale)}</p>
                       {e.description && (
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           <ExpandableText text={e.description} maxChars={60} />

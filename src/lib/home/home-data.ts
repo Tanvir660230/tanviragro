@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadFeedData } from "@/lib/feed/feed-data";
 import { getAccountingData } from "@/lib/accounting/engine";
-import { capitalSummary } from "@/components/finance/CapitalSummaryCard";
+import { capitalSummary } from "@/lib/money/summary";
 import { addDays, startOfMonth, todayDhaka } from "@/lib/dates";
 import { nextEidDate } from "@/lib/home/eid";
 import { buildHomeModel, type HomeInput, type HomeModel } from "@/lib/home/home-model";

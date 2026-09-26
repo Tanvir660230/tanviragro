@@ -7,6 +7,7 @@ import type { TxnRow, StatementResult } from "@/app/dashboard/(app)/finance/stat
 import { DataPagination } from "@/components/ui/data-pagination";
 import { useL } from "@/i18n/text";
 import { todayDhaka, startOfMonth } from "@/lib/dates";
+import { CASH_CATEGORY_LABEL } from "@/lib/accounting/cash-ledger";
 
 const BADGE: Record<TxnRow["category"], string> = {
   "Capital In":      "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
@@ -28,11 +29,8 @@ function fmt(n: number) {
   return "৳" + Math.abs(Math.round(n)).toLocaleString("en-IN");
 }
 
-const CATEGORY_BN: Record<string, string> = {
-  "Capital In": "মূলধন জমা", "Capital Out": "মূলধন তোলা", "Cattle Sale": "গরু বিক্রি", "Cattle Purchase": "গরু কেনা",
-  "Inventory": "খাবার/স্টক", "Operating Cost": "খরচ", "Vet Fee": "ডাক্তার/চিকিৎসা",
-  "Supplier Due": "দোকানে বাকি (এখনো দেওয়া হয়নি)", "Profit Advance": "লাভের অগ্রিম", "Partner Loan": "অংশীদারের ধার", "Asset Purchase": "সম্পদ কেনা", "Loan Received": "ঋণ নেওয়া", "Loan Repayment": "ঋণ শোধ",
-};
+// one list of category names for the statement and the Money page
+const CATEGORY_BN: Record<string, string> = Object.fromEntries(Object.entries(CASH_CATEGORY_LABEL).map(([k, v]) => [k, v.bn]));
 
 function fmtDate(d: string) {
   return d.slice(0, 10);

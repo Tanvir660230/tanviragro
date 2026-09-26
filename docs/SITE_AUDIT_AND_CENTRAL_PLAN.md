@@ -456,3 +456,41 @@ The partners page and profile were rendered with the production numbers and a de
 **Bug found during the check**
 - The session proxy sent `/sw.js`, `/manifest.webmanifest`, `/icon` and `/apple-icon` to `/login` for signed-out browsers. So the service worker could not register and the install icon broke.
 - They are now excluded by exact name. `/dashboard` and every other path still require a session.
+
+## 14. The Money page rebuilt on one money model (2026-09-27)
+
+**One source for every figure.** `lib/money/money-model.ts`, through `buildMoneyModel`, works out every figure on `/dashboard/finance`. It only puts together results the rest of the site already computes:
+- the engine (`getAccountingData`), for the cash ledger, expenses, assets and dues;
+- the partner position engine (`loadPartnerData`), for each animal's full cost and the farm's result;
+- the home model, for weights, measured ADG and the value today.
+
+As a result, cash, the running costs, "if sold today" and the farm's worth are the same numbers as the homepage and the partners page.
+- `lib/money/money-data.ts` (`loadMoneyData`) fetches the data once: all time, the chosen period, this month, last month and the last six months.
+- `lib/money/period.ts` (`financePeriod`) turns the period query into dates.
+- `lib/money/summary.ts` (`capitalSummary`) moved here from the old analytics file.
+- `CASH_CATEGORY_LABEL` in `cash-ledger.ts` is the one name list for cash categories.
+
+**Layout**
+- **Money today**, four tiles:
+  - cash, with the 30-day average spend and how many days it lasts;
+  - this month's running costs against last month;
+  - the result if every animal were sold today, with its ±10% price range;
+  - the farm's worth.
+
+  A strip below shows the market price used and links to change it.
+- **Period bar:** chosen once, above the tabs. It applies to the overview and the expenses tab.
+- **Tabs**
+  - **Overview:** running costs by kind; the final result from animals sold or dead; cash in and out by category; six months of running-cost bars, with cash in and out as figures.
+  - **Expenses:** one line of totals; filters by category; CSV.
+  - **Cash statement.**
+  - **Per animal:** the sale planner (price, days, projected weight = weight + ADG × days, cost = full cost + cost per head per day × days); the per-animal cost detail folded underneath.
+  - **Assets:** the engine's register, plus asset payments that have no register entry.
+
+**Removed, because each repeated or contradicted a central figure**
+- BreakEvenCard, BudgetForecastPanel/BudgetPeriodPicker, CapitalSummaryCard, CashFlowForecast
+- CostBreakdownChart, FinanceAnalyticsPanel/WithFilter, FinanceTabs, PLSummary, PLTrendChart
+- PerHeadROITable, SellTodaySummary, WhatIfCalculator
+- `lib/cattle-weight.ts`, `lib/supabase/queries/analytics.ts`
+- in CostList: the second date filter, the asset register, the fixed/variable chips
+
+**Tests:** `__tests__/money-model.test.ts`. The asset source guard now checks the new page.
