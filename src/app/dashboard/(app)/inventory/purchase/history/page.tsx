@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { siteTitle } from "@/components/navigation/site-map";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -99,7 +100,7 @@ export default async function PurchaseHistoryPage() {
   return (
     <div className="space-y-4 max-w-5xl mx-auto pb-12">
       <PageHeader
-        title="Purchase History"
+        title={siteTitle(L, "/dashboard/inventory/purchase/history", "Purchase History")}
         subtitle={L("আগের কেনার মেমো দেখুন ও ঠিক করুন।", "View and modify past bulk purchase memos.")}
         icon={History}
         back="/dashboard/inventory"

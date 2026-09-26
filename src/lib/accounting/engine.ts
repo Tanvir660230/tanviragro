@@ -1,7 +1,7 @@
 import { calculateDepreciation } from "@/lib/financial/calculations";
+import { requestMemo } from "@/lib/request-memo";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cache } from "react";
 import { selectAll } from "@/lib/supabase/select-all";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { getBusinessContext } from "@/lib/context/business-context";
@@ -47,6 +47,7 @@ export interface BalanceSheet {
   totalLiabilities: number;
   principalOutstanding: number;   // cash-affecting portion (from liabilities + loans tables)
   accruedInterestPayable: number; // non-cash accrued interest on loans
+  partnerLoans: number;           // money partners lent the farm, still owed (inside principalOutstanding)
   partnerCapital: number;
   retainedEarnings: number;
   totalEquity: number;
@@ -171,7 +172,7 @@ function must<T>(res: { data: T | null; error?: { message?: string } | null }, w
   return (res.data ?? []) as T;
 }
 
-export const getCachedDbData = cache(async (db: Client, businessId: string) => {
+export const getCachedDbData = requestMemo((_db: Client, businessId: string) => businessId, async (db: Client, businessId: string) => {
     const [
       cattleRes, salesRes, costsRes,
       invTxRes, partnerTxRes, fixedAssetRes, liabRes, loansRes, treatmentsRes,
@@ -695,6 +696,7 @@ export async function getAccountingData(
     totalAssets,
     totalLiabilities,
     principalOutstanding: allTimeFinancingCash,
+    partnerLoans: partnerLoansOutstanding,
     accruedInterestPayable: allTimeInterestExpense,
     partnerCapital,
     retainedEarnings,

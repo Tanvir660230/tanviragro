@@ -4,6 +4,8 @@
  * Sold / dead animals get their realised result (sale price − full cost, or the loss).
  */
 import { buildHomeModel, WEIGH_EVERY_DAYS, type HomeCattle, type HomeInput } from "@/lib/home/home-model";
+import { alignHomeWithFarm } from "@/lib/home/farm-align";
+import type { FarmPosition } from "@/lib/partners/position";
 
 export type BoardRow = {
   id: string; tag_id: string; breed: string | null; gender: string | null; status: string;
@@ -90,8 +92,11 @@ export function buildBoard(p: {
   directCostByCattle: Record<string, number>;
   health: HealthEvent[];                 // open (not completed) events, any date
   sales: Sale[];
+  /** the farm position: each animal's full cost and result, as on the Money and partners pages */
+  farm?: FarmPosition | null;
 }): Board {
-  const model = buildHomeModel(p.home);
+  const model = alignHomeWithFarm(buildHomeModel(p.home), p.farm);
+  const farmBy = new Map((p.farm?.animals ?? []).map((a) => [a.id, a]));
   const metricsById = new Map(model.cattle.map((c) => [c.id, c]));
   const nextHealthBy = new Map<string, HealthEvent>();
   for (const h of [...p.health].sort((a, b) => a.date.localeCompare(b.date))) if (!nextHealthBy.has(h.cattle_id)) nextHealthBy.set(h.cattle_id, h);
@@ -101,7 +106,7 @@ export function buildBoard(p: {
     const h = nextHealthBy.get(r.id);
     let realised: BoardAnimal["realised"] = null;
     if (r.status === "sold" || r.status === "dead") {
-      const cost = Number(r.purchase_price ?? 0) + (p.feedByAnimal[r.id] ?? 0) + (p.directCostByCattle[r.id] ?? 0);
+      const cost = farmBy.get(r.id)?.fullCost ?? Number(r.purchase_price ?? 0) + (p.feedByAnimal[r.id] ?? 0) + (p.directCostByCattle[r.id] ?? 0);
       const sale = saleBy.get(r.id);
       realised = r.status === "sold" && sale
         ? { kind: "sold", date: sale.sold_at, salePrice: sale.price, cost, result: sale.price - cost }

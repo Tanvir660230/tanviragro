@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadHomeInputs } from "@/lib/home/home-data";
+import { loadFarm, loadHomeInputs } from "@/lib/home/home-data";
 import { todayDhaka } from "@/lib/dates";
 import { buildBoard, type Board, type BoardRow } from "@/lib/cattle/board";
 
 /** Cattle list data: the homepage calculation for active animals + history for sold/dead ones. */
 export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId: string, today = todayDhaka()): Promise<Board> {
-  const [inputs, rowsRes, healthRes, salesRes] = await Promise.all([
+  const [inputs, farm, rowsRes, healthRes, salesRes] = await Promise.all([
     loadHomeInputs(supabase, businessId, today, { money: false }),
+    loadFarm(supabase, businessId),
     supabase.from("cattle")
       .select("id, tag_id, breed, gender, status, purchase_date, purchase_price, target_weight_kg, is_quarantined, is_qurbani_marked, initial_weight_kg, initial_weight_type")
       .eq("business_id", businessId).is("deleted_at", null),
@@ -24,6 +25,7 @@ export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId:
 
   return buildBoard({
     home: inputs.input,
+    farm,
     rows: ((rowsRes.data ?? []) as (BoardRow & { purchase_price: number | string; target_weight_kg: number | string | null })[])
       .map((r) => ({ ...r, purchase_price: Number(r.purchase_price ?? 0), target_weight_kg: r.target_weight_kg == null ? null : Number(r.target_weight_kg), purchase_date: String(r.purchase_date).slice(0, 10),
         initial_weight_kg: r.initial_weight_kg == null ? null : Number(r.initial_weight_kg) })),

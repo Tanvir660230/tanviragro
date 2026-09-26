@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
@@ -32,7 +33,7 @@ export default async function MovementsPage() {
   return (
     <div className="space-y-4 pb-12">
       <PageHeader
-        title="Stock Movements"
+        title={siteTitle(L, "/dashboard/inventory/movements", "Stock Movements")}
         subtitle={L("প্রতিটি কেনা, খাওয়ানো, মিক্স ও গণনার পুরো তালিকা।", "Unified traceable timeline of every purchase, consumption, transfer and adjustment.")}
         icon={ArrowRightLeft}
         back="/dashboard/inventory"

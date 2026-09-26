@@ -85,18 +85,17 @@ export class CentralInventoryRepository {
   }
 
   /**
-   * Fast stock on hand lookup for an item.
+   * Stock on hand of one item: THE balance view (v_inventory_balance — the same figure as the
+   * stock page, the feed engine and the accounts). It used to add up the raw rows, which a single
+   * read caps at 1,000.
    */
   public static async getItemStockOnHand(
     supabase: SupabaseClient<any>,
     itemId: string
   ): Promise<number> {
-    const { data: txns } = await supabase
-      .from("inventory_transactions")
-      .select("type, qty")
-      .eq("item_id", itemId);
-
-    return StockLedgerEngine.calculateItemStockOnHand(txns ?? []);
+    const { data, error } = await supabase.from("v_inventory_balance").select("qty_on_hand").eq("item_id", itemId).maybeSingle();
+    if (error) throw new Error(`stock: could not read the balance: ${error.message}`);
+    return Number((data as { qty_on_hand?: number | string } | null)?.qty_on_hand ?? 0);
   }
 
   /**

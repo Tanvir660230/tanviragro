@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { requestMemo } from "@/lib/request-memo";
 import { todayDhaka } from "@/lib/dates";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 import { selectAll } from "@/lib/supabase/select-all";
@@ -92,7 +93,12 @@ const n = (v: number | string | null | undefined) => (v == null ? null : Number(
  * Loads the feed data and, first, posts any automatic daily consumption that is due
  * (open usage periods behind yesterday). Posting is idempotent, so concurrent page loads are safe.
  */
-export async function loadFeedData(supabase: SupabaseClient<any>, businessId: string, asOf = todayDhaka()): Promise<FeedData> {
+export const loadFeedData = requestMemo(
+  (_s: SupabaseClient<any>, businessId: string, asOf: string = todayDhaka()) => `${businessId}:${asOf}`,
+  (supabase: SupabaseClient<any>, businessId: string, asOf: string = todayDhaka()) => loadFeedDataPosting(supabase, businessId, asOf),
+);
+
+async function loadFeedDataPosting(supabase: SupabaseClient<any>, businessId: string, asOf = todayDhaka()): Promise<FeedData> {
   const data = await loadFeedDataOnly(supabase, businessId, asOf);
   if (asOf !== todayDhaka()) return data;                       // historical views never post
   const due = autoRowsDue({ asOf, periods: data.periods, animals: data.animals, charts: data.charts, learned: data.snapshot.learnedDaily });

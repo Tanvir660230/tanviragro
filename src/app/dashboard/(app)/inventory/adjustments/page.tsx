@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
@@ -33,7 +34,7 @@ export default async function AdjustmentsPage() {
   return (
     <div className="space-y-4 pb-12">
       <PageHeader
-        title="Stock Adjustments"
+        title={siteTitle(L, "/dashboard/inventory/adjustments", "Stock Adjustments")}
         subtitle={L("গুনে মেলানো, নষ্ট, ক্ষতি ও সংশোধন — সবকিছুর তালিকা।", "Physical counts, spoilage, damage and corrections — fully traceable.")}
         icon={ClipboardList}
         back="/dashboard/inventory"

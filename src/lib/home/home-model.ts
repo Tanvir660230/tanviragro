@@ -46,6 +46,8 @@ export type HomeCattle = {
   costSoFar: number; feedCost: number;
   valueToday: number | null; profitToday: number | null;   // estimates (weight × today's price)
   readyToSell: boolean;
+  /** reached its target weight (one of the two "ready to sell" reasons) */
+  targetReached: boolean;
   eid: { weightKg: number; value: number | null; profit: number | null } | null;
 };
 
@@ -120,8 +122,8 @@ export function buildHomeModel(input: HomeInput): HomeModel {
     const costSoFar = c.purchasePrice + feedCost + (input.directCostByCattle[c.id] ?? 0);
     const valueToday = price && weightKg ? weightKg * price : null;
     const profitToday = valueToday != null ? valueToday - costSoFar : null;
-    const readyToSell = (c.targetWeightKg != null && weightKg != null && weightKg >= c.targetWeightKg)
-      || (profitToday != null && costSoFar > 0 && profitToday / costSoFar >= READY_ROI);
+    const targetReached = c.targetWeightKg != null && weightKg != null && weightKg >= c.targetWeightKg;
+    const readyToSell = targetReached || (profitToday != null && costSoFar > 0 && profitToday / costSoFar >= READY_ROI);
 
     let eid: HomeCattle["eid"] = null;
     if (eidDays != null && eidDays > 0 && eidDays <= EID_PROJECTION_DAYS && weightKg != null && adg != null && adg > 0) {
@@ -134,7 +136,7 @@ export function buildHomeModel(input: HomeInput): HomeModel {
     return {
       id: c.id, tag: c.tag, daysOnFarm: Math.max(0, days(c.purchaseDate, today)),
       weightKg, weightBasis, lastWeighed, daysSinceWeighed: lastWeighed ? days(lastWeighed, today) : null,
-      adgKg: adg, costSoFar, feedCost, valueToday, profitToday, readyToSell, eid,
+      adgKg: adg, costSoFar, feedCost, valueToday, profitToday, readyToSell, targetReached, eid,
     };
   });
 

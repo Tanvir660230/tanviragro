@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import {
@@ -103,7 +104,7 @@ export default async function IncomeStatementPage() {
 
       {/* Statement Header */}
       <StatementReportHeader
-        title="Income Statement"
+        title={siteTitle(L, "/dashboard/accounting/income-statement", "Income Statement")}
         subtitle={L("বিক্রি থেকে সব খরচ বাদ দিয়ে লাভ বা ক্ষতি", "Statement of Profit & Loss · Multi-Step GAAP Format")}
         asOfDate={asOf}
         isAuditedBalanced={tb.isBalanced}

@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   experimental: {
+    // a page seen in the last 30 s opens from the browser's cache (back/forward, tab to tab);
+    // every save calls revalidatePath / router.refresh, which clears it, so data stays fresh
+    staleTimes: { dynamic: 30 },
     optimizePackageImports: [
       "lucide-react",
       "recharts",

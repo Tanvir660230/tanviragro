@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
@@ -136,7 +137,7 @@ export default async function BalanceSheetPage() {
 
       {/* Statement Header */}
       <StatementReportHeader
-        title="Balance Sheet"
+        title={siteTitle(L, "/dashboard/accounting/balance-sheet", "Balance Sheet")}
         subtitle={L("খামারের যা আছে (সম্পদ), যা দেনা (দায়) ও মালিকদের অংশ", "Statement of Financial Position · Standard Double-Entry")}
         asOfDate={asOf}
         isAuditedBalanced={tb.isBalanced}
@@ -201,8 +202,9 @@ export default async function BalanceSheetPage() {
               <div className="divide-y divide-border/30">
                 {currentPrincipal > 0 && <Row label={L("স্বল্প মেয়াদি দেনা (১ বছরের মধ্যে)", "Current Liabilities (due ≤ 1 yr)")} value={currentPrincipal} indent />}
                 {longTermPrincipal > 0 && <Row label={L("দীর্ঘ মেয়াদি দেনা (১ বছর পরে)", "Long-term Obligations (due > 1 yr)")} value={longTermPrincipal} indent />}
+                {bs.partnerLoans > 0.5 && <Row label={L("অংশীদারের ধার (ফেরত দিতে হবে)", "Loans from partners")} value={bs.partnerLoans} indent />}
                 {bs.accruedInterestPayable > 0 && <Row label={L("জমা সুদ (দিতে হবে)", "Accrued Interest Payable")} value={bs.accruedInterestPayable} indent />}
-                {currentPrincipal === 0 && longTermPrincipal === 0 && bs.accruedInterestPayable === 0 && (
+                {currentPrincipal === 0 && longTermPrincipal === 0 && bs.accruedInterestPayable === 0 && bs.partnerLoans <= 0.5 && (
                   <div className="py-4 px-5 text-xs text-muted-foreground italic">{L("কোনো দেনা নেই।", "No outstanding liabilities.")}</div>
                 )}
               </div>

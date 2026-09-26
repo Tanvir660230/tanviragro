@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { fmtDay } from "@/lib/format";
 import Link from "next/link";
 import { AlertTriangle, Blend, History, Package, PlayCircle, Receipt, Scale, Wheat } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -51,6 +52,7 @@ export default async function InventoryPage({
     { data: cattleData },
     portfolioData,
     movementsData,
+    balanceData,
   ] = await Promise.all([
     businessId
       ? supabase
@@ -85,6 +87,10 @@ export default async function InventoryPage({
           .order("created_at", { ascending: false })
           .limit(8)
       : Promise.resolve({ data: [] }),
+    // THE stock on hand (the same view as the feed engine, the top bar and the accounts)
+    businessId
+      ? supabase.from("v_inventory_balance").select("item_id, qty_on_hand").eq("business_id", businessId)
+      : Promise.resolve({ data: [] }),
   ]);
 
   // THE feed engine: usage periods, running estimates, days left — same as the homepage and Feed Usage
@@ -102,10 +108,8 @@ export default async function InventoryPage({
   const stockMap: Record<string, number> = {};
   const avgDailyMap: Record<string, number> = {};
 
-  for (const s of stats) {
-    stockMap[s.item_id] = s.total_stock;
-    avgDailyMap[s.item_id] = s.consumed_last_30d / 30;
-  }
+  for (const s of stats) avgDailyMap[s.item_id] = s.consumed_last_30d / 30;
+  for (const b of ((balanceData as { data?: { item_id: string; qty_on_hand: number | string }[] | null })?.data ?? [])) stockMap[b.item_id] = Number(b.qty_on_hand);
 
   // Days left: the feed engine's daily figure (running period, else usage learned from past
   // periods) wins; the recorded 30-day average above is only the fallback.
@@ -248,7 +252,7 @@ export default async function InventoryPage({
                   <li key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{it?.name ?? "—"} <span className="text-xs font-normal text-muted-foreground">· {mvLabel(m.movement_type, m.notes)}</span></span>
-                      <span className="block text-[11px] text-muted-foreground">{m.movement_type === "purchase" ? ti.bought : ti.dated} {String(m.recorded_at).slice(0, 10)} · {ti.entered} {String(m.created_at).slice(0, 10)}</span>
+                      <span className="block text-[11px] text-muted-foreground">{m.movement_type === "purchase" ? ti.bought : ti.dated} {fmtDay(String(m.recorded_at).slice(0, 10), locale)} · {ti.entered} {fmtDay(String(m.created_at).slice(0, 10), locale)}</span>
                     </span>
                     <span className={`shrink-0 text-right tabular-nums ${isIn ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}>
                       {isIn ? "+" : "−"}{Number(m.qty).toLocaleString("en-IN", { maximumFractionDigits: 2 })} {it?.unit ?? ""}

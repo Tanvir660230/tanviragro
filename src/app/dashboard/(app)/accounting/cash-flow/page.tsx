@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { ArrowDownRight, ArrowUpRight, Activity, Building, Landmark } from "lucide-react";
@@ -90,7 +91,7 @@ export default async function CashFlowPage() {
 
       {/* Statement Header */}
       <StatementReportHeader
-        title="Cash Flow Statement"
+        title={siteTitle(L, "/dashboard/accounting/cash-flow", "Cash Flow Statement")}
         subtitle={L("টাকা কোথা থেকে এলো আর কোথায় গেলো", "Statement of Cash Flows · Direct Method")}
         asOfDate={asOf}
         isAuditedBalanced={tb.isBalanced}

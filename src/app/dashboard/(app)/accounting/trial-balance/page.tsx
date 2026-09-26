@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { StatementReportHeader } from "@/components/finance/finance-ui";
@@ -41,7 +42,7 @@ export default async function TrialBalancePage() {
 
       {/* Statement Header */}
       <StatementReportHeader
-        title="Trial Balance"
+        title={siteTitle(L, "/dashboard/accounting/trial-balance", "Trial Balance")}
         subtitle={L("প্রতিটি হিসাবের ডেবিট ও ক্রেডিট — দুই দিক মিলছে কি না", "Chart of Accounts Ledger Audit · Double-Entry Integrity")}
         asOfDate={asOf}
         isAuditedBalanced={tb.isBalanced}

@@ -1,12 +1,11 @@
 import { todayDhaka, addDays } from "@/lib/dates";
+import { getBusinessContext } from "@/lib/context/business-context";
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
 import { getCachedTopBarAlerts } from "@/lib/supabase/topbar-alerts";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Bell } from "lucide-react";
 import { NotificationCenterClient } from "@/components/notifications/NotificationCenterClient";
 import { NotificationItem } from "@/lib/notifications/types";
-import { getCachedBusinessId } from "@/lib/supabase/cached";
 import { getL, getLocale } from "@/i18n/server-text";
 
 export const metadata: Metadata = { title: "নোটিফিকেশন" };
@@ -20,34 +19,13 @@ function fmtDate(iso: string, locale?: string) {
 export default async function NotificationsPage() {
   const L = await getL();
   const lang = await getLocale();
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: bizData } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("id", (await getCachedBusinessId()) ?? "")
-    .maybeSingle();
-
-  const bizId = bizData?.id ?? "";
-  // the farm's calendar (Dhaka), not the server's UTC date
-  const todayISO    = todayDhaka();
-  const in7DaysISO  = addDays(todayISO, 7);
-  const in30DaysISO = addDays(todayISO, 30);
-  const sevenDaysAgoISO = addDays(todayISO, -7);
-
-  const alerts = await getCachedTopBarAlerts(bizId, todayISO, in7DaysISO, in30DaysISO, sevenDaysAgoISO);
-
-  // Resolve cattle tag_ids
-  const lookupIds = [
-    ...new Set([...alerts.allCattleIds, ...alerts.unweighedCattleIds]),
-  ];
-  const { data: cattleRows } = lookupIds.length
-    ? await supabase.from("cattle").select("id, tag_id").in("id", lookupIds)
-    : { data: [] as { id: string; tag_id: string }[] };
-  const tagMap: Record<string, string> = {};
-  for (const c of (cattleRows ?? [])) tagMap[c.id] = c.tag_id;
+  const ctx = await getBusinessContext().catch(() => null);
+  if (!ctx) return null;
+  // the farm's calendar (Dhaka); the same alerts, windows and weighing rule as the top bar
+  const todayISO = todayDhaka();
+  const alerts = await getCachedTopBarAlerts(ctx.businessId, todayISO);
+  const tagMap = alerts.tagById;
+  const weighDays = alerts.weighEveryDays;
 
   const notificationItems: NotificationItem[] = [];
 
@@ -88,17 +66,17 @@ export default async function NotificationsPage() {
     });
   }
 
-  // Unweighed cattle (7+ days) → High priority
+  // Unweighed cattle (past the weighing rule) → High priority
   for (const id of alerts.unweighedCattleIds) {
     const tag = tagMap[id] ?? id.slice(0, 6);
     notificationItems.push({
       id: `unweighed-${id}`,
-      title: `#${tag} — ৭+ দিন ওজন নেওয়া হয়নি`,
-      subtitle: L("৭ দিনের বেশি ওজন নেওয়া হয়নি। বৃদ্ধি দেখতে ওজন লিখুন।", "No weight in over 7 days. Record one to track growth."),
+      title: L(`#${tag} — ${weighDays}+ দিন ওজন নেওয়া হয়নি`, `#${tag} — not weighed in ${weighDays}+ days`),
+      subtitle: L(`${weighDays} দিনের বেশি ওজন নেওয়া হয়নি। বৃদ্ধি দেখতে ওজন লিখুন।`, `No weight in over ${weighDays} days. Record one to track growth.`),
       category: "cattle",
       severity: "high",
       iconKey: "scale",
-      timestamp: sevenDaysAgoISO,
+      timestamp: addDays(todayISO, -weighDays),
       href: `/dashboard/cattle/${id}`,
       isRead: false,
       isPinned: false,
@@ -186,8 +164,8 @@ export default async function NotificationsPage() {
         title={L("নোটিফিকেশন", "Notifications")}
         subtitle={
           notificationItems.length === 0
-            ? "সব ঠিক আছে — কোনো সক্রিয় সতর্কতা নেই"
-            : `${notificationItems.length}টি সক্রিয় সতর্কতা ও অটোমেশন নোটিশ আছে`
+            ? L("সব ঠিক আছে — কোনো সক্রিয় সতর্কতা নেই", "All clear — no active alerts")
+            : L(`${notificationItems.length}টি সক্রিয় সতর্কতা আছে`, `${notificationItems.length} active alerts`)
         }
         icon={Bell}
         badge={notificationItems.length || undefined}

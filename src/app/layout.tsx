@@ -3,10 +3,11 @@ import { Poppins, Fira_Code, Hind_Siliguri } from "next/font/google";
 import { Providers } from "@/components/shared/Providers";
 import "./globals.css";
 
+// only the weights the app uses (font-light was never used: one file less per font)
 const poppins = Poppins({
   variable: "--font-poppins",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -14,12 +15,13 @@ const firaCode = Fira_Code({
   variable: "--font-fira-code",
   subsets: ["latin"],
   display: "swap",
+  preload: false,   // figures only; not needed before the first paint
 });
 
 const hindSiliguri = Hind_Siliguri({
   variable: "--font-bengali",
   subsets: ["bengali"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 

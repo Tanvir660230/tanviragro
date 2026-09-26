@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -58,7 +59,7 @@ export default async function UtilityExpensesPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader
-        title="Utility Expenses"
+        title={siteTitle(L, "/dashboard/finance/utilities", "Utility Expenses")}
         subtitle={L("বিদ্যুৎ, ইন্টারনেট, গ্যাস, পানি ইত্যাদি — খাবার ও গরুর খরচ থেকে আলাদা", "Electricity, internet, gas, water and other utilities — kept separate from feed and cattle costs")}
         icon={Zap}
         back="/dashboard/finance"

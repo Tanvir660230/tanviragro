@@ -5,14 +5,31 @@ import { capitalSummary } from "@/lib/money/summary";
 import { addDays, startOfMonth, todayDhaka } from "@/lib/dates";
 import { nextEidDate } from "@/lib/home/eid";
 import { buildHomeModel, type HomeInput, type HomeModel } from "@/lib/home/home-model";
+import { alignHomeWithFarm } from "@/lib/home/farm-align";
+import type { FarmPosition } from "@/lib/partners/position";
 import type { FeedData } from "@/lib/feed/feed-data";
 import { AuthError, ForbiddenError } from "@/lib/errors/app-error";
 
 export type HomeInputs = { input: HomeInput; feed: FeedData; directCostByCattle: Record<string, number> };
 
-/** Loads the homepage from the verified sources; money figures are omitted without accounting access. */
+/**
+ * Loads the homepage from the verified sources; money figures are omitted without accounting
+ * access. Each animal's cost and the herd's result come from the farm position (the same as the
+ * Money and partners pages) when the viewer may see it.
+ */
 export async function loadHomeModel(supabase: SupabaseClient<any>, businessId: string, today = todayDhaka()): Promise<HomeModel> {
-  return buildHomeModel((await loadHomeInputs(supabase, businessId, today)).input);
+  const [inputs, farm] = await Promise.all([loadHomeInputs(supabase, businessId, today), loadFarm(supabase, businessId)]);
+  return alignHomeWithFarm(buildHomeModel(inputs.input), farm);
+}
+
+/** The farm position, or null without accounting access (the plain home figures are shown then). */
+export async function loadFarm(supabase: SupabaseClient<any>, businessId: string): Promise<FarmPosition | null> {
+  // imported here: load-positions itself reads the home inputs
+  const { loadPartnerData } = await import("@/lib/partners/load-positions");
+  return loadPartnerData(supabase, businessId).then((p) => p.farm).catch((e) => {
+    if (!(e instanceof ForbiddenError || e instanceof AuthError)) console.error("farm position failed", e);
+    return null;
+  });
 }
 
 /**
@@ -20,6 +37,16 @@ export async function loadHomeModel(supabase: SupabaseClient<any>, businessId: s
  * money = false skips the accounting engine (cash, month's expenses) when a page does not need it.
  */
 export async function loadHomeInputs(supabase: SupabaseClient<any>, businessId: string, today = todayDhaka(), opts: { money?: boolean } = {}): Promise<HomeInputs> {
+  // the accounting engine starts at the same time as everything else (it used to wait for them)
+  const moneyP = opts.money !== false
+    ? Promise.all([getAccountingData(supabase), getAccountingData(supabase, startOfMonth(today), today)])
+        .then(([all, month]) => ({ cash: all.balanceSheet.cashAndBank, month: capitalSummary(month).operatingExpenses }))
+        .catch((e) => {
+          // no accounting access → money is not shown; any other failure is a bug, so it is logged
+          if (!(e instanceof ForbiddenError || e instanceof AuthError)) console.error("home: accounting engine failed", e);
+          return null;
+        })
+    : Promise.resolve(null);
   const [cattleRes, feed, costsRes, treatmentsRes, priceRes, healthRes] = await Promise.all([
     supabase.from("cattle")
       .select("id, tag_id, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, target_weight_kg")
@@ -52,17 +79,9 @@ export async function loadHomeInputs(supabase: SupabaseClient<any>, businessId: 
   }
 
   // money: the accounting engine (needs accounting permission — otherwise not shown)
-  let cash: number | null = null;
-  let monthOperatingExpenses: number | null = null;
-  if (opts.money !== false) try {
-    const [all, month] = await Promise.all([getAccountingData(supabase), getAccountingData(supabase, startOfMonth(today), today)]);
-    cash = all.balanceSheet.cashAndBank;
-    monthOperatingExpenses = capitalSummary(month).operatingExpenses;
-  } catch (e) {
-    // no accounting access → money is not shown; any other failure is a bug, so it is logged
-    // (it used to be swallowed, and the cash tile just showed "—" with no trace)
-    if (!(e instanceof ForbiddenError || e instanceof AuthError)) console.error("home: accounting engine failed", e);
-  }
+  const money = await moneyP;
+  const cash: number | null = money?.cash ?? null;
+  const monthOperatingExpenses: number | null = money?.month ?? null;
 
   const price = (priceRes.data as { price_per_kg: number | string } | null)?.price_per_kg;
 

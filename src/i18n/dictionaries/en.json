@@ -84,8 +84,8 @@
     "insights_all_clear": "All clear — no issues detected",
     "insights": {
       "more": "+{{n}} more",
-      "unweighed_7d_single": "#{{tag}} not weighed in 7 days",
-      "unweighed_7d_multi": "{{tags}} — not weighed in 7 days",
+      "unweighed_7d_single": "#{{tag}} not weighed in 14 days",
+      "unweighed_7d_multi": "{{tags}} — not weighed in 14 days",
       "low_stock_one": "{{n}} inventory item will run out within 10 days",
       "low_stock_many": "{{n}} inventory items will run out within 10 days",
       "profitable": "Currently profitable — ৳{{net}} net",
@@ -866,8 +866,8 @@
       "sold": "Sold"
     },
     "alerts": {
-      "unweighed": "{{count}} cattle haven't been weighed in 7+ days",
-      "needs_weighing": "Needs weighing · 7+ days",
+      "unweighed": "{{count}} cattle haven't been weighed in 14+ days",
+      "needs_weighing": "Needs weighing · 14+ days",
       "overdue_health": "{{count}} health events are overdue",
       "high_fcr": "{{count}} cattle have FCR above 10"
     },
@@ -1218,6 +1218,7 @@
     "money": "Money",
     "purchase": "Purchase",
     "feed": "Feed",
+    "farm_share": "Feed & share of farm costs",
     "medical": "Medical",
     "other": "Other",
     "break_even": "Break-even price",

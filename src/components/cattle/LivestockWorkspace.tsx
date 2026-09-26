@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { WEIGH_EVERY_DAYS } from "@/lib/home/home-model";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -106,7 +107,7 @@ export function LivestockWorkspace({ cattle, allBreeds, existingTagIds, alerts, 
       case "sick":
         return cattle.filter((c) => c.is_quarantined || c.status === "quarantined");
       case "unweighed": {
-        const sevenDaysAgo = mountedAtMs - 7 * 86400000;
+        const sevenDaysAgo = mountedAtMs - WEIGH_EVERY_DAYS * 86400000;   // the homepage's weighing rule
         return cattle.filter(
           (c) => c.status === "active" && (!c.lastWeighedAt || new Date(c.lastWeighedAt).getTime() < sevenDaysAgo)
         );

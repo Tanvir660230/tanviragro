@@ -84,8 +84,8 @@
     "insights_all_clear": "সব ঠিক আছে — কোনো সমস্যা নেই",
     "insights": {
       "more": "+{{n}} আরো",
-      "unweighed_7d_single": "#{{tag}} ৭ দিনে ওজন করা হয়নি",
-      "unweighed_7d_multi": "{{tags}} — ৭ দিনে ওজন করা হয়নি",
+      "unweighed_7d_single": "#{{tag}} ১৪ দিনে ওজন করা হয়নি",
+      "unweighed_7d_multi": "{{tags}} — ১৪ দিনে ওজন করা হয়নি",
       "low_stock_one": "{{n}}টি পণ্য ১০ দিনের মধ্যে শেষ হয়ে যাবে",
       "low_stock_many": "{{n}}টি পণ্য ১০ দিনের মধ্যে শেষ হয়ে যাবে",
       "profitable": "এখন লাভজনক — নিট ৳{{net}}",
@@ -866,8 +866,8 @@
       "sold": "বিক্রয়"
     },
     "alerts": {
-      "unweighed": "{{count}}টি গরু ৭+ দিন ধরে ওজন করা হয়নি",
-      "needs_weighing": "৭+ দিনে ওজন নেওয়া হয়নি",
+      "unweighed": "{{count}}টি গরু ১৪+ দিন ধরে ওজন করা হয়নি",
+      "needs_weighing": "১৪+ দিনে ওজন নেওয়া হয়নি",
       "overdue_health": "{{count}}টি স্বাস্থ্য ইভেন্ট মেয়াদ পেরিয়ে গেছে",
       "high_fcr": "{{count}}টি গরুর FCR ১০-এর বেশি"
     },
@@ -1218,6 +1218,7 @@
     "money": "টাকা",
     "purchase": "কেনা",
     "feed": "খাবার",
+    "farm_share": "খাবার ও খামারের খরচের ভাগ",
     "medical": "চিকিৎসা",
     "other": "অন্যান্য",
     "break_even": "লাভ-ক্ষতি সমান দাম",

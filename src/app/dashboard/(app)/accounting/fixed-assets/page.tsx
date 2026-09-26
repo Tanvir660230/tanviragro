@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { AddFixedAssetDialog } from "@/components/accounting/AddFixedAssetDialog";
@@ -47,7 +48,7 @@ export default async function FixedAssetsPage() {
 
       {/* Header */}
       <StatementReportHeader
-        title="Fixed Assets Register"
+        title={siteTitle(L, "/dashboard/accounting/fixed-assets", "Fixed Assets Register")}
         subtitle={L("শেড ও যন্ত্রপাতি — কেনা দাম, অবচয় ও বর্তমান মূল্য", "Capital Asset Schedules · Depreciation & Net Book Value")}
         asOfDate={asOf}
         isAuditedBalanced={tb.isBalanced}

@@ -22,7 +22,8 @@ export type ProfileHeroProps = {
             growth: { gainKg: number; fromKg: number; from: string; fromPurchase: boolean } | null };
   adg: { kg: number | null; tier: "good" | "fair" | "poor" | "none"; tierLabel: string; adg14: number | null; breedAvg: number | null };
   target: { kg: number; progress: number } | null;
-  cost: { total: number; purchase: number; feed: number; medical: number; other: number; running: number; planReference: number | null; breakEvenPerKg: number | null };
+  /** farmShare: the feed and running costs shared by taka × days (the farm position) — when set, "feed" is not shown apart */
+  cost: { total: number; purchase: number; feed: number; medical: number; other: number; running: number; planReference: number | null; breakEvenPerKg: number | null; farmShare?: number | null };
   value: { worth: number | null; profit: number | null } | null;                       // active animals (estimates)
   realised: { kind: "sold" | "dead"; salePrice: number | null; result: number } | null;  // sold / dead
   perKg: { cost: number | null; feed: number | null };
@@ -50,7 +51,9 @@ export function CattleProfileHero(p: ProfileHeroProps) {
   const tierClass = { good: "text-emerald-700 dark:text-emerald-400", fair: "text-amber-700 dark:text-amber-400", poor: "text-red-600 dark:text-red-400", none: "text-muted-foreground" }[p.adg.tier];
   const segments = [
     { label: tp.purchase, amount: p.cost.purchase, color: "bg-blue-500" },
-    { label: tp.feed, amount: p.cost.feed, color: "bg-amber-500" },
+    p.cost.farmShare != null
+      ? { label: tp.farm_share, amount: p.cost.farmShare, color: "bg-amber-500" }
+      : { label: tp.feed, amount: p.cost.feed, color: "bg-amber-500" },
     { label: tp.medical, amount: p.cost.medical, color: "bg-red-400" },
     { label: tp.other, amount: p.cost.other, color: "bg-slate-400" },
   ].filter((s) => s.amount > 0);

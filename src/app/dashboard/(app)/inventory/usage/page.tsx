@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { CalendarRange } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -65,7 +66,7 @@ export default async function FeedUsagePage() {
   return (
     <div className="space-y-4 pb-12">
       <PageHeader
-        title="Feed Usage"
+        title={siteTitle(L, "/dashboard/inventory/usage", "Feed Usage")}
         subtitle={L("খাওয়ানো শুরু হলে চালু করুন, শেষ হলে শেষ করুন। প্রতিদিনের খরচ সিস্টেম নিজে হিসাব করে — রোজ লিখতে হয় না।", "Start a feed when you begin using it, end it when it finishes. The system works out daily use and cost — no daily entry needed.")}
         icon={CalendarRange}
         back="/dashboard/inventory"

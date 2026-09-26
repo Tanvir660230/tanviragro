@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { WEIGH_EVERY_DAYS } from "@/lib/home/home-model";
 import type { Metadata } from "next";
 import { Beef } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -178,7 +179,8 @@ async function CattleSection({ open, t }: { open?: string; t: Dictionary }) {
   for (const [id, cost] of Object.entries(herdFeedShare)) feedCostMap[id] = (feedCostMap[id] ?? 0) + cost;
 
   const today = new Date().getTime();
-  const sevenDaysAgo = today - 7 * 86400000;
+  // the homepage's weighing rule (one number everywhere)
+  const sevenDaysAgo = today - WEIGH_EVERY_DAYS * 86400000;
 
   const enriched: CattleRowEnriched[] = cattle.map((c) => {
     const isActive = c.status === "active";

@@ -28,7 +28,8 @@ import { HealthWorkspace } from "@/components/cattle/HealthWorkspace";
 import { measuredGrowth, measuredLogs, weightTypeLabel } from "@/lib/growth/baseline";
 import { animalFeedShares, type AnimalPresence } from "@/lib/inventory/feed-costing";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
-import { loadHomeInputs } from "@/lib/home/home-data";
+import { loadFarm, loadHomeInputs } from "@/lib/home/home-data";
+import { alignHomeWithFarm } from "@/lib/home/farm-align";
 import { buildHomeModel } from "@/lib/home/home-model";
 import { CattleProfileHero } from "@/components/cattle/CattleProfileHero";
 import { todayDhaka } from "@/lib/dates";
@@ -586,13 +587,16 @@ async function ProfileSection({ id }: { id: string }) {
   // ── THE feed engine (lib/feed/usage-engine.ts): same numbers as the Feed Usage page ──
   // Closed usage periods + recorded feeding, split per day by live weight and presence.
   // same inputs as the homepage and the cattle list, so all three show the same figures
-  const [homeInputs, { data: nextHealthData }] = await Promise.all([
+  const [homeInputs, farm, { data: nextHealthData }] = await Promise.all([
     loadHomeInputs(supabase, businessId, undefined, { money: false }),
+    loadFarm(supabase, businessId),
     supabase.from("health_events").select("title, scheduled_at").eq("cattle_id", id)
       .is("completed_at", null).is("deleted_at", null).order("scheduled_at", { ascending: true }).limit(1).maybeSingle(),
   ]);
   const feed = homeInputs.feed;
-  const hm = buildHomeModel(homeInputs.input).cattle.find((x) => x.id === id) ?? null;
+  // cost and result from the farm position — the same figures as the Money and partners pages
+  const hm = alignHomeWithFarm(buildHomeModel(homeInputs.input), farm).cattle.find((x) => x.id === id) ?? null;
+  const fa = farm?.animals.find((a) => a.id === id) ?? null;
   const myFeed = feed.snapshot.perAnimal[id];
   const actualFeedCost = myFeed?.actual ?? 0;
   const runningFeedEstimate = myFeed?.estimated ?? 0;
@@ -615,7 +619,10 @@ async function ProfileSection({ id }: { id: string }) {
   const totalFeedCost = actualFeedCost;
 
   const overheadCost = 0;
-  const totalCost = Number(c.purchase_price) + totalFeedCost + medicalCost + otherIndividualCost;
+  const ownTotal = Number(c.purchase_price) + totalFeedCost + medicalCost + otherIndividualCost;
+  const totalCost = fa?.fullCost ?? ownTotal;
+  // feed + the farm's running costs shared to this animal (what the full cost adds to purchase and own costs)
+  const farmShare = fa ? Math.max(0, fa.fullCost - Number(c.purchase_price ?? 0) - medicalCost - otherIndividualCost) : null;
   // Marginal cost = everything spent AFTER purchase (feed, vet, transport, etc.)
   // Used for "cost per kg gained" — purchase price is excluded because it's a sunk
   // cost paid regardless of how much weight the animal gains.
@@ -739,7 +746,7 @@ async function ProfileSection({ id }: { id: string }) {
         target={c.target_weight_kg && (hm?.weightKg ?? latestWeight) ? { kg: Number(c.target_weight_kg), progress: ((hm?.weightKg ?? latestWeight) / Number(c.target_weight_kg)) * 100 } : null}
         cost={{
           total: totalCost, purchase: Number(c.purchase_price ?? 0), feed: totalFeedCost, medical: medicalCost, other: otherIndividualCost,
-          running: runningFeedEstimate, planReference: allocatedFeedCost > 0 ? allocatedFeedCost : null,
+          running: runningFeedEstimate, planReference: allocatedFeedCost > 0 ? allocatedFeedCost : null, farmShare,
           breakEvenPerKg: (hm?.weightKg ?? latestWeight) > 0 ? totalCost / (hm?.weightKg ?? latestWeight) : null,
         }}
         value={c.status === "active" && hm ? { worth: hm.valueToday, profit: hm.profitToday } : null}

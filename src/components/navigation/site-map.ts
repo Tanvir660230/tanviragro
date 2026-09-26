@@ -127,6 +127,22 @@ export type Lang = keyof Label;
 export const tr = (l: Label, lang: string | undefined): string => (lang === "bn" ? l.bn : l.en);
 
 /** Every href of the site (sections and pages). */
+/** A page's name from the site map (the same words as the menu), or null when it is not on it. */
+export function siteLabel(href: string): Label | null {
+  for (const sec of SITE) {
+    const page = sec.pages.find((x) => x.href === href);
+    if (page) return page.label;
+    if (sec.href === href) return sec.label;
+  }
+  return null;
+}
+
+/** A page title in the viewer's language from the site map, e.g. siteTitle(L, "/dashboard/finance/loans", "Loans"). */
+export const siteTitle = (L: (bn: string, en: string) => string, href: string, fallback: string): string => {
+  const l = siteLabel(href);
+  return l ? L(l.bn, l.en) : fallback;
+};
+
 export const ALL_HREFS: string[] = [...new Set(SITE.flatMap((s) => [s.href, ...s.pages.map((p) => p.href)]))];
 
 /** The single most specific href for a path (longest match), so parents do not light up with children. */

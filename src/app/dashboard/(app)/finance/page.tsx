@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteTitle } from "@/components/navigation/site-map";
 import { Suspense } from "react";
 import { Beef, Building2, History, Landmark, LayoutDashboard, Receipt } from "lucide-react";
 import { AddCostDialog } from "@/components/finance/AddCostDialog";
@@ -98,7 +99,7 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Money" icon={Landmark} actions={<AddCostDialog payers={payers} />} className="mb-0" />
+      <PageHeader title={siteTitle(L, "/dashboard/finance", "Money")} icon={Landmark} actions={<AddCostDialog payers={payers} />} className="mb-0" />
       <MoneyToday m={m} />
       <MoneyChecks checks={m.checks} />
       <Suspense fallback={null}>

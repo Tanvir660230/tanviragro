@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cache } from "react";
+import { requestMemo } from "@/lib/request-memo";
 import type { Partner, PartnerTransaction } from "@/types/database";
 import { getAccountingData, getCachedDbData } from "@/lib/accounting/engine";
 import { unallocatedCostOf } from "@/lib/accounting/inventory-ledger";
@@ -53,7 +53,7 @@ const missingTable = (e: { code?: string; message?: string } | null) =>
 export const PREVIEW_CYCLE_ID = "preview";
 
 /** `previewClose`: also close a cycle on that day (not saved) — what closing it would settle. */
-export const loadPartnerData = cache(async (supabase: SupabaseClient<any>, businessId: string, previewClose?: string): Promise<PartnerData> => {
+export const loadPartnerData = requestMemo((_s: SupabaseClient<any>, businessId: string, previewClose?: string) => `${businessId}:${previewClose ?? ""}`, async (supabase: SupabaseClient<any>, businessId: string, previewClose?: string): Promise<PartnerData> => {
   const today = todayDhaka();
   const [acc, db, home, partnersRes, txnsRes, feeRes, rulesRes, deathRes, lockRes, cyclesRes] = await Promise.all([
     getAccountingData(supabase),
