@@ -418,7 +418,9 @@ Both migrations were dry-run together on production and rolled back. They create
    - cash ৳16,782 (or later);
    - 5 partners, 25+ partner entries;
    - no rows in `partner_share_rules` / `partner_cycles`.
-2. **Apply the migrations in this order.** They were dry-run together on 2026-09-27.
+2. **Apply the migrations in this order.** **Done on production on 2026-09-27**, on the owner's word ("Database update kora lagle koro"), with auto mode off. Deploy is later.
+   - After them: 161 policies, 70 "team members", 0 tables without RLS, and 5 share rules (Mohiuddin manual 50%, no loss).
+   - The owner still sees 5 partners / 25 entries / 53 costs / 861 stock rows / 6 cattle; a stranger sees 0.
    1. `20260924120000_phase1_rls_hardening`
    2. `20260927090000_partner_share_rules`
    3. `20260927100000_partner_cycles_money_types`: the three `alter type … add value` lines run before its `begin`.
