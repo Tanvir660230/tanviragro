@@ -38,9 +38,9 @@ export interface UserProfileMenuProps {
 }
 
 const THEME_OPTIONS = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "system", label: "Auto", icon: Monitor },
-  { value: "dark", label: "Dark", icon: Moon },
+  { value: "light", label: "Light", bn: "হালকা", icon: Sun },
+  { value: "system", label: "Auto", bn: "অটো", icon: Monitor },
+  { value: "dark", label: "Dark", bn: "গাঢ়", icon: Moon },
 ] as const;
 
 export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
@@ -60,7 +60,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
   };
 
   const nameToUse = profile?.full_name || getSmartName(email || "user@tanviragro.com");
-  const roleToUse = profile?.role || "Farm Admin";
+  const roleToUse = profile?.role || (locale === "bn" ? "খামার প্রশাসক" : "Farm admin");
   const initials = nameToUse.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 
   const toggleLanguage = () => {
@@ -103,7 +103,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-bold truncate leading-tight text-foreground">{nameToUse}</span>
-              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-primary/10 text-primary uppercase">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                 {roleToUse}
               </span>
             </div>
@@ -116,7 +116,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
           onClick={() => router.push("/dashboard")}
         >
           <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-xs">Dashboard</span>
+          <span className="font-medium text-sm">{locale === "bn" ? "হোম" : "Home"}</span>
         </DropdownMenuItem>
 
         <DropdownMenuItem
@@ -124,7 +124,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
           onClick={() => router.push("/dashboard/settings")}
         >
           <User className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-xs">Profile & Account</span>
+          <span className="font-medium text-sm">{locale === "bn" ? "প্রোফাইল ও অ্যাকাউন্ট" : "Profile & account"}</span>
         </DropdownMenuItem>
 
         <DropdownMenuItem
@@ -132,7 +132,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
           onClick={() => router.push("/dashboard/settings")}
         >
           <Settings className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-xs">{t.sidebar.settings}</span>
+          <span className="font-medium text-sm">{t.sidebar.settings}</span>
         </DropdownMenuItem>
 
         <DropdownMenuItem
@@ -140,7 +140,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
           onClick={() => setShortcutsModalOpen(true)}
         >
           <Keyboard className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-xs">Keyboard Shortcuts</span>
+          <span className="font-medium text-sm">{locale === "bn" ? "কীবোর্ড শর্টকাট" : "Keyboard shortcuts"}</span>
           <kbd className="ml-auto text-[10px] font-mono text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded">
             Ctrl+/
           </kbd>
@@ -152,7 +152,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
           disabled={langPending}
         >
           <Languages className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-xs">
+          <span className="font-medium text-sm">
             {locale === "en" ? "বাংলায় দেখুন" : "Switch to English"}
           </span>
         </DropdownMenuItem>
@@ -161,11 +161,11 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
 
         {mounted && (
           <div className="px-2 py-1.5">
-            <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1.5">
-              Theme
+            <p className="text-[11px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1.5">
+              {locale === "bn" ? "রং" : "Theme"}
             </p>
             <div className="flex items-center gap-1 rounded-xl bg-muted/60 p-1 border border-border/40">
-              {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+              {THEME_OPTIONS.map(({ value, label, bn, icon: Icon }) => (
                 <button
                   key={value}
                   onClick={() => setTheme(value)}
@@ -178,7 +178,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
                   title={label}
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  <span className="text-[11px]">{label}</span>
+                  <span className="text-[11px]">{locale === "bn" ? bn : label}</span>
                 </button>
               ))}
             </div>
@@ -192,7 +192,7 @@ export function UserProfileMenu({ email, profile }: UserProfileMenuProps) {
           onClick={() => logout()}
         >
           <LogOut className="h-4 w-4" />
-          <span className="font-semibold text-xs">{t.common.logout}</span>
+          <span className="font-semibold text-sm">{t.common.logout}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

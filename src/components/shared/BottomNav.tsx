@@ -42,7 +42,7 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
 
       {/* More menu panel */}
       <div className={cn(
-        "md:hidden fixed bottom-[58px] inset-x-0 z-50 bg-card border-t border-border/70 rounded-t-3xl shadow-floating transition-all duration-300 overflow-hidden",
+        "md:hidden fixed bottom-[61px] inset-x-0 z-50 bg-card border-t border-border/70 rounded-t-3xl shadow-floating transition-all duration-300 overflow-hidden",
         moreOpen
           ? "opacity-100 translate-y-0 pointer-events-auto ease-out"
           : "opacity-0 translate-y-6 pointer-events-none ease-in"
@@ -109,7 +109,7 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
       {/* Bottom tab bar */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar/90 backdrop-blur-xl border-t border-sidebar-border/50 safe-bottom shadow-lg"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar/95 backdrop-blur-xl border-t border-sidebar-border safe-bottom shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)]"
       >
         <div className="flex items-stretch">
           {navItems.map((sec) => {
@@ -119,18 +119,16 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
               <Link
                 key={href}
                 href={href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-xs font-medium transition-all",
-                  active
-                    ? "text-sidebar-primary font-semibold"
-                    : "text-sidebar-foreground/55 hover:text-sidebar-foreground"
+                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 py-1.5 min-h-[60px] transition-colors",
+                  active ? "text-sidebar-primary" : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
                 )}
               >
-                {active && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2.5px] w-8 rounded-b-full bg-sidebar-primary" />
-                )}
-                <Icon className={cn("h-5 w-5 transition-transform duration-150", active && "scale-110 text-sidebar-primary")} />
-                <span className={cn("text-[11px] leading-none", active && "font-semibold")}>
+                <span className={cn("flex h-7 w-12 items-center justify-center rounded-full transition-colors", active && "bg-sidebar-primary/12")}>
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className={cn("max-w-full truncate text-[11px] leading-tight", active ? "font-semibold" : "font-medium")}>
                   {tr(sec.label, locale)}
                 </span>
               </Link>
@@ -143,17 +141,14 @@ export function BottomNav({ isAdmin = true }: { isAdmin?: boolean }) {
             aria-label={moreOpen ? "Close more menu" : "Open more menu"}
             aria-expanded={moreOpen}
             className={cn(
-              "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-xs font-medium transition-all cursor-pointer",
-              (moreOpen || moreActive)
-                ? "text-sidebar-primary font-semibold"
-                : "text-sidebar-foreground/55 hover:text-sidebar-foreground"
+              "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 py-1.5 min-h-[60px] transition-colors cursor-pointer",
+              (moreOpen || moreActive) ? "text-sidebar-primary" : "text-sidebar-foreground/60 hover:text-sidebar-foreground"
             )}
           >
-            {moreActive && !moreOpen && (
-              <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2.5px] w-8 rounded-b-full bg-sidebar-primary" />
-            )}
-            <MoreHorizontal className={cn("h-5 w-5 transition-transform duration-150", (moreOpen || moreActive) && "scale-110 text-sidebar-primary")} />
-            <span className={cn("text-[11px] leading-none", (moreOpen || moreActive) && "font-semibold")}>
+            <span className={cn("flex h-7 w-12 items-center justify-center rounded-full transition-colors", (moreOpen || moreActive) && "bg-sidebar-primary/12")}>
+              <MoreHorizontal className="h-5 w-5" />
+            </span>
+            <span className={cn("max-w-full truncate text-[11px] leading-tight", (moreOpen || moreActive) ? "font-semibold" : "font-medium")}>
               {t.nav.more}
             </span>
           </button>

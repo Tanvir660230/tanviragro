@@ -1,18 +1,12 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { PanelLeftClose } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n/I18nProvider';
-import { logout } from '@/app/(auth)/login/actions';
-import {
-  ENTERPRISE_NAV_CONFIG,
-  isNavActive,
-  navLabel,
-  navGroupLabel,
-} from './nav-config';
-import { ExtendedUserRole, ROLE_BADGE_STYLE } from '@/constants/roles';
+import { useShell } from '@/components/layout/ShellContext';
+import type { ExtendedUserRole } from '@/constants/roles';
+import { BrandMark } from './BrandMark';
+import { SidebarNav, SidebarUserCard } from './SidebarNav';
 
 interface SidebarExpandedProps {
   isAdmin?: boolean;
@@ -22,66 +16,28 @@ interface SidebarExpandedProps {
   className?: string;
 }
 
-export function SidebarExpanded({
-  isAdmin = true,
-  role = 'owner',
-  business,
-  userEmail,
-  className,
-}: SidebarExpandedProps) {
+/** The desktop sidebar: the farm, the menu (by role), and who is signed in. */
+export function SidebarExpanded({ isAdmin = true, role = 'owner', business, userEmail, className }: SidebarExpandedProps) {
   const { locale } = useTranslation();
-  const pathname = usePathname();
-  const roleBadgeStyle = ROLE_BADGE_STYLE[role] || ROLE_BADGE_STYLE.viewer;
+  const { toggleSidebar } = useShell();
   const bizName = business?.name ?? 'Tanvir Agro';
 
   return (
-    <aside className={cn('flex flex-col h-full bg-sidebar border-r border-sidebar-border', className)}>
-      <div className="p-4 border-b border-sidebar-border">
-        <p className="text-sm font-bold text-sidebar-foreground">{bizName}</p>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto p-3 space-y-6">
-        {ENTERPRISE_NAV_CONFIG.map((group) => (
-          <div key={group.id} className="space-y-1">
-            {navGroupLabel(group, locale) && (
-              <h2 className="px-2 text-[10px] font-bold text-sidebar-foreground/50 uppercase tracking-wider">
-                {navGroupLabel(group, locale)}
-              </h2>
-            )}
-            {group.items.map((item) => {
-              const active = isNavActive(item.href, pathname);
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm',
-                    active 
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground' 
-                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {navLabel(item, locale)}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-
-      <div className="shrink-0 p-3 border-t border-sidebar-border/40">
-        <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-sidebar-foreground truncate">
-                {userEmail || 'System User'}
-            </span>
-          <form action={logout}>
-            <button type="submit" className="p-1.5 text-sidebar-foreground/50 hover:text-destructive">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </form>
+    <aside className={cn('flex h-full flex-col border-r border-sidebar-border bg-sidebar', className)}>
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
+        <BrandMark logoUrl={business?.logo_url} name={bizName} size={34} />
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-[0.95rem] font-bold tracking-tight text-sidebar-foreground">{bizName}</p>
+          <p className="truncate text-[11px] text-sidebar-foreground/50">{locale === 'bn' ? 'খামার ব্যবস্থাপনা' : 'Farm management'}</p>
         </div>
+        <button type="button" onClick={toggleSidebar} title={locale === 'bn' ? 'মেনু ছোট করুন (Ctrl+B)' : 'Collapse (Ctrl+B)'}
+          aria-label={locale === 'bn' ? 'মেনু ছোট করুন' : 'Collapse sidebar'}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/45 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground">
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
       </div>
+      <SidebarNav role={role} isAdmin={isAdmin} />
+      <SidebarUserCard email={userEmail} role={role} />
     </aside>
   );
 }

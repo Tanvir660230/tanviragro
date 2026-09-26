@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import Image from "next/image";
 import { Wrench, Menu, Search, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShell } from "./ShellContext";
@@ -11,6 +10,7 @@ import { QuickCreateMenu } from "./QuickCreateMenu";
 import { NotificationCenter } from "./NotificationCenter";
 import { UserProfileMenu } from "./UserProfileMenu";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { BrandMark } from "@/components/navigation/BrandMark";
 import type {
   HealthEvent,
   InventoryItem,
@@ -92,51 +92,43 @@ export function DashboardHeader({
       <header
         role="banner"
         className={cn(
-          "sticky top-0 z-40 flex h-14 items-center justify-between gap-2 sm:gap-3 border-b border-border/60 bg-background/80 backdrop-blur-xl px-3 sm:px-4 lg:px-6 shadow-xs transition-all",
+          "sticky top-0 z-40 flex h-14 items-center justify-between gap-2 sm:gap-3 border-b border-border/70 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 px-2.5 sm:px-4 lg:px-6",
           className
         )}
       >
         {/* LEFT: Logo / Brand, Sidebar Toggle, Status */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
           <button
             type="button"
             onClick={handleSidebarToggle}
-            aria-label="Toggle Navigation Drawer"
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-muted/30 text-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer"
+            aria-label={locale === "bn" ? "মেনু খুলুন" : "Open menu"}
+            className="md:hidden flex h-10 w-10 items-center justify-center rounded-xl text-foreground hover:bg-muted active:scale-95 transition-all cursor-pointer"
           >
-            <Menu className="h-4.5 w-4.5" />
+            <Menu className="h-5 w-5" />
           </button>
 
-
-          <div className="flex items-center gap-2 md:hidden">
-            <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 overflow-hidden shrink-0 shadow-xs">
-              {bizLogo ? (
-                <Image src={bizLogo} alt={bizName} fill sizes="32px" className="object-cover" />
-              ) : (
-                <span className="text-base leading-none">🌿</span>
-              )}
-            </div>
-            <span className="hidden sm:inline text-xs font-bold text-foreground truncate max-w-[120px]">
-              {bizName}
-            </span>
+          {/* phones: the farm, since the sidebar (which names it on a computer) is hidden */}
+          <div className="flex min-w-0 items-center gap-2 md:hidden">
+            <BrandMark logoUrl={bizLogo} name={bizName} size={30} />
+            <span className="truncate text-[0.95rem] font-bold tracking-tight text-foreground max-w-[34vw]">{bizName}</span>
           </div>
 
         </div>
 
         {/* CENTER: Global Search Trigger Bar */}
         {showSearch && (
-          <div className="flex min-w-0 flex-1 justify-end sm:justify-start max-w-md mx-1 sm:mx-2">
+          <div className="flex min-w-0 flex-1 justify-end md:justify-start md:max-w-md mx-0.5 sm:mx-2">
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
               aria-label="Search and command palette (Ctrl+K)"
-              className="flex w-9 sm:w-full items-center justify-center sm:justify-between gap-2 h-9 px-0 sm:px-3 rounded-xl border border-border/60 bg-muted/30 hover:bg-muted/60 text-muted-foreground hover:text-foreground text-xs font-medium transition-all shadow-2xs group focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+              className="flex w-10 md:w-full items-center justify-center md:justify-between gap-2 h-10 md:h-9 px-0 md:px-3 rounded-xl md:border md:border-border/70 md:bg-muted/40 hover:bg-muted/70 text-muted-foreground hover:text-foreground text-sm md:text-xs font-medium transition-all group focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Search className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                <span className="hidden sm:inline truncate">{locale === "bn" ? "গরু, পাতা বা কাজ খুঁজুন…" : "Search cattle, pages or actions…"}</span>
+                <Search className="h-[18px] w-[18px] md:h-3.5 md:w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                <span className="hidden md:inline truncate">{locale === "bn" ? "গরু, পাতা বা কাজ খুঁজুন…" : "Search cattle, pages or actions…"}</span>
               </div>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-background border border-border/70 text-muted-foreground shrink-0 shadow-2xs">
+              <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-background border border-border/70 text-muted-foreground shrink-0 shadow-2xs">
                 ⌘K
               </kbd>
             </button>
@@ -144,7 +136,7 @@ export function DashboardHeader({
         )}
 
         {/* RIGHT: Quick Create, Notifications, Tools, Help, Theme, User */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
           {children}
 
           {showQuickCreate && <QuickCreateMenu />}
@@ -188,7 +180,8 @@ export function DashboardHeader({
             <HelpCircle className="h-4 w-4" />
           </button>
 
-          {showThemeToggle && <ThemeToggle compact />}
+          {/* on phones the theme is in the profile menu */}
+          {showThemeToggle && <div className="hidden sm:block"><ThemeToggle compact /></div>}
 
           <div className="w-px h-4 bg-border/60 mx-0.5 hidden sm:block" />
 

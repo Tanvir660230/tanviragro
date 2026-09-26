@@ -27,7 +27,7 @@ export default function DashboardLayout({
       sidebar={
         <Suspense
           fallback={
-            <div className="hidden md:flex h-svh md:w-52 lg:w-60 flex-col bg-sidebar border-r border-sidebar-border/60 sticky top-0 shrink-0">
+            <div className="hidden md:flex h-svh w-full flex-col bg-sidebar border-r border-sidebar-border sticky top-0 shrink-0">
               <div className="h-14 border-b border-sidebar-border/50 animate-shimmer overflow-hidden" />
               <div className="flex-1 p-3 space-y-2 pt-4">
                 {[...Array(6)].map((_, i) => (
@@ -52,7 +52,7 @@ export default function DashboardLayout({
       bottomNav={
         <Suspense
           fallback={
-            <div className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar/95 backdrop-blur-md border-t border-sidebar-border/60 flex items-center justify-around h-14 safe-bottom">
+            <div className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar/95 backdrop-blur-md border-t border-sidebar-border/60 flex items-center justify-around h-[61px] safe-bottom">
               {[...Array(5)].map((_, i) => (
                 <div key={i} className="h-8 w-10 rounded-lg bg-muted/40 animate-pulse" />
               ))}

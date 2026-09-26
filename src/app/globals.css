@@ -487,3 +487,15 @@
   }
   body.stmt-printing .stmt-print-hide { display: none !important; }
 }
+/* ── Phones: readable small print ──────────────────────────────────────────
+   The app uses fixed 9–11px sizes for notes and labels in ~330 places. On a phone (and most of
+   all in Bangla, whose letters sit smaller) they read too small, so they go up one step on narrow
+   screens only — in one place, the same everywhere. Desktop is unchanged. */
+@media (max-width: 767px) {
+  .text-\[9px\] { font-size: 10px; }
+  .text-\[10px\] { font-size: 11px; }
+  .text-\[11px\] { font-size: 12px; line-height: 1.45; }
+  :lang(bn) .text-xs { font-size: 0.8rem; line-height: 1.2rem; }
+}
+/* Bangla letters are tall: a little more room between lines of running text */
+:lang(bn) p { line-height: 1.6; }
