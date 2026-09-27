@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   MoreHorizontal, ShieldAlert, Moon, Skull, Printer,
-  RotateCcw, AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -18,12 +18,13 @@ import { cn } from "@/lib/utils";
 import { toggleQuarantine } from "@/app/dashboard/(app)/cattle/[id]/actions";
 import {
   toggleQurbaniMark,
-  markAsDeceased,
   undoMarkAsDeceased,
 } from "@/app/dashboard/(app)/cattle/actions";
 
 import type { CattleStatus } from "@/types/database";
 import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { DeathDialog } from "./DeathDialog";
 
 interface Props {
   cattleId:      string;
@@ -43,81 +44,42 @@ export function CattleDetailMoreMenu({
   isQurbani,
 }: Props) {
   const L = useL();
+  const { locale } = useTranslation();
   const router = useRouter();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [isPending, startTransition] = useTransition();
 
-  function run(action: () => Promise<{ error?: string } | undefined | void>) {
+  /** runs an action; the success message only when it really worked */
+  function run(action: () => Promise<{ error?: string } | undefined | void>, ok: string) {
     startTransition(async () => {
-      const result = await action();
+      const result = await action().catch(() => ({ error: L("সমস্যা হয়েছে — কিছু বদলায়নি", "Something went wrong — nothing changed") }));
       if (result && "error" in result && result.error) {
         toast.error(result.error as string);
       } else {
+        toast.success(ok);
         router.refresh();
       }
     });
   }
 
-  const handleQuarantine = () => {
-    run(async () => {
-      const r = await toggleQuarantine(cattleId, !isQuarantined);
-      toast.success(isQuarantined ? L("আবার দলে ফিরল", "Removed from quarantine") : L("আলাদা রাখা হলো", "Moved to quarantine"));
-      return r;
-    });
-  };
+  const handleQuarantine = () =>
+    run(() => toggleQuarantine(cattleId, !isQuarantined), isQuarantined ? L("আবার দলে ফিরল", "Removed from quarantine") : L("আলাদা রাখা হলো", "Moved to quarantine"));
 
-  const handleQurbani = () => {
-    run(async () => {
-      const next = !isQurbani;
-      const r = await toggleQurbaniMark(cattleId, next);
-      toast.success(next ? L("কোরবানির জন্য বাছাই হলো", "Marked for Qurbani") : L("কোরবানি থেকে সরানো হলো", "Qurbani mark removed"));
-      return r;
-    });
-  };
+  const handleQurbani = () =>
+    run(() => toggleQurbaniMark(cattleId, !isQurbani), !isQurbani ? L("কোরবানির জন্য বাছাই হলো", "Marked for Qurbani") : L("কোরবানি থেকে সরানো হলো", "Qurbani mark removed"));
 
-  const handleMarkDead = () => {
-    run(async () => {
-      const r = await markAsDeceased(cattleId);
-      toast.success(L(`#${tagId} মৃত হিসেবে লেখা হলো`, `#${tagId} marked as deceased`));
-      setConfirm(null);
-      return r;
-    });
-  };
-
-  const handleUndoDead = () => {
-    run(async () => {
-      const r = await undoMarkAsDeceased(cattleId);
-      toast.success(L(`#${tagId} আবার সক্রিয়`, `#${tagId} restored to active`));
-      return r;
-    });
-  };
+  const handleUndoDead = () =>
+    run(() => undoMarkAsDeceased(cattleId), L(`#${tagId} আবার সক্রিয়`, `#${tagId} restored to active`));
 
   return (
     <>
-      {/* Inline confirm overlay — appears when user selects "Mark as Dead" */}
+      {/* the one "mark dead" form: date and cause */}
       {confirm === "dead" && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-1.5">
-          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-          <span className="text-xs text-destructive font-medium whitespace-nowrap">{L("নিশ্চিত?", "Confirm?")}</span>
-          <button
-            onClick={handleMarkDead}
-            disabled={isPending}
-            className="rounded px-2 py-0.5 text-xs font-semibold bg-destructive text-white hover:bg-destructive/90 disabled:opacity-50 transition-colors"
-          >
-            {isPending ? "…" : L("হ্যাঁ", "Yes")}
-          </button>
-          <button
-            onClick={() => setConfirm(null)}
-            disabled={isPending}
-            className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {L("বাতিল", "Cancel")}
-          </button>
-        </div>
+        <DeathDialog animals={[{ id: cattleId, tag: tagId }]} lang={locale === "bn" ? "bn" : "en"} onClose={() => setConfirm(null)} />
       )}
 
       {/* More dropdown */}
-      {confirm === null && (
+      {(
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={L("আরও", "More actions")}
@@ -132,7 +94,7 @@ export function CattleDetailMoreMenu({
 
           <DropdownMenuContent align="end" className="w-52">
             {/* Quarantine — active/stolen only */}
-            {status !== "sold" && status !== "dead" && (
+            {status === "active" && (
               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={handleQuarantine}>
                 <ShieldAlert className={cn(
                   "h-4 w-4",
@@ -153,7 +115,7 @@ export function CattleDetailMoreMenu({
               </DropdownMenuItem>
             )}
 
-            {/* Mark as Dead — active only */}
+            {/* Died or stolen — active only */}
             {status === "active" && (
               <>
                 <DropdownMenuSeparator />
@@ -162,13 +124,13 @@ export function CattleDetailMoreMenu({
                   onClick={() => setConfirm("dead")}
                 >
                   <Skull className="h-4 w-4" />
-                  {L("মৃত লিখুন", "Mark as Dead")}
+                  {L("মারা গেছে / চুরি", "Died or stolen")}
                 </DropdownMenuItem>
               </>
             )}
 
-            {/* Undo dead — dead only */}
-            {status === "dead" && (
+            {/* Undo dead / stolen (recorded by mistake, or it came back) */}
+            {(status === "dead" || status === "stolen") && (
               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={handleUndoDead}>
                 <RotateCcw className="h-4 w-4 text-muted-foreground" />
                 {L("আবার সক্রিয় করুন", "Restore to Active")}

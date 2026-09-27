@@ -84,6 +84,8 @@ export interface HealthEventRow {
   title: string;
   event_type: HealthEventType;
   scheduled_at: string;
+  /** set when the task was already done (a batch given today or earlier) */
+  completed_at?: string;
   notes: string | null;
 }
 

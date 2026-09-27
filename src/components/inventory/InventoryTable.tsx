@@ -27,6 +27,8 @@ export interface InventoryRow {
   avgDailyConsumption: number | null;
   kg_per_unit?: number | null;
   currentCost?: number | null;
+  /** value on hand from the balance view (the same figure as the Money page) */
+  stockValue?: number | null;
   is_active_roughage?: boolean | null;
   is_discontinued?: boolean;
 }

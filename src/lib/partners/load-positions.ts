@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectAll } from "@/lib/supabase/select-all";
 import { requestMemo } from "@/lib/request-memo";
 import type { Partner, PartnerTransaction } from "@/types/database";
 import { getAccountingData, getCachedDbData } from "@/lib/accounting/engine";
@@ -6,6 +7,7 @@ import { unallocatedCostOf } from "@/lib/accounting/inventory-ledger";
 import { loadHomeInputs } from "@/lib/home/home-data";
 import { buildHomeModel, type HomeModel } from "@/lib/home/home-model";
 import { todayDhaka } from "@/lib/dates";
+import { isLossStatus } from "@/lib/cattle/status";
 import { assetDailyCosts, spread } from "@/lib/partners/asset-costs";
 import {
   buildPartnerPositions, type FarmPosition, type FeeRate, type PartnerPosition, type PositionAnimal,
@@ -60,7 +62,9 @@ export const loadPartnerData = requestMemo((_s: SupabaseClient<any>, businessId:
     getCachedDbData(supabase, businessId),
     loadHomeInputs(supabase, businessId, today, { money: false }),
     supabase.from("partners").select("*").eq("business_id", businessId).is("deleted_at", null).order("joined_at", { ascending: true }),
-    supabase.from("partner_transactions").select("*, partners!inner(business_id)").eq("partners.business_id", businessId).is("deleted_at", null).order("recorded_at", { ascending: false }),
+    selectAll(() => supabase.from("partner_transactions").select("*, partners!inner(business_id)").eq("partners.business_id", businessId).is("deleted_at", null)
+      .order("recorded_at", { ascending: false }).order("id", { ascending: false }))
+      .then((data) => ({ data }), (e: Error) => { throw new Error(`partner entries: ${e.message}`); }),
     supabase.from("management_fee_rates").select("rate_percent, effective_from").eq("business_id", businessId).is("deleted_at", null),
     supabase.from("partner_share_rules").select("id, partner_id, effective_from, share_mode, fixed_pct, bears_loss, note, created_at").eq("business_id", businessId).is("deleted_at", null),
     supabase.from("cattle_death_records").select("cattle_id, death_date").eq("business_id", businessId),
@@ -72,7 +76,6 @@ export const loadPartnerData = requestMemo((_s: SupabaseClient<any>, businessId:
   const cycleRows = ((cyclesRes.data ?? []) as { id: string; closed_on: string; note: string | null; created_at: string }[])
     .map((c) => ({ id: c.id, closedOn: String(c.closed_on).slice(0, 10), note: c.note, createdAt: c.created_at }));
   if (partnersRes.error) throw new Error(`partners: ${partnersRes.error.message}`);
-  if (txnsRes.error) throw new Error(`partner entries: ${txnsRes.error.message}`);
   if (rulesRes.error && !missingTable(rulesRes.error)) throw new Error(`share rules: ${rulesRes.error.message}`);
 
   const partners = (partnersRes.data ?? []) as (Partner & { left_at?: string | null })[];
@@ -116,10 +119,11 @@ export const loadPartnerData = requestMemo((_s: SupabaseClient<any>, businessId:
   const saleBy = new Map(db.sales.map((s) => [s.cattle_id, s]));
   const deathBy = new Map(((deathRes.data ?? []) as { cattle_id: string; death_date: string }[]).map((d) => [d.cattle_id, String(d.death_date).slice(0, 10)]));
   const animals: PositionAnimal[] = db.cattle
-    .filter((c) => c.status === "active" || c.status === "sold" || c.status === "dead")
+    .filter((c) => c.status === "active" || c.status === "sold" || isLossStatus(c.status))
     .map((c) => {
       const sale = saleBy.get(c.id);
-      const status = c.status as PositionAnimal["status"];
+      // stolen is a loss like a death (no sale): its cost is shared on the day it went missing
+      const status = (isLossStatus(c.status) ? "dead" : c.status) as PositionAnimal["status"];
       return {
         id: c.id, tag: c.tag_id ?? "?", status,
         purchaseDate: String(c.purchase_date).slice(0, 10),

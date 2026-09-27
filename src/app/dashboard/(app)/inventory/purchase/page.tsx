@@ -16,7 +16,8 @@ export const metadata = {
   title: "Add Purchase Invoice | Tanvir Agro",
 };
 
-export default async function BulkPurchasePage() {
+export default async function BulkPurchasePage({ searchParams }: { searchParams: Promise<{ item?: string }> }) {
+  const { item: presetItem } = await searchParams;
   const supabase = await createClient();
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) redirect("/login");
@@ -65,7 +66,8 @@ export default async function BulkPurchasePage() {
     <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 pb-12">
       <PageHeader title={t.title} subtitle={t.subtitle} icon={ReceiptText} back="/dashboard/inventory" />
       <SupplierDuesCard dues={dues} today={todayDhaka()} lang={lang} />
-      <BulkPurchaseClient items={items} context={context} today={todayDhaka()} lang={lang} />
+      <BulkPurchaseClient items={items} context={context} today={todayDhaka()} lang={lang}
+        initialItemId={items.some((i) => i.id === presetItem) ? presetItem : undefined} />
     </div>
   );
 }

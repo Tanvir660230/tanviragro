@@ -13,10 +13,13 @@ export function ArchiveItemButton({
   id,
   name,
   isDiscontinued,
+  blocked = false,
 }: {
   id: string;
   name: string;
   isDiscontinued: boolean;
+  /** still has stock or is in use: it would stay on the list, so it has to be finished first */
+  blocked?: boolean;
 }) {
   const L = useL();
   const router = useRouter();
@@ -59,10 +62,19 @@ export function ArchiveItemButton({
       <Button
         variant="ghost"
         size="icon-sm"
-        className="text-muted-foreground hover:text-destructive"
         disabled={isPending}
-        onClick={() => setConfirm(true)}
-        title={L("মুছুন (ইতিহাস থেকে যাবে)", "Delete this item (history will be preserved)")}
+        onClick={() => {
+          if (blocked) {
+            toast.info(L("স্টকে এখনো আছে বা চালু আছে — আগে \"শেষ হয়েছে\" দিন, তারপর মুছুন।", "It still has stock or is in use — mark it finished first, then delete it."));
+            return;
+          }
+          setConfirm(true);
+        }}
+        aria-disabled={blocked}
+        className={blocked ? "text-muted-foreground/50 hover:text-muted-foreground" : "text-muted-foreground hover:text-destructive"}
+        title={blocked
+          ? L("আগে শেষ করুন, তারপর মুছুন", "Finish it first, then delete it")
+          : L("মুছুন (ইতিহাস থেকে যাবে)", "Delete this item (history will be preserved)")}
       >
         {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
       </Button>
@@ -71,7 +83,7 @@ export function ArchiveItemButton({
         open={confirm}
         title={L(`"${name}" মুছবেন?`, `Delete "${name}"?`)}
         description={L("তালিকা থেকে লুকানো হবে, কিন্তু কেনা ও খরচের সব ইতিহাস থেকে যাবে।", "This item will be hidden from your active list, but all its purchase and usage history will be safely preserved in the background.")}
-        confirmLabel="Delete"
+        confirmLabel={L("মুছুন", "Delete")}
         destructive={true}
         onConfirm={handleConfirm}
         onCancel={() => setConfirm(false)}

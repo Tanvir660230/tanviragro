@@ -77,6 +77,8 @@ export async function createWeightLog(
 
 export type SaleFormState = { error?: string; success?: boolean } | undefined;
 
+const SALE_CANCEL_NOTE = "Auto-cancelled due to animal sale";
+
 export async function recordSale(
   _prevState: SaleFormState,
   formData: FormData
@@ -145,6 +147,15 @@ export async function recordSale(
       };
     }
 
+    // no more vaccine / task reminders for an animal that has left (undoing the sale brings them back)
+    await supabase
+      .from("health_events")
+      .update({ deleted_at: new Date().toISOString(), notes: SALE_CANCEL_NOTE })
+      .eq("cattle_id", cattle_id)
+      .eq("business_id", ctx.businessId)
+      .is("completed_at", null)
+      .is("deleted_at", null);
+
     await LivestockEventBus.publish(
       "CattleSold",
       ctx.businessId,
@@ -177,13 +188,17 @@ export async function revertSale(
 
     const { data: sale } = await supabase
       .from("sales")
-      .select("id, sold_at")
+      .select("id, sold_at, sale_group_id")
       .eq("cattle_id", cattleId)
       .is("deleted_at", null)
       .order("sold_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!sale) return { error: "No active sale found for this animal." };
+    // one price for several animals: undoing one would leave the others' shares wrong
+    if ((sale as { sale_group_id?: string | null }).sale_group_id) {
+      return { error: "This animal was sold together with others — undo the whole sale from the “Sold together” card." };
+    }
 
     // A sale inside a locked accounting period cannot be undone.
     const lockErr = await checkFinancialLock(supabase, ctx.businessId, sale.sold_at);
@@ -205,6 +220,13 @@ export async function revertSale(
       await supabase.from("sales").update({ deleted_at: null }).eq("id", sale.id);
       return { error: "Failed to reset cattle status" };
     }
+
+    await supabase
+      .from("health_events")
+      .update({ deleted_at: null, notes: null })
+      .eq("cattle_id", cattleId)
+      .eq("business_id", ctx.businessId)
+      .eq("notes", SALE_CANCEL_NOTE);
 
     revalidatePath(`/dashboard/cattle/${cattleId}`);
     revalidatePath("/dashboard/cattle");

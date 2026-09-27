@@ -46,6 +46,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useL } from "@/i18n/text";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 const STEPS = [
   { id: 1, title: "Identity", bn: "পরিচয়", icon: Tag },
@@ -79,8 +80,12 @@ export function EnterpriseAnimalWizard({
   onSuccess,
 }: EnterpriseWizardProps) {
   const L = useL();
+  const { locale } = useTranslation();
+  const lang = locale === "bn" ? "bn" : "en";
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
+  // errors show once the user tries to move on, never on a form they have not touched yet
+  const [triedSteps, setTriedSteps] = useState<Set<number>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
@@ -151,15 +156,17 @@ export function EnterpriseAnimalWizard({
     }
   }, [state, editAnimalId, open]);
 
-  const stepValidation = useMemo(() => {
-    const activeExistingTags = editAnimalId
-      ? existingTagIds.filter((t) => t !== initialData?.identification?.tagId)
-      : existingTagIds;
-    return validateWizardStep(currentStep, state, activeExistingTags);
-  }, [currentStep, state, existingTagIds, editAnimalId, initialData]);
+  const activeExistingTags = useMemo(() => (editAnimalId
+    ? existingTagIds.filter((t) => t !== initialData?.identification?.tagId)
+    : existingTagIds), [existingTagIds, editAnimalId, initialData]);
+  const stepValidation = useMemo(
+    () => validateWizardStep(currentStep, state, activeExistingTags, lang),
+    [currentStep, state, activeExistingTags, lang]);
+  const shownErrors = triedSteps.has(currentStep) ? stepValidation.errors : {};
 
   const goNext = () => {
     if (!stepValidation.isValid) {
+      setTriedSteps((p) => new Set(p).add(currentStep));
       const firstErr = Object.values(stepValidation.errors)[0];
       toast.error(firstErr || L("ভুলগুলো ঠিক করে এগোন", "Please fix the errors to continue"));
       return;
@@ -177,9 +184,11 @@ export function EnterpriseAnimalWizard({
   };
 
   const handleFinalSubmit = async () => {
-    const step1Check = validateWizardStep(1, state, existingTagIds);
-    const step5Check = validateWizardStep(5, state, existingTagIds);
+    const step1Check = validateWizardStep(1, state, activeExistingTags, lang);
+    const step5Check = validateWizardStep(5, state, activeExistingTags, lang);
     if (!step1Check.isValid || !step5Check.isValid) {
+      setTriedSteps(new Set([1, 5]));
+      setCurrentStep(!step1Check.isValid ? 1 : 5);
       toast.error(L("পরিচয় ও কোথা থেকে — অংশের দরকারি ঘরগুলো পূরণ করুন", "Please complete all required fields in Identity and Origin"));
       return;
     }
@@ -213,12 +222,12 @@ export function EnterpriseAnimalWizard({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden bg-background">
         <DialogHeader className="p-4 sm:p-5 border-b bg-card/50">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <span>{editAnimalId ? L(`গরুর তথ্য বদলান (${state.identification.tagId || "গরু"})`, `Edit animal (${state.identification.tagId || "Animal"})`) : L("নতুন গরু", "New animal")}</span>
+          <div className="flex items-center justify-between gap-2 pr-9">
+            <DialogTitle className="min-w-0 text-base sm:text-lg font-bold flex items-center gap-2">
+              <Sparkles className="h-5 w-5 shrink-0 text-primary" />
+              <span className="min-w-0 truncate">{editAnimalId ? L(`গরুর তথ্য বদলান (${state.identification.tagId || "গরু"})`, `Edit animal (${state.identification.tagId || "Animal"})`) : L("নতুন গরু", "New animal")}</span>
             </DialogTitle>
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="shrink-0 text-xs">
               {L(`ধাপ ${currentStep} / ৮`, `Step ${currentStep} of 8`)}
             </Badge>
           </div>
@@ -258,7 +267,7 @@ export function EnterpriseAnimalWizard({
                 onChange={(up) =>
                   setState((p) => ({ ...p, identification: { ...p.identification, ...up } }))
                 }
-                errors={stepValidation.errors}
+                errors={shownErrors}
                 suggestedTag={suggestedTag}
               />
             </>
@@ -270,7 +279,7 @@ export function EnterpriseAnimalWizard({
               onChange={(up) =>
                 setState((p) => ({ ...p, farmLocation: { ...p.farmLocation, ...up } }))
               }
-              errors={stepValidation.errors}
+              errors={shownErrors}
             />
           )}
 
@@ -280,7 +289,7 @@ export function EnterpriseAnimalWizard({
               onChange={(up) =>
                 setState((p) => ({ ...p, categoryStage: { ...p.categoryStage, ...up } }))
               }
-              errors={stepValidation.errors}
+              errors={shownErrors}
             />
           )}
 
@@ -290,7 +299,7 @@ export function EnterpriseAnimalWizard({
               onChange={(up) =>
                 setState((p) => ({ ...p, health: { ...p.health, ...up } }))
               }
-              errors={stepValidation.errors}
+              errors={shownErrors}
             />
           )}
 
@@ -300,7 +309,7 @@ export function EnterpriseAnimalWizard({
               onChange={(up) =>
                 setState((p) => ({ ...p, origin: { ...p.origin, ...up } }))
               }
-              errors={stepValidation.errors}
+              errors={shownErrors}
             />
           )}
 
@@ -310,7 +319,7 @@ export function EnterpriseAnimalWizard({
               onChange={(up) =>
                 setState((p) => ({ ...p, financial: { ...p.financial, ...up } }))
               }
-              errors={stepValidation.errors}
+              errors={shownErrors}
             />
           )}
 

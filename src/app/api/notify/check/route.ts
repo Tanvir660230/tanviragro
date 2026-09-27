@@ -13,6 +13,8 @@ import {
 import { authenticateApiRoute } from "@/lib/auth/api-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { measuredGrowth } from "@/lib/growth/baseline";
+import { loadLowStock } from "@/lib/inventory/low-stock";
+import { selectAll } from "@/lib/supabase/select-all";
 
 // Runs daily at 08:00 UTC via Netlify Scheduled Function
 // Monday runs include weekly checks: missing weight, sell window, digest
@@ -64,47 +66,12 @@ export async function GET(request: NextRequest) {
 
   // ── 1. Low stock ─────────────────────────────────────────────────
 
-  const [{ data: allTxns }, { data: items }] = await Promise.all([
-    cronBusinessId
-      ? supabase.from("inventory_transactions").select("item_id, type, qty, recorded_at, inventory_items!inner(business_id)").eq("inventory_items.business_id", cronBusinessId)
-      : supabase.from("inventory_transactions").select("item_id, type, qty, recorded_at"),
-    cronBusinessId
-      ? supabase.from("inventory_items").select("id, name, unit, low_stock_threshold").eq("business_id", cronBusinessId).is("deleted_at", null)
-      : supabase.from("inventory_items").select("id, name, unit, low_stock_threshold").is("deleted_at", null),
-  ]);
-
-  const txnList = (allTxns ?? []) as { item_id: string; type: string; qty: number; recorded_at: string }[];
-  const itemList = (items ?? []) as { id: string; name: string; unit: string; low_stock_threshold: number | null }[];
-
-  const stockByItem: Record<string, number> = {};
-  const consume30ByItem: Record<string, number> = {};
-
-  for (const t of txnList) {
-    if (t.type === "purchase") {
-      stockByItem[t.item_id] = (stockByItem[t.item_id] ?? 0) + t.qty;
-    } else {
-      stockByItem[t.item_id] = (stockByItem[t.item_id] ?? 0) - t.qty;
-      if (new Date(t.recorded_at) >= thirtyDaysAgo) {
-        consume30ByItem[t.item_id] = (consume30ByItem[t.item_id] ?? 0) + t.qty;
-      }
-    }
-  }
-
+  // the ledger's balance, every row (see loadLowStock)
   const lowStockNames: string[] = [];
-  for (const item of itemList) {
-    const stock = stockByItem[item.id] ?? 0;
-    const daily = (consume30ByItem[item.id] ?? 0) / 30;
-    const daysLeft = daily > 0 ? Math.floor(stock / daily) : null;
-
-    if (daysLeft !== null && daysLeft < 10) {
-      await sendLowStockAlert(item.name, daysLeft, stock, item.unit);
-      alerts.push(`low-stock:${item.name}`);
-      lowStockNames.push(item.name);
-    } else if (item.low_stock_threshold !== null && stock < item.low_stock_threshold) {
-      await sendLowStockAlert(item.name, 0, stock, item.unit);
-      alerts.push(`threshold:${item.name}`);
-      lowStockNames.push(item.name);
-    }
+  for (const item of await loadLowStock(supabase, cronBusinessId ?? null, now)) {
+    await sendLowStockAlert(item.name, item.daysLeft !== null && item.daysLeft < 10 ? item.daysLeft : 0, item.stock, item.unit);
+    alerts.push(`${item.daysLeft !== null && item.daysLeft < 10 ? "low-stock" : "threshold"}:${item.name}`);
+    lowStockNames.push(item.name);
   }
 
   // ── 1b. Expiring stock (next 30 days) ───────────────────────────────
@@ -210,14 +177,16 @@ export async function GET(request: NextRequest) {
       : supabase.from("cattle").select("id, tag_id, purchase_date, initial_weight_kg, initial_weight_type").eq("status", "active"));
 
     const sellCattleIds = (cattleForSell ?? []).map((c: { id: string }) => c.id);
-    const { data: allWeightLogs } = sellCattleIds.length > 0
-      ? await supabase
+    // every weighing (a single read stops at 1,000 rows)
+    const allWeightLogs = sellCattleIds.length > 0
+      ? await selectAll(() => supabase
           .from("weight_logs")
           .select("cattle_id, weight_kg, recorded_at, weight_type")
           .in("cattle_id", sellCattleIds)
           .is("deleted_at", null)
           .order("recorded_at", { ascending: false })
-      : { data: [] };
+          .order("id", { ascending: false }))
+      : [];
 
     // Latest weight per cattle
     const latestWeightByCattle: Record<string, number> = {};

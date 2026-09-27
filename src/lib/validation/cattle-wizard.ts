@@ -108,6 +108,8 @@ export interface WizardTemplate {
   id: string;
   name: string;
   description: string;
+  nameBn: string;
+  descriptionBn: string;
   apply: (current: AnimalWizardState) => AnimalWizardState;
 }
 
@@ -116,6 +118,7 @@ export const WIZARD_TEMPLATES: WizardTemplate[] = [
     id: "fattening_bull",
     name: "Commercial Fattening Bull",
     description: "Beef profile with 0.85 kg/day target ADG and 480 kg harvest target.",
+    nameBn: "মোটাতাজা ষাঁড়", descriptionBn: "দিনে ০.৮৫ কেজি বৃদ্ধি, ৪৮০ কেজি লক্ষ্য ওজন।",
     apply: (current) => ({
       ...current,
       identification: { ...current.identification, gender: "male", breed: "Crossbred" },
@@ -126,6 +129,7 @@ export const WIZARD_TEMPLATES: WizardTemplate[] = [
     id: "qurbani_prime",
     name: "Qurbani Premium Bull",
     description: "High conformation beef profile for Eid-ul-Adha target sale.",
+    nameBn: "কুরবানির ষাঁড়", descriptionBn: "ঈদুল আজহায় বিক্রির জন্য বড় গড়নের ষাঁড়।",
     apply: (current) => ({
       ...current,
       identification: { ...current.identification, gender: "male", breed: "Brahman" },
@@ -136,6 +140,7 @@ export const WIZARD_TEMPLATES: WizardTemplate[] = [
     id: "dairy_heifer",
     name: "Dairy Heifer / Cow",
     description: "Female breeding/dairy yield profile.",
+    nameBn: "বকনা / গাভী", descriptionBn: "প্রজনন বা দুধের জন্য গাভী।",
     apply: (current) => ({
       ...current,
       identification: { ...current.identification, gender: "female", breed: "Frieswal" },
@@ -146,6 +151,7 @@ export const WIZARD_TEMPLATES: WizardTemplate[] = [
     id: "farm_born_calf",
     name: "Farm-Born Calf",
     description: "Pedigree tracking and initial birth weight.",
+    nameBn: "খামারে জন্ম বাছুর", descriptionBn: "মা-বাবার ট্যাগ ও জন্মের ওজন।",
     apply: (current) => ({
       ...current,
       categoryStage: { category: "calf", isQurbaniTarget: false, targetWeightKg: 200, expectedDailyGainKg: 0.5 },
@@ -174,29 +180,30 @@ export function calculateAnimalAge(dob: string | null | undefined): { months: nu
   return { months: totalMonths, years, display };
 }
 
-export function validateWizardStep(step: number, state: AnimalWizardState, existingTagIds: string[] = []): { isValid: boolean; errors: Record<string, string> } {
+export function validateWizardStep(step: number, state: AnimalWizardState, existingTagIds: string[] = [], lang: "en" | "bn" = "en"): { isValid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
+  const L = (bn: string, en: string) => (lang === "bn" ? bn : en);
 
   if (step === 1) {
     if (!state.identification.tagId.trim()) {
-      errors.tagId = "Ear Tag / ID is required";
+      errors.tagId = L("কানের ট্যাগ / নম্বর দিন", "Ear Tag / ID is required");
     } else if (state.identification.tagId.length > 30) {
-      errors.tagId = "Tag ID must be under 30 characters";
-    } else if (existingTagIds.includes(state.identification.tagId.trim())) {
-      errors.tagId = `Tag ID "${state.identification.tagId}" is already registered`;
+      errors.tagId = L("ট্যাগ ৩০ অক্ষরের কম হতে হবে", "Tag ID must be under 30 characters");
+    } else if (existingTagIds.some((t) => t.toLowerCase() === state.identification.tagId.trim().toLowerCase())) {
+      errors.tagId = L(`ট্যাগ "${state.identification.tagId}" আগে থেকেই আছে`, `Tag ID "${state.identification.tagId}" is already registered`);
     }
     if (!state.identification.gender) {
-      errors.gender = "Gender is required";
+      errors.gender = L("লিঙ্গ বাছাই করুন", "Gender is required");
     }
   }
 
   if (step === 5) {
     if (state.origin.originType === "purchase") {
-      if (!state.origin.purchaseDate) errors.purchaseDate = "Purchase date is required";
-      if (state.origin.purchasePrice < 0 || isNaN(state.origin.purchasePrice)) errors.purchasePrice = "Valid purchase price is required";
-      if (state.origin.initialWeightKg <= 0 || isNaN(state.origin.initialWeightKg)) errors.initialWeightKg = "Initial live weight is required and must be > 0";
+      if (!state.origin.purchaseDate) errors.purchaseDate = L("কেনার তারিখ দিন", "Purchase date is required");
+      if (state.origin.purchasePrice < 0 || isNaN(state.origin.purchasePrice)) errors.purchasePrice = L("সঠিক কেনা দাম দিন", "Valid purchase price is required");
+      if (state.origin.initialWeightKg <= 0 || isNaN(state.origin.initialWeightKg)) errors.initialWeightKg = L("কেনার সময়ের ওজন দিন (০-এর বেশি)", "Initial live weight is required and must be > 0");
     } else {
-      if (state.origin.initialWeightKg <= 0 || isNaN(state.origin.initialWeightKg)) errors.initialWeightKg = "Birth / initial weight is required";
+      if (state.origin.initialWeightKg <= 0 || isNaN(state.origin.initialWeightKg)) errors.initialWeightKg = L("জন্মের ওজন দিন", "Birth / initial weight is required");
     }
   }
 

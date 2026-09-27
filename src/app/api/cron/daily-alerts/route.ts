@@ -4,6 +4,7 @@ import { sendWhatsAppWithFallback } from "@/lib/notifications";
 import { authenticateApiRoute } from "@/lib/auth/api-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
+import { loadLowStock } from "@/lib/inventory/low-stock";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -25,42 +26,11 @@ export async function GET(request: NextRequest) {
   const messages: string[] = [];
   const todayStr = todayDhaka();
 
-  // 1. Low Stock — compute from transactions (no current_stock column)
-  const [{ data: allTxns }, { data: items }] = await Promise.all([
-    cronBusinessId
-      ? supabase.from("inventory_transactions").select("item_id, type, qty, recorded_at, inventory_items!inner(business_id)").eq("inventory_items.business_id", cronBusinessId)
-      : supabase.from("inventory_transactions").select("item_id, type, qty, recorded_at"),
-    cronBusinessId
-      ? supabase.from("inventory_items").select("id, name, unit, low_stock_threshold").eq("business_id", cronBusinessId).is("deleted_at", null)
-      : supabase.from("inventory_items").select("id, name, unit, low_stock_threshold").is("deleted_at", null),
-  ]);
-
-  const stockByItem: Record<string, number> = {};
-  const consume30ByItem: Record<string, number> = {};
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  for (const t of (allTxns ?? []) as { item_id: string; type: string; qty: number; recorded_at: string }[]) {
-    if (t.type === "purchase") {
-      stockByItem[t.item_id] = (stockByItem[t.item_id] ?? 0) + t.qty;
-    } else {
-      stockByItem[t.item_id] = (stockByItem[t.item_id] ?? 0) - t.qty;
-      if (new Date(t.recorded_at) >= thirtyDaysAgo) {
-        consume30ByItem[t.item_id] = (consume30ByItem[t.item_id] ?? 0) + t.qty;
-      }
-    }
-  }
-
-  const lowStockLines: string[] = [];
-  for (const item of (items ?? []) as { id: string; name: string; unit: string; low_stock_threshold: number | null }[]) {
-    const stock = Math.max(0, stockByItem[item.id] ?? 0);
-    const daily = (consume30ByItem[item.id] ?? 0) / 30;
-    const daysLeft = daily > 0 ? Math.floor(stock / daily) : null;
-    if ((daysLeft !== null && daysLeft < 10) || (item.low_stock_threshold !== null && stock < item.low_stock_threshold)) {
-      const label = daysLeft !== null ? `${stock.toFixed(1)} ${item.unit} (~${daysLeft}d left)` : `${stock.toFixed(1)} ${item.unit}`;
-      lowStockLines.push(`- ${item.name}: ${label}`);
-    }
-  }
+  // 1. Low Stock — the ledger's balance, every row (see loadLowStock)
+  const lowStockLines = (await loadLowStock(supabase, cronBusinessId ?? null)).map((item) => {
+    const label = item.daysLeft !== null ? `${item.stock.toFixed(1)} ${item.unit} (~${item.daysLeft}d left)` : `${item.stock.toFixed(1)} ${item.unit}`;
+    return `- ${item.name}: ${label}`;
+  });
   if (lowStockLines.length > 0) {
     messages.push("?? *Low Stock Alert*\n" + lowStockLines.join("\n"));
   }

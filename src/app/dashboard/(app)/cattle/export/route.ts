@@ -1,136 +1,33 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
-import { measuredGrowth } from "@/lib/growth/baseline";
 import { todayDhaka } from "@/lib/dates";
+import { actionPermissionError } from "@/lib/auth/action-guard";
+import { PERMISSIONS } from "@/constants/roles";
+import { loadCattleBoard } from "@/lib/cattle/board-data";
+import { boardCsv } from "@/lib/cattle/board-csv";
 
+/** The cattle list as CSV: the same calculation as the cards (never a third one). */
 export async function GET() {
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return new NextResponse("Unauthorized", { status: 401 });
-  }
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
+  const denied = await actionPermissionError(PERMISSIONS.CATTLE_EXPORT);
+  if (denied) return new NextResponse(denied, { status: 403 });
 
   const businessId = await getCurrentBusinessId(supabase);
-  if (!businessId) {
-    return new NextResponse("Business not found", { status: 404 });
-  }
+  if (!businessId) return new NextResponse("Business not found", { status: 404 });
 
-  const [{ data: cattleData }, { data: weightLogs }, { data: feedItems }] =
-    await Promise.all([
-      supabase
-        .from("cattle")
-        .select("id, tag_id, breed, gender, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, status")
-        .eq("business_id", businessId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("weight_logs")
-        .select("cattle_id, weight_kg, recorded_at, weight_type, cattle!inner(business_id)")
-        .is("deleted_at", null)
-        .eq("cattle.business_id", businessId)
-        .order("recorded_at", { ascending: false }),
-      supabase
-        .from("inventory_items")
-        .select("id")
-        .eq("business_id", businessId)
-        .eq("category", "feed"),
-    ]);
+  const today = todayDhaka();
+  const board = await loadCattleBoard(supabase, businessId, today);
 
-  const feedItemIds = (feedItems ?? []).map((i) => i.id);
-  const { data: consumptions } = feedItemIds.length
-    ? await supabase
-        .from("inventory_transactions")
-        .select("cattle_id, qty")
-        .eq("type", "consumption")
-        .in("item_id", feedItemIds)
-    : { data: [] };
-
-  // Latest MEASURED weight per cattle, and all logs for measured growth
-  const latestWeightMap: Record<string, number> = {};
-  const logsByCattle: Record<string, { weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]> = {};
-  for (const log of (weightLogs ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" }[]) {
-    (logsByCattle[log.cattle_id] ??= []).push(log);
-    if (log.weight_type !== "estimated" && !(log.cattle_id in latestWeightMap)) {
-      latestWeightMap[log.cattle_id] = log.weight_kg;
-    }
-  }
-
-  // Feed consumption per cattle
-  const consumeMap: Record<string, number> = {};
-  for (const t of (consumptions ?? []) as { cattle_id: string | null; qty: number }[]) {
-    if (t.cattle_id) consumeMap[t.cattle_id] = (consumeMap[t.cattle_id] ?? 0) + t.qty;
-  }
-
-  const today = new Date().getTime();
-
-  type CattleRow = {
-    id: string;
-    tag_id: string;
-    breed: string | null;
-    gender: string;
-    purchase_date: string;
-    purchase_price: number;
-    initial_weight_kg: number;
-    initial_weight_type: "measured" | "estimated" | "unknown";
-    status: string;
-  };
-
-  const headers = [
-    "Tag ID",
-    "Breed",
-    "Gender",
-    "Purchase Date",
-    "Purchase Price (৳)",
-    "Initial Weight (kg)",
-    "Initial Weight Type",
-    "Current Weight (kg)",
-    "Weight Gain (kg)",
-    "Days in Pen",
-    "Feed Consumed (kg)",
-    "FCR",
-    "Status",
-  ];
-
-  const rows = (cattleData ?? []).map((c: CattleRow) => {
-    const currentWeight = latestWeightMap[c.id] ?? c.initial_weight_kg;
-    // measured growth only; empty until the animal has two measurements
-    const growth = measuredGrowth(c, logsByCattle[c.id] ?? []);
-    const weightGain = growth ? growth.gainKg : null;
-    const consumed = consumeMap[c.id] ?? 0;
-    const fcr = weightGain !== null && weightGain > 0 && consumed > 0 ? (consumed / weightGain).toFixed(2) : "";
-    const daysInPen =
-      c.status === "active"
-        ? Math.floor((today - new Date(c.purchase_date).getTime()) / 86400000)
-        : "";
-
-    return [
-      c.tag_id,
-      c.breed ?? "",
-      c.gender,
-      c.purchase_date,
-      c.purchase_price,
-      c.initial_weight_kg,
-      c.initial_weight_type,
-      Number(currentWeight).toFixed(1),
-      weightGain === null ? "" : weightGain.toFixed(1),
-      daysInPen,
-      consumed.toFixed(1),
-      fcr,
-      c.status,
-    ]
-      .map((val) => `"${String(val).replace(/"/g, '""')}"`)
-      .join(",");
-  });
-
-  const csv = [headers.join(","), ...rows].join("\n");
-  const date = todayDhaka();
-
-  return new NextResponse("﻿" + csv, {
+  return new NextResponse("﻿" + boardCsv(board), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="cattle-${date}.csv"`,
+      "Content-Disposition": `attachment; filename="cattle-${today}.csv"`,
+      "Cache-Control": "no-store",
     },
   });
 }

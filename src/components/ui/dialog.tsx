@@ -39,6 +39,54 @@ function DialogOverlay({
   )
 }
 
+/**
+ * The phone's Back button closes an open dialog instead of leaving the page: opening pushes one
+ * history entry (same URL, Next's own state kept), Back pops it and the dialog closes; closing the
+ * dialog normally removes the entry again. A nested dialog closes first, then the one below it.
+ */
+// Open dialogs, newest last, each with one history entry of its own. The phone's Back pops the
+// newest entry: the newest dialog closes. A dialog closed any other way takes its entry off again
+// (the resulting popstate is ignored), unless it led to another page.
+const dialogStack: string[] = []
+const dialogClosers = new Map<string, () => void>()
+const mountedDialogs = new Set<string>()
+let ignoredPops = 0
+let listening = false
+
+function onDialogPop() {
+  if (ignoredPops > 0) { ignoredPops--; return }
+  const top = dialogStack.pop()
+  if (top) dialogClosers.get(top)?.()
+}
+
+function BackButtonCloses() {
+  const closeRef = React.useRef<HTMLButtonElement>(null)
+  const id = React.useId()
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!listening) { window.addEventListener("popstate", onDialogPop); listening = true }
+    mountedDialogs.add(id)
+    dialogClosers.set(id, () => closeRef.current?.click())
+    if (!dialogStack.includes(id)) {
+      dialogStack.push(id)
+      window.history.pushState({ ...(window.history.state ?? {}), __dialog: id }, "")
+    }
+    const href = window.location.href
+    return () => {
+      mountedDialogs.delete(id)
+      setTimeout(() => {
+        if (mountedDialogs.has(id)) return                 // only re-mounted
+        dialogClosers.delete(id)
+        const at = dialogStack.indexOf(id)
+        if (at === -1) return                              // closed by Back: entry already gone
+        dialogStack.splice(at, 1)
+        if (window.location.href === href) { ignoredPops++; window.history.back() }
+      }, 0)
+    }
+  }, [id])
+  return <DialogPrimitive.Close ref={closeRef} tabIndex={-1} aria-hidden className="sr-only" />
+}
+
 function DialogContent({
   className,
   children,
@@ -58,6 +106,7 @@ function DialogContent({
         )}
         {...props}
       >
+        <BackButtonCloses />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
@@ -101,7 +150,9 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-6 -mb-6 flex flex-col-reverse gap-2 rounded-b-2xl border-t border-border/60 bg-muted/30 px-6 py-4 sm:flex-row sm:justify-end",
+        // bleeds to the dialog's edges through its p-6; a dialog without padding (p-0, e.g. a
+        // scrolling body with its own padding) keeps the footer inside, never wider than the screen
+        "-mx-6 -mb-6 flex flex-col-reverse gap-2 rounded-b-2xl border-t border-border/60 bg-muted/30 px-6 py-4 sm:flex-row sm:justify-end [.p-0>&]:mx-0 [.p-0>&]:mb-0",
         className
       )}
       {...props}

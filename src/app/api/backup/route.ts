@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateApiRoute } from "@/lib/auth/api-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { runCronBackup } from "./backup-helpers";
+import { readBackupTables } from "@/lib/backup/backup-tables";
 
 // Vercel Cron / Scheduled Function — runs every Monday 08:00 UTC or on-demand by authorized user
 // Requires env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BACKUP_EMAIL, RESEND_API_KEY, CRON_SECRET
@@ -26,31 +28,21 @@ export async function GET(req: NextRequest) {
     const { createClient: createServerClient } = await import("@/lib/supabase/server");
     const userSupabase = await createServerClient();
 
-    const [
-      { data: cattle },
-      { data: sales },
-      { data: costs },
-      { data: weightLogs },
-      { data: inventory },
-      { data: transactions },
-    ] = await Promise.all([
-      userSupabase.from("cattle").select("*").eq("business_id", bizId).order("created_at", { ascending: false }),
-      userSupabase.from("sales").select("*, cattle!inner(business_id)").eq("cattle.business_id", bizId).order("sold_at", { ascending: false }),
-      userSupabase.from("cost_entries").select("*").eq("business_id", bizId).order("recorded_at", { ascending: false }),
-      userSupabase.from("weight_logs").select("*").in("cattle_id", (await userSupabase.from("cattle").select("id").eq("business_id", bizId)).data?.map(c => c.id) ?? []).order("recorded_at", { ascending: false }),
-      userSupabase.from("inventory_items").select("*").eq("business_id", bizId),
-      userSupabase.from("inventory_transactions").select("*").in("item_id", (await userSupabase.from("inventory_items").select("id").eq("business_id", bizId)).data?.map(i => i.id) ?? []).order("recorded_at", { ascending: false }),
-    ]);
+    // every table of this farm, every row (see BACKUP_TABLES)
+    const tables = await readBackupTables(userSupabase as unknown as SupabaseClient, bizId);
 
     return NextResponse.json({
       ok: true,
       business_id: bizId,
-      cattle: cattle ?? [],
-      sales: sales ?? [],
-      costs: costs ?? [],
-      weightLogs: weightLogs ?? [],
-      inventory: inventory ?? [],
-      transactions: transactions ?? [],
+      generated_at: new Date().toISOString(),
+      // the first backups' names, kept so older restores still read them
+      cattle: tables.cattle,
+      sales: tables.sales,
+      costs: tables.cost_entries,
+      weightLogs: tables.weight_logs,
+      inventory: tables.inventory_items,
+      transactions: tables.inventory_transactions,
+      tables,
     });
   }
 

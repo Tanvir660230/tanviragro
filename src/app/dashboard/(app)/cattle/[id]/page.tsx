@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { selectAll } from "@/lib/supabase/select-all";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { CATTLE_STATUS_STYLE } from "@/constants/cattle-status";
@@ -32,6 +33,11 @@ import { loadFarm, loadHomeInputs } from "@/lib/home/home-data";
 import { alignHomeWithFarm } from "@/lib/home/farm-align";
 import { buildHomeModel } from "@/lib/home/home-model";
 import { CattleProfileHero } from "@/components/cattle/CattleProfileHero";
+import { PurchaseGroupCard, SaleGroupCard } from "@/components/cattle/PurchaseGroupCard";
+import { loadAnimalPurchaseGroup, loadAnimalSaleGroup } from "@/lib/cattle/groups";
+import { getBusinessContext } from "@/lib/context/business-context";
+import { hasPermission } from "@/lib/auth/permissions";
+import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
 import { dayList, feedCostBetween, feedKgBetween } from "@/lib/feed/usage-engine";
 import { getL } from "@/i18n/server-text";
@@ -317,7 +323,8 @@ async function ProfileSection({ id }: { id: string }) {
       .order("recorded_at", { ascending: true })
       .limit(500),
     feedItemIds.length
-      ? supabase
+      // every page: the ledger grows daily and a single read stops at 1,000 rows
+      ? selectAll(() => supabase
           .from("inventory_transactions")
           .select("qty, unit_cost, recorded_at, notes, item_id, movement_type")
           .eq("cattle_id", id)
@@ -325,6 +332,7 @@ async function ProfileSection({ id }: { id: string }) {
           .in("movement_type", ["consumption", "consumption_reversal"])
           .in("item_id", feedItemIds)
           .order("recorded_at", { ascending: true })
+          .order("id", { ascending: true })).then((data) => ({ data, error: null }))
       : Promise.resolve({ data: [] as { qty: number; unit_cost: number | null; recorded_at: string; notes: string | null; item_id: string }[], error: null }),
     supabase
       .from("cost_entries")
@@ -370,13 +378,15 @@ async function ProfileSection({ id }: { id: string }) {
       .maybeSingle(),
     // Herd-level recorded feeding (no cattle_id): shared among animals present that day
     feedItemIds.length
-      ? supabase
+      // every page: herd feeding is most of the ledger (750+ rows and growing daily)
+      ? selectAll(() => supabase
           .from("inventory_transactions")
           .select("qty, unit_cost, recorded_at, notes, item_id, cattle_id, is_estimate, movement_type")
           .is("cattle_id", null)
           .in("movement_type", ["consumption", "consumption_reversal"])
           .in("item_id", feedItemIds)
           .order("recorded_at", { ascending: true })
+          .order("id", { ascending: true })).then((data) => ({ data, error: null }))
       : Promise.resolve({ data: [] as { qty: number; unit_cost: number | null; recorded_at: string; notes: string | null; item_id: string; cattle_id: string | null; is_estimate: boolean }[], error: null }),
     supabase
       .from("cattle")
@@ -393,6 +403,15 @@ async function ProfileSection({ id }: { id: string }) {
   if (!cattleData) notFound();
 
   const c = cattleData as Cattle;
+
+  // bought / sold together with others at one price (each animal carries its share)
+  const [purchaseGroup, saleGroup, ctx] = await Promise.all([
+    loadAnimalPurchaseGroup(supabase, businessId, c.id),
+    c.status === "sold" ? loadAnimalSaleGroup(supabase, businessId, c.id) : Promise.resolve(null),
+    getBusinessContext(supabase).catch(() => null),
+  ]);
+  const canEditCattle = ctx ? hasPermission(ctx, PERMISSIONS.CATTLE_EDIT) : false;
+  const canSell = ctx ? hasPermission(ctx, PERMISSIONS.CATTLE_SELL) : false;
 
   // Secondary non-blocking queries for breed benchmarking
   const { data: breedBenchData } = c.breed ? await supabase
@@ -703,7 +722,7 @@ async function ProfileSection({ id }: { id: string }) {
         badges={{ ready: !!hm?.readyToSell, quarantined: !!c.is_quarantined, qurbani: !!c.is_qurbani_marked }}
         actions={<>
           {/* Undo Sale — time-limited */}
-          {c.status === "sold" && latestSaleData?.sold_at &&
+          {c.status === "sold" && !saleGroup && latestSaleData?.sold_at &&
             nowMs - new Date(latestSaleData.sold_at).getTime() <= 7 * 86400000 && (
             <UndoSaleButton cattleId={c.id} tagId={c.tag_id} soldAt={latestSaleData.sold_at} />
           )}
@@ -752,7 +771,7 @@ async function ProfileSection({ id }: { id: string }) {
         value={c.status === "active" && hm ? { worth: hm.valueToday, profit: hm.profitToday } : null}
         realised={c.status === "sold"
           ? { kind: "sold", salePrice: latestSaleData?.sale_price_total != null ? Number(latestSaleData.sale_price_total) : null, result: latestSaleData?.sale_price_total != null ? Number(latestSaleData.sale_price_total) - totalCost : -totalCost }
-          : c.status === "dead" ? { kind: "dead", salePrice: null, result: -totalCost } : null}
+          : c.status === "dead" || c.status === "stolen" ? { kind: "dead", salePrice: null, result: -totalCost } : null}
         perKg={{
           cost: weightGain > 0 && gainWindowCost > 0 ? gainWindowCost / weightGain : null,
           feed: weightGain > 0 && gainWindowFeed > 0 ? gainWindowFeed / weightGain : null,
@@ -767,6 +786,8 @@ async function ProfileSection({ id }: { id: string }) {
         defaultTab={c.status === "active" ? "weight" : "overview"}
         overview={
           <>
+            {saleGroup && <SaleGroupCard sale={saleGroup} cattleId={c.id} lang={locale} canUndo={canSell} />}
+            {purchaseGroup && <PurchaseGroupCard group={purchaseGroup} cattleId={c.id} lang={locale} canEdit={canEditCattle} />}
             <DailyFeedRequirementCard
               cattleId={c.id}
               initialWeightKg={c.initial_weight_kg ?? 0}

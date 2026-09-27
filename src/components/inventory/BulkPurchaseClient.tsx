@@ -49,11 +49,13 @@ const taka = (n: number) => `৳${n.toLocaleString("en-IN", { maximumFractionDig
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
 const norm = (s: string) => s.trim().toLowerCase();
 
-export function BulkPurchaseClient({ items, context, today, lang }: {
+export function BulkPurchaseClient({ items, context, today, lang, initialItemId }: {
   items: PurchaseItemOption[];
   context: PurchaseContext;
   today: string;
   lang: PurchaseLang;
+  /** "Buy" on a stock row: the memo opens with that item on the first line */
+  initialItemId?: string;
 }) {
   const t = PURCHASE_TEXT[lang];
   const router = useRouter();
@@ -65,7 +67,7 @@ export function BulkPurchaseClient({ items, context, today, lang }: {
   const [notes, setNotes] = useState("");
   const [payment, setPayment] = useState<"cash" | "partial" | "due">("cash");
   const [paid, setPaid] = useState("");
-  const [rows, setRows] = useState<Row[]>([blankRow()]);
+  const [rows, setRows] = useState<Row[]>(() => [blankRow(initialItemId ? { itemId: initialItemId } : {})]);
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const unitOf = (r: Row) => (r.isNew ? r.newUnit : itemById.get(r.itemId)?.unit ?? "");

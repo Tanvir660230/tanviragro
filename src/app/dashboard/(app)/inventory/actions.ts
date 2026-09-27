@@ -13,6 +13,7 @@ import { todayDhaka } from "@/lib/dates";
 import { feedLedgerErrorMessage } from "@/lib/inventory/feed-batch";
 import { scaleRecipe } from "@/lib/inventory/recipe-math";
 import type { CostSource, MovementType } from "@/types/database";
+import { isEmptyQty } from "@/lib/inventory/stock-view";
 
 export type InventoryFormState =
   | { error?: string; success?: boolean; warning?: string }
@@ -149,6 +150,7 @@ export async function adjustStock(
 
   if (!item_id) return { error: "Item ID is required" };
   if (isNaN(adjustedQty) || adjustedQty < 0) return { error: "Valid adjusted quantity is required" };
+  if (recorded_at.slice(0, 10) > todayDhaka()) return { error: "A count cannot be dated in the future" };
 
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
@@ -158,6 +160,13 @@ export async function adjustStock(
     .eq("id", item_id)
     .maybeSingle();
   if (!itemRow || itemRow.business_id !== businessId) return { error: "Unauthorized" };
+
+  const lockError = await checkFinancialLock(supabase, businessId, recorded_at.slice(0, 10));
+  if (lockError) return { error: lockError };
+
+  // a feed in use is counted on its usage period (the daily deduction is reconciled there)
+  const { data: openLine } = await supabase.from("v_feed_usage_lines").select("period_id").eq("item_id", item_id).eq("status", "open").limit(1);
+  if ((openLine ?? []).length) return { error: "This feed is in use: count it with “Count check” on its card, so the daily deduction is corrected too." };
 
   const currentStock = await CentralInventoryRepository.getItemStockOnHand(supabase, item_id);
 
@@ -188,6 +197,9 @@ export async function adjustStock(
   if (error) return { error: "Failed to record stock adjustment" };
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard");
+  revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
 
@@ -211,6 +223,7 @@ export async function addStock(
   if (!item_id) return { error: "Invalid item" };
   if (isNaN(qty) || qty <= 0) return { error: "Enter a valid quantity" };
   if (!recorded_at) return { error: "Date is required" };
+  if (recorded_at > todayDhaka()) return { error: "Stock cannot be added for a future date" };
 
   // Ownership check
   const businessId = await getCurrentBusinessId(supabase);
@@ -266,6 +279,7 @@ export async function logConsumption(
   if (!item_id) return { error: "Invalid item" };
   if (isNaN(qty) || qty <= 0) return { error: "Enter a valid quantity" };
   if (!recorded_at) return { error: "Date is required" };
+  if (recorded_at > todayDhaka()) return { error: "Use cannot be recorded for a future date" };
 
   // Ownership check
   const businessId2 = await getCurrentBusinessId(supabase);
@@ -313,9 +327,9 @@ export async function logConsumption(
   // Supplement auto-deduction logic removed as per user request
 
   revalidatePath("/dashboard/inventory");
-    revalidatePath("/dashboard");
-    revalidatePath("/dashboard/finance");
-    if (cattle_id) revalidatePath(`/dashboard/cattle/${cattle_id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/finance");
+  if (cattle_id) revalidatePath(`/dashboard/cattle/${cattle_id}`);
   revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
@@ -342,7 +356,7 @@ export async function recordDailyFeeding(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  if (!/^d{4}-d{2}-d{2}$/.test(recorded_at)) return { error: "Invalid date" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(recorded_at)) return { error: "Invalid date" };
   if (recorded_at > todayDhaka()) return { error: "Feeding cannot be recorded for a future date" };
 
   // one line per item (two lines for the same item would violate the one-row-per-day rule)
@@ -400,6 +414,15 @@ export async function archiveInventoryItem(
 
   if (item.is_active_roughage) {
     return { error: "This item is currently set as the active roughage. Please set a different roughage as active before deleting this one." };
+  }
+
+  // An item with stock or in use would stay on the list (it is never hidden while it holds
+  // stock), so "delete" would look like it did nothing: finish it first.
+  const { data: openLine } = await supabase.from("v_feed_usage_lines").select("period_id").eq("item_id", id).eq("status", "open").limit(1);
+  if ((openLine ?? []).length) return { error: "This feed is in use. Mark it finished first, then delete it." };
+  const stock = await getItemStock(supabase, id);
+  if (!isEmptyQty(stock)) {
+    return { error: `There is still ${stock % 1 === 0 ? stock : stock.toFixed(2)} in stock. Mark it finished first (fed, used or lost), then delete it.` };
   }
 
   const { error } = await supabase
@@ -791,6 +814,11 @@ export async function markInventoryItemEmpty(
     .maybeSingle();
 
   if (!item || item.business_id !== bizId) return { error: "Unauthorized" };
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(finishDate)) return { error: "Choose the date it finished" };
+  if (finishDate > todayDhaka()) return { error: "The finish date cannot be in the future" };
+  const lockError = await checkFinancialLock(supabase, bizId, finishDate);
+  if (lockError) return { error: lockError };
 
   // If this feed is in an open usage period, "finished" ends that period with 0 left:
   // the stock used is FEED CONSUMPTION (Feed Expenses), reconciled by the database.

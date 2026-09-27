@@ -3,6 +3,8 @@ import { requestMemo } from "@/lib/request-memo";
 import { todayDhaka } from "@/lib/dates";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 import { selectAll } from "@/lib/supabase/select-all";
+import { hasQty } from "@/lib/inventory/stock-view";
+import { isOnFarm } from "@/lib/cattle/status";
 import {
   autoRowsDue, computeFeedSnapshot, dayList, forecastDepletion,
   type Animal, type ChartVersion, type FeedSnapshot, type Period, type RecordedRow, type RuleType,
@@ -48,7 +50,7 @@ export type FeedItemStatus = {
 export type FeedRole = "mix" | "ingredient" | "direct";
 
 /** Retired only when the owner said so and nothing is left or in use (one rule for every page). */
-export const isRetired = (flagged: boolean, stockQty: number, inUse = false) => flagged && stockQty <= 0.0001 && !inUse;
+export const isRetired = (flagged: boolean, stockQty: number, inUse = false) => flagged && !hasQty(stockQty) && !inUse;
 
 /** Mix items: made on the Mix page, or named as a mix. Ingredients: in any mix or recipe, and not a mix. */
 export function feedRoles(input: {
@@ -124,7 +126,7 @@ export async function feedAutoPostingDue(supabase: SupabaseClient<any>, business
 
 /** Reads only; posts nothing. */
 export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId: string, asOf = todayDhaka()): Promise<FeedData> {
-  const [linesRes, recipesRes, cattleRes, salesRes, itemsRes, balanceRes, chartsRes, mixRes, recipeIngRes] = await Promise.all([
+  const [linesRes, recipesRes, cattleRes, salesRes, itemsRes, balanceRes, chartsRes, mixRes, recipeIngRes, deathRes] = await Promise.all([
     supabase.from("v_feed_usage_lines").select("*").eq("business_id", businessId).order("start_date", { ascending: true }),
     supabase.from("feed_recipes").select("id, name").eq("business_id", businessId),
     supabase.from("cattle").select("id, tag_id, purchase_date, status, updated_at, initial_weight_kg, initial_weight_type").eq("business_id", businessId).is("deleted_at", null),
@@ -135,6 +137,8 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
     supabase.from("feed_mix_batches").select("output_item_id").eq("business_id", businessId).is("undone_at", null),
     // every recipe ever made (deleted ones too): their items are mix ingredients
     supabase.from("recipe_ingredients").select("item_id, feed_recipes!inner(business_id)").eq("feed_recipes.business_id", businessId),
+    // the day each dead animal died (it eats until then)
+    supabase.from("cattle_death_records").select("cattle_id, death_date").eq("business_id", businessId),
   ]);
   type ChartRow = {
     id: string; target_type: "item" | "recipe"; item_id: string | null; recipe_id: string | null; effective_from: string; notes: string | null;
@@ -154,7 +158,8 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
 
   const [logsRes, unitCosts, recRes, postedRes] = await Promise.all([
     cattleIds.length
-      ? supabase.from("weight_logs").select("cattle_id, weight_kg, recorded_at, weight_type").in("cattle_id", cattleIds).is("deleted_at", null)
+      // every weighing: a single read stops at 1,000 rows, and which ones were dropped was random
+      ? selectAll(() => supabase.from("weight_logs").select("id, cattle_id, weight_kg, recorded_at, weight_type").in("cattle_id", cattleIds).is("deleted_at", null).order("id")).then((data) => ({ data }))
       : Promise.resolve({ data: [] }),
     loadUnitCostMap(supabase, businessId),
     itemIds.length
@@ -204,6 +209,7 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
 
   // animals (presence = purchase → sale / exit)
   const soldAt = new Map(((salesRes.data ?? []) as { cattle_id: string; sold_at: string }[]).map((s) => [s.cattle_id, s.sold_at.slice(0, 10)]));
+  const diedOn = new Map(((deathRes.data ?? []) as { cattle_id: string; death_date: string }[]).map((d) => [d.cattle_id, String(d.death_date).slice(0, 10)]));
   const logsBy = new Map<string, Animal["logs"]>();
   for (const l of (logsRes.data ?? []) as { cattle_id: string; weight_kg: number; recorded_at: string; weight_type: "measured" | "estimated" | null }[]) {
     const arr = logsBy.get(l.cattle_id) ?? [];
@@ -212,7 +218,8 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
   }
   const animals: Animal[] = cattle.filter((c) => c.purchase_date).map((c) => ({
     id: c.id, tag: c.tag_id, from: String(c.purchase_date).slice(0, 10),
-    to: soldAt.get(c.id) ?? (c.status === "active" ? null : c.updated_at ? c.updated_at.slice(0, 10) : null),
+    // left the farm on its sale or death day; the last edit time only when neither is recorded
+    to: soldAt.get(c.id) ?? diedOn.get(c.id) ?? (isOnFarm(c.status) ? null : c.updated_at ? c.updated_at.slice(0, 10) : null),
     initialWeightKg: c.initial_weight_kg == null ? null : Number(c.initial_weight_kg),
     initialWeightType: c.initial_weight_type ?? "unknown",
     logs: logsBy.get(c.id) ?? [],
@@ -258,7 +265,7 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
   };
 
   const { data: mixInputRows } = itemIds.length
-    ? await supabase.from("inventory_transactions").select("item_id").in("item_id", itemIds).eq("movement_type", "feed_mix_input")
+    ? { data: await selectAll<{ item_id: string }>(() => supabase.from("inventory_transactions").select("item_id").in("item_id", itemIds).eq("movement_type", "feed_mix_input").order("id")) }
     : { data: [] };
   const roles = feedRoles({
     items,

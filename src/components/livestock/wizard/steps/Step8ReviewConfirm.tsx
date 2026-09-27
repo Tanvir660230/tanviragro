@@ -20,6 +20,14 @@ interface Props {
 export function Step8ReviewConfirm({ state, errors }: Props) {
   const L = useL();
   const age = calculateAnimalAge(state.identification.dob);
+  const words: Record<string, [string, string]> = {
+    male: ["ষাঁড়", "Male"], female: ["গাভী", "Female"], cattle: ["গরু", "Cattle"], buffalo: ["মহিষ", "Buffalo"], goat: ["ছাগল", "Goat"],
+    fattening: ["মোটাতাজা", "Fattening"], qurbani: ["কুরবানি", "Qurbani"], dairy: ["দুধ / প্রজনন", "Dairy"], calf: ["বাছুর", "Calf"], breeding: ["প্রজনন", "Breeding"],
+    active: ["সুস্থ", "Healthy"], quarantined: ["আলাদা রাখা", "Quarantined"], treatment: ["চিকিৎসায়", "Under treatment"], observation: ["নজরে রাখা", "Under observation"], sheep: ["ভেড়া", "Sheep"],
+    purchase: ["কেনা", "Purchased"], birth: ["খামারে জন্ম", "Farm born"],
+  };
+  const w = (v: string | null | undefined) => (v && words[v] ? L(words[v][0], words[v][1]) : v || "—");
+  const ageText = state.identification.dob ? age.display : L("দেওয়া নেই", "Not given");
   const totalFinancial =
     (state.origin.purchasePrice || 0) +
     (state.financial.transportCost || 0) +
@@ -51,15 +59,15 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
               {L("পরিচয়", "Identification")}
             </span>
             <Badge variant="outline" className="text-[10px]">
-              {state.identification.species.toUpperCase()}
+              {w(state.identification.species)}
             </Badge>
           </div>
           <div className="space-y-1 text-muted-foreground">
             <p><strong className="text-foreground">{L("ট্যাগ:", "Tag ID:")}</strong> {state.identification.tagId || "—"}</p>
             <p><strong className="text-foreground">{L("নাম:", "Name:")}</strong> {state.identification.name || "—"}</p>
-            <p><strong className="text-foreground">{L("জাত:", "Breed:")}</strong> {state.identification.breed}</p>
-            <p><strong className="text-foreground">{L("লিঙ্গ:", "Gender:")}</strong> {state.identification.gender}</p>
-            <p><strong className="text-foreground">{L("বয়স:", "Age:")}</strong> {age.display}</p>
+            <p><strong className="text-foreground">{L("জাত:", "Breed:")}</strong> {state.identification.breed || "—"}</p>
+            <p><strong className="text-foreground">{L("লিঙ্গ:", "Gender:")}</strong> {w(state.identification.gender)}</p>
+            <p><strong className="text-foreground">{L("বয়স:", "Age:")}</strong> {ageText}</p>
           </div>
         </div>
 
@@ -71,7 +79,7 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
               {L("জায়গা ও উদ্দেশ্য", "Location & Purpose")}
             </span>
             <Badge variant="secondary" className="text-[10px]">
-              {state.categoryStage.category}
+              {w(state.categoryStage.category)}
             </Badge>
           </div>
           <div className="space-y-1 text-muted-foreground">
@@ -79,13 +87,13 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
             <p><strong className="text-foreground">{L("শেড:", "Pen / Shed:")}</strong> {state.farmLocation.penId || L("দেওয়া নেই", "Unassigned")}</p>
             <p><strong className="text-foreground">{L("লক্ষ্য ওজন:", "Target Weight:")}</strong> {state.categoryStage.targetWeightKg ? `${state.categoryStage.targetWeightKg} kg` : "—"}</p>
             <p><strong className="text-foreground">{L("দৈনিক বৃদ্ধি:", "Expected ADG:")}</strong> {state.categoryStage.expectedDailyGainKg ? `${state.categoryStage.expectedDailyGainKg} kg/d` : "—"}</p>
-            <p><strong className="text-foreground">{L("স্বাস্থ্য:", "Health Status:")}</strong> {state.health.status} {state.health.isQuarantined ? L("(আলাদা রাখা)", "(Quarantined)") : ""}</p>
+            <p><strong className="text-foreground">{L("স্বাস্থ্য:", "Health Status:")}</strong> {w(state.health.status)} {state.health.isQuarantined ? L("(আলাদা রাখা)", "(Quarantined)") : ""}</p>
           </div>
         </div>
 
         {/* Acquisition & Financial Summary */}
         <div className="p-3 rounded-lg border border-border bg-card space-y-2 sm:col-span-2">
-          <div className="flex items-center justify-between border-b pb-1.5 font-semibold text-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-1.5 font-semibold text-foreground">
             <span className="flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
               {L("কেনা ও খরচ", "Acquisition & Financial Footprint")}
@@ -95,7 +103,7 @@ export function Step8ReviewConfirm({ state, errors }: Props) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-muted-foreground">
             <div>
               <span className="block text-[10px] uppercase font-semibold">{L("কোথা থেকে", "Origin")}</span>
-              <span className="text-foreground font-medium">{state.origin.originType}</span>
+              <span className="text-foreground font-medium">{w(state.origin.originType)}</span>
             </div>
             <div>
               <span className="block text-[10px] uppercase font-semibold">{L("কেনা দাম", "Base Price")}</span>

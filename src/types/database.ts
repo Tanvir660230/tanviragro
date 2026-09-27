@@ -123,6 +123,8 @@ export type Cattle = {
   vendor_id: string | null;
   is_quarantined: boolean;
   is_qurbani_marked: boolean;
+  /** bought together with others at one price (cattle_purchase_groups); purchase_price is its share */
+  purchase_group_id?: string | null;
   withdrawal_end_date?: string | null;
   insurance_provider: string | null;
   insurance_amount: number | null;
@@ -469,6 +471,8 @@ export type Sale = {
   notes: string | null;
   deleted_at: string | null;
   reverted_reason: string | null;
+  /** sold together with others at one price (cattle_sale_groups); sale_price_total is its share */
+  sale_group_id?: string | null;
   created_at: string;
 };
 

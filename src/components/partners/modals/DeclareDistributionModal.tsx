@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Banknote } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,8 +43,8 @@ export function DeclareDistributionModal({ entries, today, t, onClose }: Props) 
     if (!paid.length) return setError(L("কোনো পরিমাণ নেই", "Nothing to pay"));
     startTransition(async () => {
       const res = await declareDistribution({ totalAmount: total, date, isLoss: false, entries: paid, lockBooks });
-      if (res.error) setError(res.error);
-      else onClose();
+      if (res.error) { setError(res.error); toast.error(res.error); }
+      else { toast.success(L("লাভ বণ্টন লেখা হলো", "Profit payout recorded")); onClose(); }
     });
   }
 

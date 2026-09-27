@@ -14,6 +14,7 @@ import type { ExpenseKind } from "@/types/database";
 
  
 import { todayDhaka } from "@/lib/dates";
+import { isLossStatus } from "@/lib/cattle/status";
 type Client = SupabaseClient<any>;
 
 // ── Public types ──────────────────────────────────────────────────
@@ -176,7 +177,7 @@ export const getCachedDbData = requestMemo((_db: Client, businessId: string) => 
     const [
       cattleRes, salesRes, costsRes,
       invTxRes, partnerTxRes, fixedAssetRes, liabRes, loansRes, treatmentsRes,
-      rpcFeedRes,
+      rpcFeedRes, lossRes,
     ] = await Promise.all([
       db.from("cattle").select("id, tag_id, purchase_price, status, purchase_date, updated_at, initial_weight_kg").eq("business_id", businessId).is("deleted_at", null),
       // money tables are read page by page too: a plain select stops silently at row 1000
@@ -193,6 +194,8 @@ export const getCachedDbData = requestMemo((_db: Client, businessId: string) => 
       // all veterinary fees logged via the treatment system are invisible in the P&L.
       selectAll(() => db.from("cattle_treatments").select("id, cattle_id, vet_fee, additional_medical_cost, treated_at, diagnosis, cattle!inner(business_id, tag_id)").eq("cattle.business_id", businessId).order("id")).then((data) => ({ data })),
       db.rpc("get_cattle_consumptions", { p_business_id: businessId }),
+      // the day a dead or stolen animal left (its loss is booked on that day)
+      (db as unknown as SupabaseClient<any>).from("cattle_death_records").select("cattle_id, death_date").eq("business_id", businessId),
     ]);
 
     type CattleRow = { id: string; tag_id: string | null; purchase_price: number; status: string; purchase_date: string; updated_at: string | null; initial_weight_kg: number | null };
@@ -222,6 +225,7 @@ export const getCachedDbData = requestMemo((_db: Client, businessId: string) => 
       loansData: must(loansRes, "loans") as unknown as LoanEngineRow[],
       treatments: must(treatmentsRes, "treatments") as unknown as TreatmentRow[],
       rpcFeedData: must(rpcFeedRes, "feed per animal") as any[],
+      lossDates: Object.fromEntries(((lossRes.data ?? []) as { cattle_id: string; death_date: string }[]).map((d) => [d.cattle_id, String(d.death_date).slice(0, 10)])) as Record<string, string>,
     };
 });
 
@@ -246,7 +250,7 @@ export async function getAccountingData(
 
   const {
     cattle, sales, costs, invTx, partnerTx, fixedAssetDb, liabData, loansData, treatments,
-    rpcFeedData
+    rpcFeedData, lossDates,
   } = await getCachedDbData(supabase as Client, businessId);
 
   // Build cattle lookup for COGS
@@ -353,7 +357,8 @@ export async function getAccountingData(
   // Distribute capitalized costs
   const activeCattleIds = new Set(cattle.filter(c => c.status === "active").map(c => c.id));
   const soldCattleIds = new Set(cattle.filter(c => c.status === "sold").map(c => c.id));
-  const deadCattleIds = new Set(cattle.filter(c => c.status === "dead").map(c => c.id));
+  // a dead or stolen animal is a loss: its cost is written off (it was never sold)
+  const deadCattleIds = new Set(cattle.filter(c => isLossStatus(c.status)).map(c => c.id));
 
   const capitalizedActiveCosts = allCapitalizedCattleCosts.filter(c => c.cattle_id && activeCattleIds.has(c.cattle_id)).reduce((s, c) => s + Number(c.amount), 0)
     + Array.from(activeCattleIds).reduce((s, id) => s + (feedCostByCattle[id] ?? 0), 0);
@@ -364,14 +369,15 @@ export async function getAccountingData(
 
   // All-time deceased loss (for balance sheet / retained earnings)
   const deceasedCattleLoss = cattle
-    .filter((c) => c.status === "dead")
+    .filter((c) => isLossStatus(c.status))
     .reduce((s, c) => s + Number(c.purchase_price ?? 0), 0) + capitalizedDeadCosts;
 
-  // Period-scoped deceased loss for the income statement: only cattle whose status changed
-  // to "dead" within the selected period (using updated_at as a proxy for the death date).
+  // Period-scoped loss for the income statement: animals that died or were stolen within the
+  // period — on the recorded day (cattle_death_records), else the last edit as a proxy.
+  const lossDay = (c: { id: string; updated_at: string | null }) => lossDates[c.id] ?? (c.updated_at ? c.updated_at.slice(0, 10) : null);
   const periodDeceasedCattleLoss = (from || to)
     ? cattle
-        .filter((c) => c.status === "dead" && c.updated_at && inPeriod(c.updated_at.slice(0, 10)))
+        .filter((c) => isLossStatus(c.status) && lossDay(c) != null && inPeriod(lossDay(c)!))
         .reduce((s, c) => {
           const deadCap = allCapitalizedCattleCosts
             .filter(cap => cap.cattle_id === c.id)

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { selectAll } from "@/lib/supabase/select-all";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -36,12 +37,13 @@ export default async function EditPurchaseMemoPage({
   const allItems = (itemsData ?? []).filter(i => !i.is_discontinued);
 
   // Fetch transactions for this date
-  const { data: txns } = await supabase
+  const txns = await selectAll(() => supabase
     .from("inventory_transactions")
     .select("id, item_id, qty, unit_cost, notes, inventory_items!inner(business_id)")
     .eq("inventory_items.business_id", businessId)
     .eq("movement_type", "purchase")
-    .eq("recorded_at", date);
+    .eq("recorded_at", date)
+    .order("id"));
   const undone = await undonePurchaseIds(supabase, (txns ?? []).map((t) => t.id));
 
   // Filter in JS to perfectly match the supplier from notes

@@ -71,7 +71,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
 
   useEffect(() => {
     if (state?.success) {
-      toast.success(L("স্বাস্থ্য কাজ যোগ হলো", "Health events scheduled"));
+      toast.success(L("স্বাস্থ্য কাজ লেখা হলো", "Health records saved"));
       setTimeout(() => {
         setOpen(false);
         setSelectedIds(new Set());
@@ -125,7 +125,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Cattle ({selectedIds.size} selected)
+                {L(`গরু (${selectedIds.size}টি বাছাই)`, `Cattle (${selectedIds.size} selected)`)}
               </Label>
               <button
                 type="button"
@@ -194,6 +194,15 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
             </Label>
             <Input id="bh_date" name="scheduled_at" type="date" required defaultValue={todayDhaka()} />
           </div>
+
+          {/* done already, or a task to do */}
+          <label className="flex min-h-10 cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2 text-sm">
+            <input type="checkbox" name="done" defaultChecked className="mt-0.5 h-4 w-4 accent-primary" />
+            <span>
+              <span className="font-medium">{L("কাজটি হয়ে গেছে", "Already done")}</span>
+              <span className="block text-xs text-muted-foreground">{L("টিক না দিলে এটি করার কাজ হিসেবে থাকবে (ভবিষ্যতের তারিখ হলে সবসময়)।", "Untick to keep it as a task to do (a future date always is).")}</span>
+            </span>
+          </label>
 
           {/* Notes */}
           <div className="space-y-1.5">

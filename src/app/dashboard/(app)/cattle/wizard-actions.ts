@@ -82,6 +82,10 @@ export async function saveEnterpriseAnimalWizardAction(
       .eq("business_id", businessId);
 
     if (updateError) {
+      // bought together at one price: its share changes only from the "Bought together" card
+      if (/bought together/i.test(updateError.message)) {
+        return { error: "This animal was bought together with others at one price — change its price or date from the “Bought together” card on its page." };
+      }
       return { error: "Failed to update animal details: " + updateError.message };
     }
 
@@ -105,7 +109,9 @@ export async function saveEnterpriseAnimalWizardAction(
       purchase_price: payload.origin.purchasePrice || 0,
       initial_weight_kg: payload.origin.initialWeightKg || 1,
       initial_weight_type: payload.origin.initialWeightType ?? "unknown",
+      // on the farm; quarantine is a flag (the step-4 box used to be ignored)
       status: "active",
+      is_quarantined: !!payload.health?.isQuarantined || payload.health?.status === "quarantined",
       notes: payload.notes?.trim() || null,
     })
     .select("id")
