@@ -7,6 +7,9 @@
 --    animal vanished: it was listed as "dead", its cost shown as a loss, its feed given to others.
 --    Existing rows are converted, and a trigger turns any future 'quarantined' write into
 --    status 'active' + is_quarantined = true, whichever screen writes it.
+--    Status is compared as TEXT: on a database whose cattle_status type has no 'quarantined'
+--    value (production: active, sold, dead, stolen) the literal would be an error, so the
+--    update is then a no-op and the trigger never fires a change — and never fails a write.
 -- 2. Every dead animal has a cattle_death_records row (the death date). Dead animals marked
 --    from the list had none, so the feed split used the row's last edit time as the death day.
 --    Existing ones get a record dated on their last update (the best date known), cause
@@ -23,12 +26,12 @@ begin;
 -- 1. quarantine: status → flag
 update public.cattle
    set status = 'active', is_quarantined = true
- where status = 'quarantined';
+ where status::text = 'quarantined';
 
 create or replace function public.cattle_quarantine_is_a_flag()
 returns trigger language plpgsql as $$
 begin
-  if new.status = 'quarantined' then
+  if new.status::text = 'quarantined' then
     new.status := 'active';
     new.is_quarantined := true;
   end if;
