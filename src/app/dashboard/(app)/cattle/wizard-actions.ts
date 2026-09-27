@@ -105,7 +105,9 @@ export async function saveEnterpriseAnimalWizardAction(
       purchase_price: payload.origin.purchasePrice || 0,
       initial_weight_kg: payload.origin.initialWeightKg || 1,
       initial_weight_type: payload.origin.initialWeightType ?? "unknown",
+      // on the farm; quarantine is a flag (the step-4 box used to be ignored)
       status: "active",
+      is_quarantined: !!payload.health?.isQuarantined || payload.health?.status === "quarantined",
       notes: payload.notes?.trim() || null,
     })
     .select("id")

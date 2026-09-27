@@ -11,6 +11,8 @@ import { CattleDomainService } from "@/lib/services/cattle.service";
 import { LivestockEventBus } from "@/lib/livestock/events";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type CattleFormState =
   | { error?: string; success?: boolean }
@@ -220,9 +222,26 @@ export async function bulkCreateCattle(
   return { count: inserted.length };
 }
 
+export type DeathDetails = {
+  /** the day it died (YYYY-MM-DD); default today */
+  date?: string;
+  /** what it died of */
+  cause?: string;
+  notes?: string;
+};
+
+const AUTO_CANCEL_NOTE = "Auto-cancelled due to animal mortality";
+/** cattle_death_records is not in the generated table types (read the same way by the partners page) */
+const deathRecords = (supabase: unknown) => (supabase as SupabaseClient<any>).from("cattle_death_records");
+
+/**
+ * THE way an animal is recorded dead (profile, cattle list, table, batch): the death day and
+ * cause go into cattle_death_records (the feed split, Money and partners read that date), open
+ * health tasks are cancelled, and the status becomes "dead". Refused in a locked month.
+ */
 export async function markAsDeceased(
   id: string,
-  notes?: string
+  details: DeathDetails | string = {}
 ): Promise<{ error?: string }> {
   const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
   if (permissionDenied) return { error: permissionDenied };
@@ -233,9 +252,14 @@ export async function markAsDeceased(
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
 
+  const d: DeathDetails = typeof details === "string" ? { notes: details } : details;
+  const date = (d.date ?? todayDhaka()).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Choose the date it died" };
+  if (date > todayDhaka()) return { error: "The date cannot be in the future" };
+
   const { data: cattle } = await supabase
     .from("cattle")
-    .select("id, business_id, status")
+    .select("id, business_id, status, purchase_date")
     .eq("id", id)
     .maybeSingle();
 
@@ -245,23 +269,46 @@ export async function markAsDeceased(
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Invalid status transition" };
   }
+  if (cattle.purchase_date && date < String(cattle.purchase_date).slice(0, 10)) {
+    return { error: "The date is before the animal was bought" };
+  }
+  const lockError = await checkFinancialLock(supabase, businessId, date);
+  if (lockError) return { error: lockError };
+
+  // the dated record first: without it the death day is unknown
+  const { error: recErr } = await deathRecords(supabase).upsert({
+    business_id: businessId,
+    cattle_id: id,
+    death_date: date,
+    cause_of_death: d.cause?.trim() || "Not recorded",
+    post_mortem_notes: d.notes?.trim() || null,
+  }, { onConflict: "cattle_id" });
+  if (recErr) return { error: "Could not save the death record" };
 
   const { error } = await supabase
     .from("cattle")
-    .update({
-      status: "dead",
-      notes: notes ? notes.trim() : undefined,
-    })
+    .update({ status: "dead" })
     .eq("id", id)
     .eq("business_id", businessId);
+  if (error) {
+    await deathRecords(supabase).delete().eq("cattle_id", id);
+    return { error: "Failed to update" };
+  }
 
-  if (error) return { error: "Failed to update" };
+  // no more vaccine / task reminders for it
+  await supabase
+    .from("health_events")
+    .update({ deleted_at: new Date().toISOString(), notes: AUTO_CANCEL_NOTE })
+    .eq("cattle_id", id)
+    .eq("business_id", businessId)
+    .is("completed_at", null)
+    .is("deleted_at", null);
 
   await LivestockEventBus.publish(
     "StatusChanged",
     businessId,
     id,
-    { previousStatus: cattle.status, newStatus: "dead", notes },
+    { previousStatus: cattle.status, newStatus: "dead", notes: d.notes, date, cause: d.cause },
     user.id
   ).catch(() => {});
 
@@ -273,6 +320,7 @@ export async function markAsDeceased(
   return {};
 }
 
+/** Recorded dead by mistake: back to active, the death record removed, its cancelled tasks back. */
 export async function undoMarkAsDeceased(
   id: string
 ): Promise<{ error?: string }> {
@@ -294,6 +342,12 @@ export async function undoMarkAsDeceased(
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
   if (cattle.status !== "dead") return { error: "Cattle is not marked as dead" };
 
+  const { data: rec } = await deathRecords(supabase).select("death_date").eq("cattle_id", id).maybeSingle();
+  if (rec?.death_date) {
+    const lockError = await checkFinancialLock(supabase, businessId, String(rec.death_date).slice(0, 10));
+    if (lockError) return { error: lockError };
+  }
+
   const { error } = await supabase
     .from("cattle")
     .update({ status: "active" })
@@ -301,6 +355,14 @@ export async function undoMarkAsDeceased(
     .eq("business_id", businessId);
 
   if (error) return { error: "Failed to restore" };
+
+  await deathRecords(supabase).delete().eq("cattle_id", id).eq("business_id", businessId);
+  await supabase
+    .from("health_events")
+    .update({ deleted_at: null, notes: null })
+    .eq("cattle_id", id)
+    .eq("business_id", businessId)
+    .eq("notes", AUTO_CANCEL_NOTE);
 
   revalidatePath(`/dashboard/cattle/${id}`);
   revalidatePath("/dashboard/cattle");
@@ -503,12 +565,15 @@ export async function createBulkHealthEvents(
   if ((cattleRows ?? []).length !== cattleIds.length || !allOwned)
     return { error: "Unauthorized" };
 
+  // done already (given today or earlier) = completed; otherwise a task to do
+  const done = formData.get("done") === "on" && scheduled_at.slice(0, 10) <= todayDhaka();
   const rows = cattleIds.map((cattle_id) => ({
     cattle_id,
     business_id: businessId,
     title,
     event_type,
     scheduled_at,
+    ...(done ? { completed_at: scheduled_at } : {}),
     notes,
   }));
 

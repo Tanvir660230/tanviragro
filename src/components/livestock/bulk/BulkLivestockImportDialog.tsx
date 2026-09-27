@@ -34,6 +34,7 @@ import {
 } from "@/lib/livestock/bulk-import";
 import { bulkImportLivestockAction } from "@/app/dashboard/(app)/cattle/bulk-actions";
 import { todayDhaka } from "@/lib/dates";
+import { useL } from "@/i18n/text";
 
 export interface BulkLivestockImportDialogProps {
   open: boolean;
@@ -48,6 +49,7 @@ export function BulkLivestockImportDialog({
   existingTagIds = [],
   onSuccess,
 }: BulkLivestockImportDialogProps) {
+  const L = useL();
   const router = useRouter();
   const [step, setStep] = useState<"upload" | "preview" | "importing">("upload");
   const [rawText, setRawText] = useState("");
@@ -72,7 +74,7 @@ export function BulkLivestockImportDialog({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success("Template CSV downloaded");
+    toast.success(L("নমুনা শিট ডাউনলোড হলো", "Template downloaded"));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,7 +95,7 @@ export function BulkLivestockImportDialog({
   const processRawText = (text: string) => {
     const parsed = parseLivestockCsv(text);
     if (parsed.rows.length === 0) {
-      toast.error("No valid data rows found in CSV text");
+      toast.error(L("শিটে কোনো ঠিক সারি পাওয়া যায়নি", "No valid rows found"));
       return;
     }
     const result = validateBatchImport(parsed.rows, existingTagIds);
@@ -116,26 +118,28 @@ export function BulkLivestockImportDialog({
       };
     });
     setValidatedRows(updated);
-    toast.success(`Generated ${generated.length} sequential tags`);
+    toast.success(L(`${generated.length}টি ট্যাগ বানানো হলো`, `Generated ${generated.length} tags`));
     setShowAutoTag(false);
   };
 
   const handleExecuteImport = () => {
     const validRowsToImport = validatedRows.filter((r) => r.isValid);
     if (validRowsToImport.length === 0) {
-      toast.error("Cannot import: No valid rows available");
+      toast.error(L("ইমপোর্ট করার মতো ঠিক সারি নেই", "No valid rows to import"));
       return;
     }
     setStep("importing");
     startTransition(async () => {
       try {
         const res = await bulkImportLivestockAction(validRowsToImport);
-        if (!res.success || res.error) {
-          toast.error(res.error || "Bulk import failed");
+        if (!res.success) {
+          toast.error(res.error || L("ইমপোর্ট হয়নি", "Import failed"));
           setStep("preview");
           return;
         }
-        toast.success(`Successfully imported ${res.insertedCount} livestock records!`);
+        // the animals are in (importing again would duplicate them); a missed cost / plan is a warning
+        if (res.error) toast.warning(res.error);
+        else toast.success(L(`${res.insertedCount}টি গরু যোগ হলো`, `${res.insertedCount} animals imported`));
         onSuccess?.();
         onOpenChange(false);
         setStep("upload");
@@ -143,7 +147,7 @@ export function BulkLivestockImportDialog({
         setValidatedRows([]);
         router.refresh();
       } catch (err: any) {
-        toast.error(err.message || "An unexpected error occurred");
+        toast.error(err.message || L("সমস্যা হয়েছে", "Something went wrong"));
         setStep("preview");
       }
     });
@@ -167,12 +171,12 @@ export function BulkLivestockImportDialog({
                 <FileSpreadsheet className="h-5 w-5" />
               </div>
               <div>
-                <DialogTitle className="text-base font-bold">Bulk Livestock Ingestion</DialogTitle>
-                <p className="text-xs text-muted-foreground">Import batches of livestock via CSV or copy-paste</p>
+                <DialogTitle className="text-base font-bold">{L("শিট থেকে গরু যোগ", "Import cattle from a sheet")}</DialogTitle>
+                <p className="text-sm text-muted-foreground">{L("CSV ফাইল দিন, বা এক্সেল থেকে কপি করে বসান", "Upload a CSV file, or paste rows copied from Excel")}</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="text-xs gap-1.5 h-8 hidden sm:flex">
-              <Download className="h-3.5 w-3.5" /> Download Template
+            <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="h-9 shrink-0 gap-1.5 text-xs">
+              <Download className="h-3.5 w-3.5" /> {L("নমুনা শিট", "Template")}
             </Button>
           </div>
         </DialogHeader>
@@ -182,29 +186,29 @@ export function BulkLivestockImportDialog({
             <div className="space-y-4">
               <div className="border-2 border-dashed border-border rounded-2xl p-6 text-center bg-card">
                 <UploadCloud className="h-9 w-9 text-muted-foreground mx-auto mb-2" />
-                <h3 className="font-semibold text-sm">Upload Livestock CSV</h3>
+                <h3 className="font-semibold text-sm">{L("CSV ফাইল দিন", "Upload a CSV file")}</h3>
                 <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-3">
-                  Select your CSV file containing ear tags and animal details.
+                  {L("ট্যাগ, জাত, ওজন, দাম ও কেনার তারিখসহ ফাইল। নমুনা শিটটি দেখুন।", "A file with tag, breed, weight, price and purchase date — see the template.")}
                 </p>
                 <label className="cursor-pointer">
                   <span className="inline-flex items-center justify-center rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs">
-                    Select CSV File
+                    {L("ফাইল বাছুন", "Choose file")}
                   </span>
                   <input type="file" accept=".csv,text/csv,text/plain" className="hidden" onChange={handleFileUpload} />
                 </label>
-                {fileName && <p className="text-xs font-mono text-primary mt-2">Loaded: {fileName}</p>}
+                {fileName && <p className="text-xs font-mono text-primary mt-2">{L("লোড হয়েছে", "Loaded")}: {fileName}</p>}
               </div>
 
               <div className="space-y-2">
                 <Textarea
-                  placeholder="Or paste CSV / TSV text here..."
+                  placeholder={L("অথবা এখানে সারিগুলো পেস্ট করুন…", "Or paste the rows here…")}
                   rows={5}
                   value={rawText}
                   onChange={(e) => setRawText(e.target.value)}
                   className="font-mono text-xs"
                 />
                 <Button onClick={() => processRawText(rawText)} disabled={!rawText.trim()} className="w-full text-xs font-semibold gap-2">
-                  <RefreshCw className="h-3.5 w-3.5" /> Parse & Validate Records
+                  <RefreshCw className="h-3.5 w-3.5" /> {L("যাচাই করুন", "Check the rows")}
                 </Button>
               </div>
             </div>
@@ -214,35 +218,35 @@ export function BulkLivestockImportDialog({
             <div className="space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="p-2.5 rounded-xl border bg-card">
-                  <span className="text-[11px] text-muted-foreground">Total Rows</span>
+                  <span className="text-xs text-muted-foreground">{L("মোট সারি", "Rows")}</span>
                   <p className="text-base font-bold">{summary.totalRows}</p>
                 </div>
                 <div className="p-2.5 rounded-xl border bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
-                  <span className="text-[11px] font-semibold">Valid</span>
+                  <span className="text-xs font-semibold">{L("ঠিক আছে", "Valid")}</span>
                   <p className="text-base font-bold">{summary.validRows}</p>
                 </div>
                 <div className="p-2.5 rounded-xl border bg-card">
-                  <span className="text-[11px] text-muted-foreground">Cost Total</span>
+                  <span className="text-xs text-muted-foreground">{L("মোট দাম", "Total price")}</span>
                   <p className="text-base font-bold">৳{summary.totalEstimatedAcquisitionCost.toLocaleString()}</p>
                 </div>
                 <div className="p-2.5 rounded-xl border bg-card">
-                  <span className="text-[11px] text-muted-foreground">Weight Total</span>
+                  <span className="text-xs text-muted-foreground">{L("মোট ওজন", "Total weight")}</span>
                   <p className="text-base font-bold">{summary.totalInitialWeightKg.toLocaleString()} kg</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between p-2.5 rounded-xl border bg-muted/20 text-xs">
-                <span>Auto-generate sequential ear tags?</span>
+                <span>{L("ট্যাগ নেই? ক্রমিক ট্যাগ বানিয়ে নিন", "No tags? Number them in order")}</span>
                 <Button size="sm" variant="outline" onClick={() => setShowAutoTag(!showAutoTag)} className="text-xs h-7 gap-1">
-                  <ListPlus className="h-3.5 w-3.5" /> {showAutoTag ? "Hide" : "Auto-Tags"}
+                  <ListPlus className="h-3.5 w-3.5" /> {showAutoTag ? L("লুকান", "Hide") : L("ট্যাগ বানান", "Make tags")}
                 </Button>
               </div>
 
               {showAutoTag && (
                 <div className="p-2.5 rounded-xl border border-primary/30 bg-primary/5 flex items-center gap-2 flex-wrap text-xs">
-                  <Input value={tagPrefix} onChange={(e) => setTagPrefix(e.target.value)} className="h-7 w-20 text-xs font-mono" placeholder="Prefix" />
+                  <Input value={tagPrefix} onChange={(e) => setTagPrefix(e.target.value)} className="h-7 w-20 text-xs font-mono" placeholder={L("শুরু", "Prefix")} />
                   <Input type="number" value={tagStartNum} onChange={(e) => setTagStartNum(parseInt(e.target.value, 10) || 1)} className="h-7 w-16 text-xs font-mono" />
-                  <Button size="sm" onClick={handleApplySequentialTags} className="h-7 text-xs">Apply</Button>
+                  <Button size="sm" onClick={handleApplySequentialTags} className="h-7 text-xs">{L("বসান", "Apply")}</Button>
                 </div>
               )}
 
@@ -251,12 +255,12 @@ export function BulkLivestockImportDialog({
                   <thead className="bg-muted/40 text-muted-foreground font-semibold border-b sticky top-0 bg-card">
                     <tr>
                       <th className="p-2">#</th>
-                      <th className="p-2">Tag ID</th>
-                      <th className="p-2">Breed</th>
-                      <th className="p-2">Gender</th>
-                      <th className="p-2">Weight</th>
-                      <th className="p-2">Price</th>
-                      <th className="p-2">Status</th>
+                      <th className="p-2">{L("ট্যাগ", "Tag")}</th>
+                      <th className="p-2">{L("জাত", "Breed")}</th>
+                      <th className="p-2">{L("লিঙ্গ", "Gender")}</th>
+                      <th className="p-2">{L("ওজন", "Weight")}</th>
+                      <th className="p-2">{L("দাম", "Price")}</th>
+                      <th className="p-2">{L("অবস্থা", "Status")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -270,9 +274,9 @@ export function BulkLivestockImportDialog({
                         <td className="p-2 font-mono">৳{r.purchasePrice.toLocaleString()}</td>
                         <td className="p-2">
                           {r.isValid ? (
-                            <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30">Valid</Badge>
+                            <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-500/30">{L("ঠিক", "Valid")}</Badge>
                           ) : (
-                            <Badge variant="destructive" className="text-[10px]">{r.errors[0] || "Invalid"}</Badge>
+                            <Badge variant="destructive" className="text-xs">{r.errors[0] || L("ভুল", "Invalid")}</Badge>
                           )}
                         </td>
                       </tr>
@@ -286,9 +290,9 @@ export function BulkLivestockImportDialog({
           {step === "importing" && (
             <div className="py-12 text-center space-y-3">
               <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-              <h3 className="font-semibold text-sm">Registering Livestock Batch</h3>
+              <h3 className="font-semibold text-sm">{L("গরু যোগ হচ্ছে…", "Adding the animals…")}</h3>
               <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                Saving profiles, baseline weight logs, and scheduled health protocols...
+                {L("গরু, খরচ আর টিকার পরিকল্পনা সেভ হচ্ছে।", "Saving the animals, their costs and vaccine plan.")}
               </p>
             </div>
           )}
@@ -298,7 +302,7 @@ export function BulkLivestockImportDialog({
           {step === "preview" ? (
             <>
               <Button type="button" variant="outline" size="sm" onClick={resetAll} className="text-xs gap-1 h-8">
-                <ArrowLeft className="h-3.5 w-3.5" /> Back
+                <ArrowLeft className="h-3.5 w-3.5" /> {L("পেছনে", "Back")}
               </Button>
               <Button
                 type="button"
@@ -308,12 +312,12 @@ export function BulkLivestockImportDialog({
                 className="text-xs font-semibold gap-1.5 h-8"
               >
                 {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                Confirm Import ({summary?.validRows || 0})
+                {L(`${summary?.validRows || 0}টি যোগ করুন`, `Import ${summary?.validRows || 0}`)}
               </Button>
             </>
           ) : (
             <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="text-xs ml-auto h-8">
-              Cancel
+              {L("বাতিল", "Cancel")}
             </Button>
           )}
         </DialogFooter>

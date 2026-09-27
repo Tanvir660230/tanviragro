@@ -10,6 +10,7 @@ import type { ValidatedLivestockRow } from "@/lib/livestock/bulk-import";
 import type { CattleGender, CattleStatus, HealthEventType } from "@/types/database";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import { todayDhaka } from "@/lib/dates";
 
 export interface BulkImportResult {
   success: boolean;
@@ -41,7 +42,10 @@ export async function bulkImportLivestockAction(
   }
   if (!businessId) return { success: false, insertedCount: 0, failedCount: rows.length, error: "No active farm found" };
 
-  const validRows = rows.filter((r) => r.isValid && r.tagId.trim().length > 0);
+  // checked again here: a row needs a tag, a real purchase date and a weight (never a made-up 1 kg)
+  const validRows = rows.filter((r) => r.isValid && r.tagId.trim().length > 0
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(r.purchaseDate ?? "")) && String(r.purchaseDate) <= todayDhaka()
+    && Number(r.initialWeightKg) > 0 && Number(r.purchasePrice ?? 0) >= 0);
   if (validRows.length === 0) {
     return { success: false, insertedCount: 0, failedCount: rows.length, error: "No valid rows to import" };
   }
@@ -82,7 +86,9 @@ export async function bulkImportLivestockAction(
       dob: r.dob || null,
       purchase_date: r.purchaseDate,
       purchase_price: r.purchasePrice || 0,
-      initial_weight_kg: r.initialWeightKg || 1,
+      initial_weight_kg: r.initialWeightKg,
+      // a weight typed into a sheet is taken as weighed (as on the add form)
+      initial_weight_type: "measured" as const,
       status: "active" as CattleStatus,
       notes: r.notes || null,
     };
@@ -102,24 +108,15 @@ export async function bulkImportLivestockAction(
     };
   }
 
-  // Insert initial baseline weight logs & ancillary costs
-  const weightLogs = [];
+  // Costs and health protocol per animal. The purchase weight is the animal's own
+  // initial_weight_kg — no separate weight log (the add form writes none; a second copy made
+  // imported animals look weighed twice on the purchase day).
   const costEntries = [];
   const allProtocolEvents: HealthEventRow[] = [];
 
   for (let i = 0; i < insertedCattle.length; i++) {
     const cow = insertedCattle[i];
     const sourceRow = validRows.find((r) => r.tagId.toLowerCase() === cow.tag_id.toLowerCase());
-
-    if (cow.initial_weight_kg > 0) {
-      weightLogs.push({
-        business_id: businessId,
-        cattle_id: cow.id,
-        weight_kg: cow.initial_weight_kg,
-        recorded_at: cow.purchase_date,
-        notes: "Initial baseline weight on import",
-      });
-    }
 
     if (sourceRow && sourceRow.transportCost > 0) {
       costEntries.push({
@@ -148,14 +145,15 @@ export async function bulkImportLivestockAction(
     allProtocolEvents.push(...protocols);
   }
 
-  if (weightLogs.length > 0) {
-    await supabase.from("weight_logs").insert(weightLogs);
-  }
+  // the animals are in; say so if their costs or health plan could not be saved
+  const warnings: string[] = [];
   if (costEntries.length > 0) {
-    await supabase.from("cost_entries").insert(costEntries);
+    const { error } = await supabase.from("cost_entries").insert(costEntries);
+    if (error) warnings.push(`transport / haat costs were not saved (${error.message})`);
   }
   if (allProtocolEvents.length > 0) {
-    await supabase.from("health_events").insert(allProtocolEvents);
+    const { error } = await supabase.from("health_events").insert(allProtocolEvents);
+    if (error) warnings.push(`the vaccine plan was not created (${error.message})`);
   }
 
   for (const cow of insertedCattle) {
@@ -174,6 +172,7 @@ export async function bulkImportLivestockAction(
     insertedCount: insertedCattle.length,
     failedCount: rows.length - insertedCattle.length,
     createdIds: insertedCattle.map((c) => c.id),
+    ...(warnings.length ? { error: `Imported, but ${warnings.join("; ")}` } : {}),
   };
 }
 
@@ -255,12 +254,16 @@ export async function bulkBatchHealthAction(
 
   const dbEventType: HealthEventType = eventType === "vaccination" ? "vaccine" : eventType;
 
+  // given today or earlier = done (it used to be saved as a task still to do, so a past date
+  // showed as "overdue" at once); a future date is a task to do
+  const done = eventDate <= todayDhaka();
   const healthEvents: HealthEventRow[] = cattleIds.map((cid) => ({
     business_id: businessId!,
     cattle_id: cid,
     title: eventName,
     event_type: dbEventType,
     scheduled_at: eventDate,
+    ...(done ? { completed_at: eventDate } : {}),
     notes: notes || `Batch health event: ${eventName}`,
   }));
 
@@ -279,7 +282,10 @@ export async function bulkBatchHealthAction(
       description: `Batch Health Treatment: ${eventName}`,
       recorded_at: eventDate,
     }));
-    await supabase.from("cost_entries").insert(costEntries);
+    const { error: costError } = await supabase.from("cost_entries").insert(costEntries);
+    if (costError) {
+      return { success: false, insertedCount: cattleIds.length, error: "The health records were saved, but the cost was not: " + costError.message };
+    }
   }
 
   revalidatePath("/dashboard/cattle");
@@ -288,15 +294,20 @@ export async function bulkBatchHealthAction(
 }
 
 /**
- * Server action to execute batch status transition (e.g. quarantine, active).
+ * Batch quarantine on / off. Quarantine is a FLAG on an animal still on the farm (never a
+ * status). "Sold" and "dead" are not batch statuses: a sale needs its price and date (the
+ * sale dialog) and a death its date (markAsDeceased) — a bare status change broke the money.
  */
 export async function bulkBatchStatusAction(
   cattleIds: string[],
   status: "active" | "quarantined" | "sold" | "dead",
-  notes?: string
+  _notes?: string
 ): Promise<{ success: boolean; updatedCount: number; error?: string }> {
-  const permissionDenied = await actionPermissionError(PERMISSIONS.CATTLE_EDIT);
+  const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
   if (permissionDenied) return { success: false, updatedCount: 0, error: permissionDenied };
+  if (status === "sold" || status === "dead") {
+    return { success: false, updatedCount: 0, error: status === "sold" ? "Sell each animal from its page (price and date are needed)." : "Record deaths with “Mark dead” (the date is needed)." };
+  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, updatedCount: 0, error: "Authentication required" };
@@ -313,17 +324,19 @@ export async function bulkBatchStatusAction(
     return { success: false, updatedCount: 0, error: "No animals selected" };
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("cattle")
-    .update({ status: status as CattleStatus, ...(notes ? { notes } : {}) })
+    .update({ is_quarantined: status === "quarantined" })
     .in("id", cattleIds)
-    .eq("business_id", businessId);
+    .eq("business_id", businessId)
+    .eq("status", "active")
+    .select("id");
 
   if (error) {
-    return { success: false, updatedCount: 0, error: "Failed to update status: " + error.message };
+    return { success: false, updatedCount: 0, error: "Failed to update: " + error.message };
   }
 
   revalidatePath("/dashboard/cattle");
-  revalidateTag("accounting", { expire: 0 });   // cattle, costs or status changed: cash and the balance sheet
-  return { success: true, updatedCount: cattleIds.length };
+  revalidatePath("/dashboard");
+  return { success: true, updatedCount: (data ?? []).length };
 }

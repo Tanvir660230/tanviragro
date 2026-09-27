@@ -5,7 +5,7 @@ import { buildBoard, type Board, type BoardRow } from "@/lib/cattle/board";
 
 /** Cattle list data: the homepage calculation for active animals + history for sold/dead ones. */
 export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId: string, today = todayDhaka()): Promise<Board> {
-  const [inputs, farm, rowsRes, healthRes, salesRes] = await Promise.all([
+  const [inputs, farm, rowsRes, healthRes, salesRes, deathRes] = await Promise.all([
     loadHomeInputs(supabase, businessId, today, { money: false }),
     loadFarm(supabase, businessId),
     supabase.from("cattle")
@@ -16,6 +16,7 @@ export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId:
       .order("scheduled_at", { ascending: true }),
     supabase.from("sales").select("cattle_id, sold_at, sale_price_total, cattle!inner(business_id)")
       .eq("cattle.business_id", businessId).is("deleted_at", null),
+    supabase.from("cattle_death_records").select("cattle_id, death_date, cause_of_death").eq("business_id", businessId),
   ]);
 
   const logs: Record<string, { date: string; kg: number; type: "measured" | "estimated" }[]> = {};
@@ -36,5 +37,7 @@ export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId:
       .map((h) => ({ cattle_id: h.cattle_id, title: h.title, date: String(h.scheduled_at).slice(0, 10) })),
     sales: ((salesRes.data ?? []) as { cattle_id: string; sold_at: string; sale_price_total: number | string }[])
       .map((s) => ({ cattle_id: s.cattle_id, sold_at: String(s.sold_at).slice(0, 10), price: Number(s.sale_price_total) })),
+    deaths: ((deathRes.data ?? []) as { cattle_id: string; death_date: string; cause_of_death: string | null }[])
+      .map((d) => ({ cattle_id: d.cattle_id, date: String(d.death_date).slice(0, 10), cause: d.cause_of_death })),
   });
 }

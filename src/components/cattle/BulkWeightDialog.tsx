@@ -17,6 +17,7 @@ import { Loader2, ClipboardList, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { bulkCreateWeightLogs, type BulkWeightEntry } from "@/app/dashboard/(app)/cattle/actions";
 import { todayDhaka } from "@/lib/dates";
+import { useL } from "@/i18n/text";
 
 interface CattleOption {
   id: string;
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOpen, onOpenChange: externalOnChange, triggerLabel, triggerVariant = "outline" }: Props) {
+  const L = useL();
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const open    = externalOpen    ?? internalOpen;
@@ -83,7 +85,7 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
       }));
 
     if (!entries.length) {
-      toast.error("Enter at least one weight to log");
+      toast.error(L("অন্তত একটি ওজন লিখুন", "Enter at least one weight"));
       return;
     }
 
@@ -92,7 +94,7 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(`${result.count} weight${result.count !== 1 ? "s" : ""} logged`);
+        toast.success(L(`${result.count}টি ওজন লেখা হলো`, `${result.count} weight${result.count !== 1 ? "s" : ""} saved`));
         setOpen(false);
         router.refresh();
       }
@@ -106,20 +108,20 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
       {!externalOnChange && (
         <DialogTrigger className={buttonVariants({ variant: triggerVariant, size: "sm" })}>
           <ClipboardList className="mr-1.5 h-4 w-4" />
-          {triggerLabel ?? "Bulk Weigh"}
+          {triggerLabel ?? L("একসাথে ওজন", "Weigh several")}
         </DialogTrigger>
       )}
 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Bulk Weight Entry</DialogTitle>
+          <DialogTitle>{L("একসাথে ওজন লিখুন", "Weigh several animals")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
           {/* Date picker */}
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-              Date
+              {L("তারিখ", "Date")}
             </label>
             <Input
               type="date"
@@ -131,7 +133,7 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
             {filledCount > 0 && (
               <span className="ml-auto flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                {filledCount} / {cattle.length} filled
+                {L(`${filledCount} / ${cattle.length} লেখা`, `${filledCount} / ${cattle.length} filled`)}
               </span>
             )}
           </div>
@@ -141,10 +143,10 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
             {/* Header */}
             <div className="grid grid-cols-[auto_1fr] gap-0 border-b border-border bg-muted/40 px-4 py-2">
               <span className="w-24 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Tag ID
+                {L("ট্যাগ", "Tag")}
               </span>
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Weight (kg)
+                {L("ওজন (কেজি)", "Weight (kg)")}
               </span>
             </div>
 
@@ -168,6 +170,7 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
                       <Input
                         ref={(el) => { inputRefs.current[idx] = el; }}
                         type="number"
+                        inputMode="decimal"
                         min="1"
                         step="0.1"
                         placeholder="— kg"
@@ -177,7 +180,7 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
                         }
                         onKeyDown={(e) => handleKeyDown(e, idx)}
                         className={cn(
-                          "h-8 border-transparent bg-transparent shadow-none focus:border-border focus:bg-background",
+                          "h-10 border-transparent bg-transparent shadow-none focus:border-border focus:bg-background",
                           isValid && "text-emerald-700 dark:text-emerald-400 font-semibold"
                         )}
                       />
@@ -189,24 +192,23 @@ export function BulkWeightDialog({ cattle, defaultOpen = false, open: externalOp
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Press <kbd className="rounded border px-1 font-mono text-xs">Tab</kbd> or{" "}
-            <kbd className="rounded border px-1 font-mono text-xs">Enter</kbd> to move between rows.
-            Leave blank to skip.
+            {L("Enter বা Tab চাপলে পরের গরুতে যাবে। খালি রাখলে সেটি বাদ যাবে। মাপা ওজন হিসেবে লেখা হয়।",
+              "Enter or Tab moves to the next animal. Leave blank to skip. Saved as measured weights.")}
           </p>
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
-            Cancel
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            {L("বাতিল", "Cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={isPending || filledCount === 0}>
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving…
+                {L("সেভ হচ্ছে…", "Saving…")}
               </>
             ) : (
-              `Save ${filledCount > 0 ? filledCount : ""} Weight${filledCount !== 1 ? "s" : ""}`
+              L(`${filledCount > 0 ? `${filledCount}টি ` : ""}ওজন সেভ করুন`, `Save ${filledCount > 0 ? filledCount : ""} weight${filledCount !== 1 ? "s" : ""}`)
             )}
           </Button>
         </DialogFooter>

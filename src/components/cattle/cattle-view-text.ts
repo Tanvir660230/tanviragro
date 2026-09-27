@@ -1,0 +1,43 @@
+/** Words of the cattle list's layout that are not in the dictionary (t.cattle_board / t.home). */
+export const CATTLE_TEXT = {
+  en: {
+    add: "Add cattle", weigh: "Weigh", more: "More",
+    m_health: "Health task for several", m_cost: "Cost for several", m_import: "Import from a sheet", m_export: "Download list (CSV)",
+    select: "Select", select_done: "Done", select_all: "Select all shown", selected: "{n} selected", clear: "Clear",
+    b_weigh: "Weigh", b_health: "Health", b_cost: "Cost", b_q_on: "Quarantine", b_q_off: "End quarantine", b_dead: "Mark dead",
+    col_tag: "Animal", col_weight: "Weight", col_adg: "Daily gain", col_days: "Days", col_cost: "Cost so far", col_value: "Worth today", col_profit: "Profit", col_next: "Next task",
+    m_open: "Open", m_weigh: "Record weight", m_health_one: "Health", m_q_on: "Quarantine", m_q_off: "End quarantine", m_dead: "Mark dead",
+    actions_for: "Actions for {tag}",
+    qurbani_on: "Mark for Qurbani", qurbani_off: "Remove Qurbani mark", ok_qurbani_on: "{tag} marked for Qurbani", ok_qurbani_off: "{tag}: Qurbani mark removed",
+    past_title: "Sold, dead and gone", badge_gone: "Left the farm", died_on: "died {date}", cause: "cause",
+    d_title: "Mark dead", d_title_many: "Mark {n} animals dead", d_date: "Date it died", d_cause: "Cause", d_cause_ph: "e.g. bloat, snake bite, disease…",
+    d_notes: "Notes", d_note: "Its cost so far is counted as a loss on this date. Open health tasks are cancelled. It can be undone from the animal's page.",
+    d_go: "Mark dead", cancel: "Cancel", d_ok: "{n} marked dead", d_failed: "{n} could not be marked",
+    q_ok_on: "{n} in quarantine", q_ok_off: "{n} out of quarantine", failed: "Something went wrong — nothing changed",
+    causes: ["Disease", "Bloat", "Accident / injury", "Snake bite", "Calving problem", "Unknown"],
+    none: "No animals yet", none_sub: "Add your first animal, or import a sheet.",
+    csv_note: "Same figures as the cards",
+  },
+  bn: {
+    add: "গরু যোগ", weigh: "ওজন", more: "আরও",
+    m_health: "একসাথে স্বাস্থ্য কাজ", m_cost: "একসাথে খরচ", m_import: "শিট থেকে ইমপোর্ট", m_export: "তালিকা ডাউনলোড (CSV)",
+    select: "বাছাই", select_done: "হয়েছে", select_all: "দেখানো সব বাছাই", selected: "{n}টি বাছাই", clear: "বাতিল",
+    b_weigh: "ওজন", b_health: "স্বাস্থ্য", b_cost: "খরচ", b_q_on: "কোয়ারেন্টাইন", b_q_off: "কোয়ারেন্টাইন শেষ", b_dead: "মৃত লিখুন",
+    col_tag: "গরু", col_weight: "ওজন", col_adg: "দৈনিক বৃদ্ধি", col_days: "দিন", col_cost: "এ পর্যন্ত খরচ", col_value: "আজকের দাম", col_profit: "লাভ", col_next: "পরের কাজ",
+    m_open: "খুলুন", m_weigh: "ওজন লিখুন", m_health_one: "স্বাস্থ্য", m_q_on: "কোয়ারেন্টাইনে নিন", m_q_off: "কোয়ারেন্টাইন শেষ", m_dead: "মৃত লিখুন",
+    actions_for: "{tag} — কাজ",
+    qurbani_on: "কুরবানির জন্য বাছুন", qurbani_off: "কুরবানি থেকে সরান", ok_qurbani_on: "{tag} কুরবানির জন্য বাছাই হলো", ok_qurbani_off: "{tag} কুরবানি থেকে সরানো হলো",
+    past_title: "বিক্রিত, মৃত ও চলে যাওয়া", badge_gone: "খামার ছেড়েছে", died_on: "মারা গেছে {date}", cause: "কারণ",
+    d_title: "মৃত লিখুন", d_title_many: "{n}টি গরু মৃত লিখুন", d_date: "কবে মারা গেছে", d_cause: "কারণ", d_cause_ph: "যেমন পেট ফাঁপা, সাপে কাটা, রোগ…",
+    d_notes: "নোট", d_note: "এ পর্যন্ত খরচ এই তারিখে ক্ষতি হিসেবে ধরা হবে। বাকি স্বাস্থ্য কাজ বাতিল হবে। গরুর পাতা থেকে ফেরানো যাবে।",
+    d_go: "মৃত লিখুন", cancel: "বাতিল", d_ok: "{n}টি মৃত লেখা হলো", d_failed: "{n}টি লেখা যায়নি",
+    q_ok_on: "{n}টি কোয়ারেন্টাইনে", q_ok_off: "{n}টি কোয়ারেন্টাইন থেকে বের হলো", failed: "সমস্যা হয়েছে — কিছু বদলায়নি",
+    causes: ["রোগ", "পেট ফাঁপা", "দুর্ঘটনা / আঘাত", "সাপে কাটা", "বাচ্চা প্রসবে সমস্যা", "জানা নেই"],
+    none: "এখনো কোনো গরু নেই", none_sub: "প্রথম গরু যোগ করুন, বা শিট থেকে ইমপোর্ট করুন।",
+    csv_note: "কার্ডের সংখ্যাই",
+  },
+} as const;
+
+export type CattleLang = keyof typeof CATTLE_TEXT;
+export type CattleText = (typeof CATTLE_TEXT)[CattleLang];
+export const fillC = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));

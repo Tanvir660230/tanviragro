@@ -6,6 +6,7 @@
 import { buildHomeModel, WEIGH_EVERY_DAYS, type HomeCattle, type HomeInput } from "@/lib/home/home-model";
 import { alignHomeWithFarm } from "@/lib/home/farm-align";
 import type { FarmPosition } from "@/lib/partners/position";
+import { isOnFarm } from "@/lib/cattle/status";
 
 export type BoardRow = {
   id: string; tag_id: string; breed: string | null; gender: string | null; status: string;
@@ -15,15 +16,17 @@ export type BoardRow = {
 };
 export type HealthEvent = { cattle_id: string; title: string; date: string };
 export type Sale = { cattle_id: string; sold_at: string; price: number };
+export type Death = { cattle_id: string; date: string; cause: string | null };
 
 export type BoardAnimal = {
   id: string; tag: string; breed: string | null; gender: string | null; status: string;
   quarantined: boolean; qurbani: boolean;
+  purchaseDate: string; purchasePrice: number;
   metrics: HomeCattle | null;                 // active animals only
   targetWeightKg: number | null;
   series: { date: string; kg: number; type: "measured" | "estimated" }[];
   nextHealth: { title: string; date: string; overdue: boolean } | null;
-  realised: { kind: "sold" | "dead"; date: string | null; salePrice: number | null; cost: number; result: number } | null;
+  realised: { kind: "sold" | "dead" | "gone"; date: string | null; salePrice: number | null; cost: number; result: number; cause?: string | null } | null;
 };
 
 export type BoardSummary = {
@@ -92,6 +95,8 @@ export function buildBoard(p: {
   directCostByCattle: Record<string, number>;
   health: HealthEvent[];                 // open (not completed) events, any date
   sales: Sale[];
+  /** dated deaths (cattle_death_records) */
+  deaths?: Death[];
   /** the farm position: each animal's full cost and result, as on the Money and partners pages */
   farm?: FarmPosition | null;
 }): Board {
@@ -101,28 +106,35 @@ export function buildBoard(p: {
   const nextHealthBy = new Map<string, HealthEvent>();
   for (const h of [...p.health].sort((a, b) => a.date.localeCompare(b.date))) if (!nextHealthBy.has(h.cattle_id)) nextHealthBy.set(h.cattle_id, h);
   const saleBy = new Map(p.sales.map((s) => [s.cattle_id, s]));
+  const deathBy = new Map((p.deaths ?? []).map((d) => [d.cattle_id, d]));
 
   const animals: BoardAnimal[] = p.rows.map((r) => {
     const h = nextHealthBy.get(r.id);
+    // an old status "quarantined" is an animal on the farm with the quarantine flag
+    const status = isOnFarm(r.status) ? "active" : r.status;
     let realised: BoardAnimal["realised"] = null;
-    if (r.status === "sold" || r.status === "dead") {
+    if (status !== "active") {
       const cost = farmBy.get(r.id)?.fullCost ?? Number(r.purchase_price ?? 0) + (p.feedByAnimal[r.id] ?? 0) + (p.directCostByCattle[r.id] ?? 0);
       const sale = saleBy.get(r.id);
-      realised = r.status === "sold" && sale
+      const death = deathBy.get(r.id);
+      realised = status === "sold" && sale
         ? { kind: "sold", date: sale.sold_at, salePrice: sale.price, cost, result: sale.price - cost }
-        : { kind: r.status === "sold" ? "sold" : "dead", date: null, salePrice: null, cost, result: -cost };
+        : status === "dead"
+          ? { kind: "dead", date: death?.date ?? null, salePrice: null, cost, result: -cost, cause: death?.cause ?? null }
+          : { kind: status === "sold" ? "sold" : "gone", date: null, salePrice: null, cost, result: -cost };
     }
     return {
-      id: r.id, tag: r.tag_id, breed: r.breed, gender: r.gender, status: r.status,
-      quarantined: !!r.is_quarantined, qurbani: !!r.is_qurbani_marked,
-      metrics: r.status === "active" ? metricsById.get(r.id) ?? null : null,
+      id: r.id, tag: r.tag_id, breed: r.breed, gender: r.gender, status,
+      quarantined: !!r.is_quarantined || r.status === "quarantined", qurbani: !!r.is_qurbani_marked,
+      purchaseDate: r.purchase_date, purchasePrice: Number(r.purchase_price ?? 0),
+      metrics: status === "active" ? metricsById.get(r.id) ?? null : null,
       targetWeightKg: r.target_weight_kg == null ? null : Number(r.target_weight_kg),
       // weight history starts at the purchase weight (hollow when it was only an estimate)
       series: [
         ...(r.initial_weight_kg ? [{ date: r.purchase_date, kg: Number(r.initial_weight_kg), type: (r.initial_weight_type === "estimated" ? "estimated" : "measured") as "measured" | "estimated" }] : []),
         ...(p.logs[r.id] ?? []),
       ].sort((a, b) => a.date.localeCompare(b.date)),
-      nextHealth: r.status === "active" && h ? { title: h.title, date: h.date, overdue: h.date < p.home.today } : null,
+      nextHealth: status === "active" && h ? { title: h.title, date: h.date, overdue: h.date < p.home.today } : null,
       realised,
     };
   });

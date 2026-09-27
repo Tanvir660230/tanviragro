@@ -77,6 +77,8 @@ export async function createWeightLog(
 
 export type SaleFormState = { error?: string; success?: boolean } | undefined;
 
+const SALE_CANCEL_NOTE = "Auto-cancelled due to animal sale";
+
 export async function recordSale(
   _prevState: SaleFormState,
   formData: FormData
@@ -145,6 +147,15 @@ export async function recordSale(
       };
     }
 
+    // no more vaccine / task reminders for an animal that has left (undoing the sale brings them back)
+    await supabase
+      .from("health_events")
+      .update({ deleted_at: new Date().toISOString(), notes: SALE_CANCEL_NOTE })
+      .eq("cattle_id", cattle_id)
+      .eq("business_id", ctx.businessId)
+      .is("completed_at", null)
+      .is("deleted_at", null);
+
     await LivestockEventBus.publish(
       "CattleSold",
       ctx.businessId,
@@ -205,6 +216,13 @@ export async function revertSale(
       await supabase.from("sales").update({ deleted_at: null }).eq("id", sale.id);
       return { error: "Failed to reset cattle status" };
     }
+
+    await supabase
+      .from("health_events")
+      .update({ deleted_at: null, notes: null })
+      .eq("cattle_id", cattleId)
+      .eq("business_id", ctx.businessId)
+      .eq("notes", SALE_CANCEL_NOTE);
 
     revalidatePath(`/dashboard/cattle/${cattleId}`);
     revalidatePath("/dashboard/cattle");
