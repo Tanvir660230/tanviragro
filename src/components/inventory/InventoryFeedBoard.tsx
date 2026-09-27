@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Blend, CheckCircle2, CircleStop, ClipboardCheck, PlayCircle, Scale, SlidersHorizontal, Wheat } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fmtDay } from "@/lib/format";
 import type { Dictionary } from "@/i18n/getDictionary";
 import type { LineResult, Period } from "@/lib/feed/usage-engine";
 import type { FeedItemStatus } from "@/lib/feed/feed-data";
@@ -17,11 +18,13 @@ const qty = (n: number, unit: string) => `${n.toLocaleString("en-IN", { maximumF
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 
-export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }: {
+export function InventoryFeedBoard({ data, open, lines, canEdit, canMix = canEdit, ti, th, lang }: {
   data: UsageDialogData;            // asOf, items (feed engine status), recipes
   open: Period[];                   // usage periods currently running
   lines: LineResult[];              // running estimates of the open periods
   canEdit: boolean;
+  /** may make a mix (the "Make a mix" button) */
+  canMix?: boolean;
   ti: TI; th: TH;
   lang: DialogLocale;
 }) {
@@ -37,6 +40,7 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
   const itemById = new Map<string, FeedItemStatus>(data.items.map((i) => [i.id, i]));
   // ingredients are mixed, not fed as they are: they wait for a mix instead of "start using"
   const notStarted = data.items.filter((i) => i.role !== "ingredient" && !i.discontinued && !i.openPeriodId && i.stockQty > 0);
+  const day = (d: string | null | undefined) => fmtDay(d, lang);
   const waiting = data.items.filter((i) => i.role === "ingredient" && !i.openPeriodId && i.stockQty > 0.0001);
 
   return (
@@ -52,7 +56,9 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
             <Link href="/dashboard/inventory/usage" className="text-xs font-medium text-primary hover:underline">{ti.usage_history}</Link>
           </div>
         </div>
-        {open.length === 0 && notStarted.length > 0 ? null : open.length === 0 ? (
+        {open.length === 0 && notStarted.length > 0 ? (
+          <p className="rounded-xl border border-dashed border-border bg-card px-4 py-3 text-sm text-muted-foreground">{ti.nothing_running}</p>
+        ) : open.length === 0 ? (
           <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold">{ti.none_in_use}</p>
@@ -83,7 +89,7 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h3 className="truncate text-base font-bold">{p.targetName}</h3>
-                        <p className="text-xs text-muted-foreground">{p.startDate > data.asOf ? fill(ti.starts_on, { date: p.startDate }) : fill(ti.since, { date: p.startDate, days: daysBetween(p.startDate, data.asOf) + 1 })}</p>
+                        <p className="text-xs text-muted-foreground">{p.startDate > data.asOf ? fill(ti.starts_on, { date: day(p.startDate) }) : fill(ti.since, { date: day(p.startDate), days: daysBetween(p.startDate, data.asOf) + 1 })}</p>
                         <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                           <Scale className="h-3 w-3" aria-hidden />{ruleLabel(p)}
                         </p>
@@ -124,7 +130,7 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
                       <span className="ml-1 rounded-full border border-dashed border-amber-500/50 px-1.5 py-px text-[10px] font-medium uppercase text-amber-700 dark:text-amber-400">{th.estimate_badge}</span>
                     </p>
                     {deductedValue > 0 && (
-                      <p className="text-[11px] text-muted-foreground">{ti.deducted}: {taka(deductedValue)}{lastPosted ? ` · ${fill(ti.last_deducted, { date: lastPosted })}` : ""}</p>
+                      <p className="text-[11px] text-muted-foreground">{ti.deducted}: {taka(deductedValue)}{lastPosted ? ` · ${fill(ti.last_deducted, { date: day(lastPosted) })}` : ""}</p>
                     )}
                     <p className="mt-1 text-[11px] text-muted-foreground/80">{ti.auto_note}</p>
                   </div>
@@ -163,7 +169,7 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
                   <span className="block truncate text-sm font-medium">{i.name}</span>
                   <span className="block text-xs tabular-nums text-muted-foreground">
                     {qty(i.stockQty, i.unit)} · {taka(i.stockValue)}
-                    {i.suggestedStart ? ` · ${fill(ti.bought_on, { date: i.suggestedStart })}` : ""}
+                    {i.suggestedStart ? ` · ${fill(ti.bought_on, { date: day(i.suggestedStart) })}` : ""}
                     {i.learnedDaily ? ` · ${fill(ti.daily_hint, { qty: qty(i.learnedDaily, i.unit) })}` : ""}
                   </span>
                   {i.suggestedStart && daysBetween(i.suggestedStart, data.asOf) >= 2 && (
@@ -196,10 +202,10 @@ export function InventoryFeedBoard({ data, open, lines, canEdit, ti, th, lang }:
               <h2 id="waiting-title" className="text-sm font-semibold">{fill(ti.waiting_title, { count: waiting.length })}</h2>
               <p className="text-xs text-muted-foreground">{ti.waiting_sub}</p>
             </div>
-            <Link href="/dashboard/inventory/mix"
+            {canMix && <Link href="/dashboard/inventory/mix"
               className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
               <Blend className="h-4 w-4" aria-hidden />{ti.make_mix}
-            </Link>
+            </Link>}
           </div>
           <ul className="mt-3 flex flex-wrap gap-1.5">
             {waiting.map((i) => (

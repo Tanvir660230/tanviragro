@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckSquare, ChevronDown, CircleStop, Loader2, MoreHorizontal, Square, X } from "lucide-react";
@@ -12,6 +13,9 @@ import { ItemActions, type CattleOption } from "./ItemActions";
 import { EditItemDialog } from "./EditItemDialog";
 import { ArchiveItemButton } from "./ArchiveItemButton";
 import type { InventoryRow } from "./InventoryTable";
+
+/** what the viewer may do (each button is shown only when allowed; the server checks again) */
+export type StockPerms = { edit: boolean; create?: boolean; purchase: boolean; consume: boolean; mix?: boolean };
 
 export type StockStatus = {
   role: "mix" | "ingredient" | "direct";
@@ -26,7 +30,7 @@ const T = {
     fed: "Fed to the cattle", fed_sub: "The mix and feeds given as they are — deducted every day while in use.",
     ingredients: "Mix ingredients", ingredients_sub: "Bought to be mixed; they leave stock when a mix is made.",
     other: "Medicine & other", discontinued: "Retired items",
-    in_use: "In use", not_started: "Not started", ingredient: "Ingredient", mix: "Mix",
+    in_use: "In use", not_started: "Not started", ingredient: "Ingredient", mix: "Mix", low: "Low",
     days_left: "≈ {days} days left", value: "worth", per: "/", actions: "More", empty: "No items.",
     f_stock: "In stock", f_done: "Finished", f_all: "All", nothing: "Nothing here.",
     selected: "{n} selected", finish: "Finished", clear: "Clear", select_all: "Select all",
@@ -42,7 +46,7 @@ const T = {
     fed: "গরুকে যা খাওয়ানো হয়", fed_sub: "মিক্স আর সরাসরি দেওয়া খাবার — চালু থাকলে প্রতিদিন কাটা হয়।",
     ingredients: "মিক্সের উপকরণ", ingredients_sub: "মেশানোর জন্য কেনা; মিক্স তৈরি করলে স্টক থেকে বের হয়।",
     other: "ওষুধ ও অন্যান্য", discontinued: "বন্ধ করা আইটেম",
-    in_use: "চালু", not_started: "চালু নেই", ingredient: "উপকরণ", mix: "মিক্স",
+    in_use: "চালু", not_started: "চালু নেই", ingredient: "উপকরণ", mix: "মিক্স", low: "কম",
     days_left: "আর ≈ {days} দিন", value: "মূল্য", per: "/", actions: "আরও", empty: "কোনো আইটেম নেই।",
     f_stock: "স্টকে আছে", f_done: "শেষ", f_all: "সব", nothing: "এখানে কিছু নেই।",
     selected: "{n}টি বাছাই", finish: "শেষ হয়ে গেছে", clear: "বাতিল", select_all: "সব বাছাই",
@@ -66,19 +70,25 @@ const hasStock = (i: InventoryRow, s?: StockStatus) => i.stock > 0.0001 || !!s?.
  * Every item, grouped (fed / mix ingredients / other), filtered by in stock / finished, and
  * selectable: several can be marked finished at once — each as fed (since a date) or lost.
  */
-export function StockList({ items, discontinued, cattle, status, lang, canEdit = false, asOf }: {
+export function StockList({ items, discontinued, cattle, status, lang, perms, asOf, lowIds = [] }: {
   items: InventoryRow[];
   discontinued: InventoryRow[];
   cattle: CattleOption[];
   status: Record<string, StockStatus>;
   lang: Lang;
-  canEdit?: boolean;
+  perms: StockPerms;
   asOf: string;
+  /** running out: in use with ≤ 7 days left, or at / below the alert level (same as the summary card) */
+  lowIds?: string[];
 }) {
   const t = T[lang];
+  const canEdit = perms.edit;
+  const low = new Set(lowIds);
   const [filter, setFilter] = useState<"stock" | "done" | "all">("stock");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [finishing, setFinishing] = useState(false);
+  // "Finished" on one row: the same dialog as finishing several at once
+  const [finishOne, setFinishOne] = useState<string | null>(null);
 
   const isFeed = (i: InventoryRow) => i.category === "feed" || i.category === "roughage";
   const inStock = items.filter((i) => hasStock(i, status[i.id]));
@@ -125,8 +135,9 @@ export function StockList({ items, discontinued, cattle, status, lang, canEdit =
           </header>
           <ul className="divide-y divide-border/60">
             {g.list.map((i) => (
-              <Row key={i.id} i={i} s={status[i.id]} cattle={cattle} t={t}
-                selectable={selectable(i)} picked={picked.has(i.id)} onToggle={() => toggle(i.id)} />
+              <Row key={i.id} i={i} s={status[i.id]} cattle={cattle} t={t} perms={perms} low={low.has(i.id)}
+                selectable={selectable(i)} picked={picked.has(i.id)} onToggle={() => toggle(i.id)}
+                onFinish={selectable(i) ? () => setFinishOne(i.id) : undefined} />
             ))}
           </ul>
         </section>
@@ -138,7 +149,7 @@ export function StockList({ items, discontinued, cattle, status, lang, canEdit =
             {t.discontinued} ({discontinued.length})<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
           </summary>
           <ul className="divide-y divide-border/60 border-t border-border/60">
-            {discontinued.map((i) => <Row key={i.id} i={i} s={status[i.id]} cattle={cattle} t={t} selectable={false} picked={false} onToggle={() => {}} />)}
+            {discontinued.map((i) => <Row key={i.id} i={i} s={status[i.id]} cattle={cattle} t={t} perms={perms} low={false} selectable={false} picked={false} onToggle={() => {}} />)}
           </ul>
         </details>
       )}
@@ -165,15 +176,20 @@ export function StockList({ items, discontinued, cattle, status, lang, canEdit =
         <FinishDialog items={pickedItems} status={status} t={t} asOf={asOf}
           onClose={() => setFinishing(false)} onDone={() => { setFinishing(false); setPicked(new Set()); }} />
       )}
+      {finishOne && (
+        <FinishDialog items={items.filter((i) => i.id === finishOne)} status={status} t={t} asOf={asOf}
+          onClose={() => setFinishOne(null)} onDone={() => setFinishOne(null)} />
+      )}
     </div>
   );
 }
 
-function Row({ i, s, cattle, t, selectable, picked, onToggle }: {
-  i: InventoryRow; s?: StockStatus; cattle: CattleOption[]; t: Txt; selectable: boolean; picked: boolean; onToggle: () => void;
+function Row({ i, s, cattle, t, perms, low, selectable, picked, onToggle, onFinish }: {
+  i: InventoryRow; s?: StockStatus; cattle: CattleOption[]; t: Txt; perms: StockPerms; low: boolean;
+  selectable: boolean; picked: boolean; onToggle: () => void; onFinish?: () => void;
 }) {
   const out = i.stock <= 0.0001;
-  const low = !out && i.low_stock_threshold != null && i.stock <= i.low_stock_threshold;
+  const anyAction = perms.edit || perms.purchase || perms.consume;
   const isFeed = i.category === "feed" || i.category === "roughage";
   const chip = !isFeed ? null
     : s?.inUse ? { text: t.in_use, cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" }
@@ -189,13 +205,14 @@ function Row({ i, s, cattle, t, selectable, picked, onToggle }: {
         ) : <span className="w-[18px] shrink-0" aria-hidden />}
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-1.5">
-            <span className="truncate text-[0.95rem] font-semibold">{i.name}</span>
+            <Link href={`/dashboard/inventory/products/${i.id}`} className="truncate text-[0.95rem] font-semibold hover:text-primary hover:underline">{i.name}</Link>
             {s?.role === "mix" && <span className="rounded-full bg-violet-500/10 px-1.5 py-px text-[10px] font-semibold text-violet-700 dark:text-violet-300">{t.mix}</span>}
             {chip && <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", chip.cls)}>{chip.text}</span>}
+            {low && <span className="rounded-full bg-red-500/10 px-1.5 py-px text-[10px] font-semibold text-red-700 dark:text-red-300">{t.low}</span>}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {i.currentCost != null ? `৳${num(i.currentCost)}${t.per}${i.unit}` : "—"}
-            {i.currentCost != null && i.stock > 0 ? ` · ${t.value} ${taka(i.stock * i.currentCost)}` : ""}
+            {i.currentCost != null && i.stock > 0.0001 ? ` · ${t.value} ${taka(i.stockValue ?? i.stock * i.currentCost)}` : ""}
             {s?.inUse && s.daysLeft != null ? ` · ${fill(t.days_left, { days: Math.floor(s.daysLeft) })}` : ""}
           </p>
         </div>
@@ -203,18 +220,26 @@ function Row({ i, s, cattle, t, selectable, picked, onToggle }: {
           {num(i.stock)} <span className="text-xs font-medium text-muted-foreground">{i.unit}</span>
         </p>
       </div>
-      <details className="group ml-[30px] mt-1">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/5">
-          <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />{t.actions}
-        </summary>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-2">
-          <div className="flex flex-wrap items-center gap-1.5"><ItemActions item={i} cattle={cattle} /></div>
-          <div className="flex items-center gap-1">
-            <EditItemDialog item={i} />
-            <ArchiveItemButton id={i.id} name={i.name} isDiscontinued={i.is_discontinued ?? false} />
+      {anyAction && (
+        <details className="group ml-[30px] mt-1">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/5">
+            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />{t.actions}
+          </summary>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <ItemActions item={i} cattle={cattle} canPurchase={perms.purchase && !i.is_discontinued}
+                canConsume={perms.consume && !out} onFinish={onFinish} />
+            </div>
+            {perms.edit && (
+              <div className="flex items-center gap-1">
+                <EditItemDialog item={i} />
+                <ArchiveItemButton id={i.id} name={i.name} isDiscontinued={i.is_discontinued ?? false}
+                  blocked={!i.is_discontinued && (Math.abs(i.stock) > 0.0001 || !!s?.inUse)} />
+              </div>
+            )}
           </div>
-        </div>
-      </details>
+        </details>
+      )}
     </li>
   );
 }

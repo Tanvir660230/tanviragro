@@ -7,6 +7,7 @@ import { ArrowRightLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MovementsClient } from "@/components/inventory/MovementsClient";
 import { getL } from "@/i18n/server-text";
+import { selectAll } from "@/lib/supabase/select-all";
 
 export const metadata: Metadata = { title: "লেনদেন" };
 
@@ -16,12 +17,13 @@ export default async function MovementsPage() {
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) redirect("/login");
 
-  const { data: txns } = await supabase
+  // the whole history: a single read stops at 1,000 rows (the ledger grows every day)
+  const txns = await selectAll(() => supabase
     .from("inventory_transactions")
-    .select("id, item_id, type, qty, unit_cost, cattle_id, recorded_at, notes, created_at, inventory_items!inner(name, category, unit, business_id)")
+    .select("id, item_id, type, movement_type, qty, unit_cost, cattle_id, recorded_at, notes, created_at, inventory_items!inner(name, category, unit, business_id)")
     .eq("inventory_items.business_id", businessId)
     .order("recorded_at", { ascending: false })
-    .limit(2000);
+    .order("id", { ascending: false }));
 
   const movements = (txns ?? []).map((t) => ({
     ...t,

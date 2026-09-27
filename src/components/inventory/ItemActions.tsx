@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useActionState, useEffect, useState, useMemo } from "react";
+import React, { useActionState, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -22,17 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, PackagePlus, Minus, CheckCircle2 } from "lucide-react";
+import { Loader2, Minus, CircleStop, Receipt, Sprout } from "lucide-react";
 import { toast } from "sonner";
 import {
   addStock,
   logConsumption,
-  markInventoryItemEmpty,
   type InventoryFormState,
 } from "@/app/dashboard/(app)/inventory/actions";
 import { enqueue } from "@/lib/offlineQueue";
 import { useTranslation } from "@/i18n/I18nProvider";
-import { ZeroPriceConfirm } from "./ledger-fields";
 import { todayDhaka } from "@/lib/dates";
 import { useL } from "@/i18n/text";
 
@@ -52,7 +50,12 @@ interface InventoryItem {
 
 // ── Add Stock Dialog ─────────────────────────────────────────────────────────
 
-function AddStockForm({
+/**
+ * Stock harvested from the farm's own / leased land (৳0 — the land rent is an expense).
+ * A PURCHASE is never entered here: it goes through the purchase memo (supplier, payment,
+ * dues and purchase history), reached with the "Buy" button.
+ */
+function OwnStockForm({
   item,
   formKey,
   onSuccess,
@@ -67,8 +70,6 @@ function AddStockForm({
   const tr = t.inventory.actions;
   const today = todayDhaka();
   const [state, formAction, isPending] = useActionState<InventoryFormState, FormData>(addStock, undefined);
-  const [unitCost, setUnitCost] = useState("");
-  const [stockSource, setStockSource] = useState<"purchase" | "own_production">("purchase");
 
   useEffect(() => {
     if (state?.success) {
@@ -82,127 +83,61 @@ function AddStockForm({
   return (
     <form key={formKey} action={formAction} className="space-y-4 pt-1">
       <input type="hidden" name="item_id" value={item.id} />
-      <input type="hidden" name="stock_source" value={stockSource} />
-
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        {([
-          ["purchase", L("কেনা", "Bought"), L("কেনা — নগদ কমে", "Purchase — reduces cash")],
-          ["own_production", L("নিজের জমি থেকে", "Harvested from own land"), L("৳0 — জমির ভাড়া আলাদা খরচ", "৳0 — land rent is an expense")],
-        ] as const).map(([value, title, sub]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setStockSource(value)}
-            className={cn("rounded-lg border px-3 py-2 text-left", stockSource === value ? "border-primary bg-primary/5" : "border-border")}
-          >
-            <span className="block font-semibold">{title}</span>
-            <span className="text-muted-foreground">{sub}</span>
-          </button>
-        ))}
-      </div>
+      <input type="hidden" name="stock_source" value="own_production" />
+      <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        {L("নিজের / ভাড়া জমি থেকে কাটা — দাম ৳0 ধরা হবে, জমির ভাড়া আলাদা খরচ। কেনা হলে \"কিনুন\" দিন।", "Harvested from own / leased land — counted at ৳0; the land rent is an expense. If you bought it, use \"Buy\".")}
+      </p>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="stk_date">{tr.date_label} *</Label>
-          <Input
-            id="stk_date"
-            name="recorded_at"
-            type="date"
-            max={today}
-            defaultValue={today}
-            required
-          />
+          <Input id="stk_date" name="recorded_at" type="date" max={today} defaultValue={today} required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="stk_qty">
-            {tr.qty_label.replace("{{unit}}", item.unit)} *
-          </Label>
-          <Input
-            id="stk_qty"
-            name="qty"
-            type="number"
-            min="0.01"
-            step="0.01"
-            placeholder="e.g. 100"
-            required
-          />
+          <Label htmlFor="stk_qty">{tr.qty_label.replace("{{unit}}", item.unit)} *</Label>
+          <Input id="stk_qty" name="qty" type="number" min="0.01" step="0.01" placeholder="e.g. 100" required />
         </div>
       </div>
-
-      {stockSource === "purchase" && (<>
-      <div className="space-y-1.5">
-        <Label htmlFor="stk_cost">{tr.unit_cost_label.replace("{{unit}}", item.unit)}</Label>
-        <Input
-          id="stk_cost"
-          name="unit_cost"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder={L("যেমন 45.50 (ঐচ্ছিক)", "e.g. 45.50 (optional)")}
-          value={unitCost}
-          onChange={(e) => setUnitCost(e.target.value)}
-        />
-        {unitCost.trim() === "" && (
-          <p className="text-xs text-muted-foreground">{L("দাম না দিলে \"দাম জানা নেই\" হিসেবে সেভ হবে, বিনামূল্যে নয়।", "No price entered: saved as cost missing, not as free.")}</p>
-        )}
-      </div>
-      <ZeroPriceConfirm unitCost={unitCost} idPrefix="stk" />
-      </>)}
 
       <div className="space-y-1.5">
         <Label htmlFor="stk_notes">{tr.notes_label}</Label>
-        <Textarea
-          id="stk_notes"
-          name="notes"
-          placeholder={L("দোকান, মেমো নং (ঐচ্ছিক)", "Supplier, invoice no. (optional)")}
-          rows={2}
-          maxLength={500}
-        />
+        <Textarea id="stk_notes" name="notes" placeholder={L("কোন জমি (ঐচ্ছিক)", "Which field (optional)")} rows={2} maxLength={500} />
       </div>
 
       {state?.error && (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {state.error}
-        </p>
+        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>
       )}
 
       <DialogFooter>
         <Button type="submit" disabled={isPending} className="w-full">
-          {isPending ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{tr.saving}</>
-          ) : (
-            tr.add_stock
-          )}
+          {isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />{tr.saving}</>) : tr.add_stock}
         </Button>
       </DialogFooter>
     </form>
   );
 }
 
-function AddStockDialog({ item }: { item: InventoryItem }) {
-  const { t } = useTranslation();
-  const tr = t.inventory.actions;
+function OwnStockDialog({ item }: { item: InventoryItem }) {
+  const L = useL();
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (next) setFormKey((k) => k + 1);
   };
+  const title = L(`${item.name} — নিজের জমি থেকে`, `${item.name} — from own land`);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        className={buttonVariants({ size: "sm", variant: "outline" })}
-        aria-label={tr.add_stock_title.replace("{{name}}", item.name)}
-      >
-        <PackagePlus className="mr-1.5 h-3.5 w-3.5" />
-        {tr.add_stock}
+      <DialogTrigger className={buttonVariants({ size: "sm", variant: "outline" })} aria-label={title}>
+        <Sprout className="mr-1.5 h-3.5 w-3.5" />
+        {L("নিজের জমি", "Own land")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{tr.add_stock_title.replace("{{name}}", item.name)}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <AddStockForm item={item} formKey={formKey} onSuccess={() => setOpen(false)} />
+        <OwnStockForm item={item} formKey={formKey} onSuccess={() => setOpen(false)} />
       </DialogContent>
     </Dialog>
   );
@@ -392,149 +327,56 @@ function LogConsumptionDialog({
 
 // ── Combined cell ─────────────────────────────────────────────────────────────
 
+/**
+ * The actions of one stock row, each shown only to someone allowed to do it.
+ * "Finished" opens the stock list's finish dialog (fed since a date / used / lost) — the one
+ * way to finish an item, the same as finishing several at once.
+ */
 export function ItemActions({
   item,
   cattle,
   onOptimisticConsume,
+  canPurchase = false,
+  canConsume = false,
+  onFinish,
 }: {
   item: InventoryItem;
   cattle: CattleOption[];
   onOptimisticConsume?: (qty: number) => void;
+  canPurchase?: boolean;
+  canConsume?: boolean;
+  /** shown when the item has stock (or is in use) and the viewer may finish it */
+  onFinish?: () => void;
 }) {
-  const router = useRouter();
-  const { t } = useTranslation();
-  const tr = t.inventory.actions;
-  const [isPending, startTransition] = React.useTransition();
-  const [showFinishDialog, setShowFinishDialog] = useState(false);
-  const [finishDate, setFinishDate] = useState(
-    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" })
-  );
-
-  function doMarkEmpty() {
-    setShowFinishDialog(false);
-    startTransition(async () => {
-      const res = await markInventoryItemEmpty(item.id, finishDate);
-      if (res.error) {
-        toast.error(res.error);
-      } else {
-        if (res.cattleCount && res.cattleCount > 0) {
-          toast.success(tr.finished_success
-            .replace("{{name}}", item.name)
-            .replace("{{n}}", String(res.cattleCount)));
-        } else {
-          toast.success(tr.marked_empty.replace("{{name}}", item.name));
-        }
-        if (onOptimisticConsume && item.stock) onOptimisticConsume(item.stock);
-      }
-      router.refresh();
-    });
-  }
-
-  const [today, yesterday, tomorrow] = useMemo(() => {
-     
-    const now = new Date().getTime();
-    return [
-      new Date(now).toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }),
-      new Date(now - 86400000).toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }),
-      new Date(now + 86400000).toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }),
-    ];
-  }, []);
+  const L = useL();
+  const isFeed = item.category === "feed" || item.category === "roughage";
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 justify-end">
-      {(item.category === "feed" || item.category === "roughage") && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setFinishDate(today);
-              setShowFinishDialog(true);
-            }}
-            disabled={isPending || (item.stock !== undefined && item.stock <= 0)}
-            className="h-8 px-2 text-xs text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:border-amber-900 dark:hover:bg-amber-950/50"
-            title={tr.finished_title}
-          >
-            {tr.finished}
-          </Button>
-        </>
+      {onFinish && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onFinish}
+          className="h-8 px-2 text-xs text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:border-amber-900 dark:hover:bg-amber-950/50"
+        >
+          <CircleStop className="mr-1.5 h-3.5 w-3.5" />
+          {L("শেষ হয়েছে", "Finished")}
+        </Button>
       )}
 
-      <AddStockDialog item={item} />
-      <LogConsumptionDialog item={item} cattle={cattle} onOptimisticConsume={onOptimisticConsume} />
-
-      {/* Mark Finished — date-picker dialog */}
-      {showFinishDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowFinishDialog(false)} />
-          <div className="relative z-10 w-full max-w-sm rounded-xl bg-card p-6 shadow-floating border border-border/60 space-y-4">
-            <div>
-              <h2 className="text-base font-semibold">{tr.finished_dialog_title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {item.stock !== undefined
-                  ? tr.finished_stock_remaining.replace("{{qty}}", item.stock.toFixed(2)).replace("{{unit}}", item.unit)
-                  : item.name}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{tr.finished_date_label}</label>
-              {/* Quick-pick buttons */}
-              <div className="flex gap-2">
-                {[
-                  { label: tr.finished_yesterday, value: yesterday },
-                  { label: tr.finished_today, value: today },
-                  { label: tr.finished_tomorrow, value: tomorrow },
-                ].map(({ label, value }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setFinishDate(value)}
-                    className={cn(
-                      "flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
-                      finishDate === value
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {/* Custom date input */}
-              <input
-                type="date"
-                value={finishDate}
-                max={tomorrow}
-                onChange={(e) => setFinishDate(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-
-            <p className="text-xs text-muted-foreground">{tr.finished_cost_note}</p>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="outline" size="sm" onClick={() => setShowFinishDialog(false)}>
-                {tr.cancel}
-              </Button>
-              <Button
-                size="sm"
-                disabled={isPending || !finishDate}
-                onClick={doMarkEmpty}
-                className="gap-1.5"
-              >
-                {isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                {tr.finished_confirm}
-              </Button>
-            </div>
-          </div>
-        </div>
+      {canPurchase && (
+        <Link
+          href={`/dashboard/inventory/purchase?item=${item.id}`}
+          className={buttonVariants({ size: "sm", variant: "outline" })}
+        >
+          <Receipt className="mr-1.5 h-3.5 w-3.5" />
+          {L("কিনুন", "Buy")}
+        </Link>
       )}
+      {canPurchase && isFeed && <OwnStockDialog item={item} />}
+      {canConsume && <LogConsumptionDialog item={item} cattle={cattle} onOptimisticConsume={onOptimisticConsume} />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { StockLedgerEngine, type RawInventoryItemRow, type RawInventoryTxnRow } 
 import { CostingEngine } from "./costing-engine";
 import type { ItemStockSummary, StockLedgerEntry, StockValuationBreakdown } from "./types";
 import { loadUnitCostMap } from "./unit-cost";
+import { selectAll } from "@/lib/supabase/select-all";
 
 /**
  * High-Performance Central Inventory Repository
@@ -16,18 +17,19 @@ export class CentralInventoryRepository {
     supabase: SupabaseClient<any>,
     businessId: string
   ): Promise<ItemStockSummary[]> {
-    const [{ data: items }, { data: txns }] = await Promise.all([
+    // every row (a single read stops at 1,000 — the ledger grows every day)
+    const [{ data: items }, txns] = await Promise.all([
       supabase
         .from("inventory_items")
         .select("id, business_id, name, unit, category, low_stock_threshold, is_active_roughage, is_discontinued, deleted_at")
         .eq("business_id", businessId)
         .is("deleted_at", null)
         .order("name", { ascending: true }),
-      supabase
+      selectAll(() => supabase
         .from("inventory_transactions")
         .select("id, item_id, type, movement_type, qty, unit_cost, cattle_id, recorded_at, notes, created_at, inventory_items!inner(business_id)")
         .eq("inventory_items.business_id", businessId)
-        .order("recorded_at", { ascending: false }),
+        .order("id")),
     ]);
 
     return StockLedgerEngine.compileInventoryPortfolio(
@@ -46,19 +48,20 @@ export class CentralInventoryRepository {
     businessId: string,
     itemId: string
   ): Promise<{ item: RawInventoryItemRow | null; ledger: StockLedgerEntry[]; valuation: StockValuationBreakdown | null }> {
-    const [{ data: item }, { data: txns }] = await Promise.all([
+    const [{ data: item }, allTxns] = await Promise.all([
       supabase
         .from("inventory_items")
         .select("id, business_id, name, unit, category, low_stock_threshold, is_active_roughage, is_discontinued, deleted_at")
         .eq("id", itemId)
         .eq("business_id", businessId)
         .maybeSingle(),
-      supabase
+      selectAll<RawInventoryTxnRow>(() => supabase
         .from("inventory_transactions")
         .select("id, item_id, type, movement_type, qty, unit_cost, cattle_id, recorded_at, notes, created_at")
         .eq("item_id", itemId)
-        .order("recorded_at", { ascending: true }),
+        .order("id")),
     ]);
+    const txns = [...allTxns].sort((a, b) => String(a.recorded_at).localeCompare(String(b.recorded_at)));
 
     if (!item) return { item: null, ledger: [], valuation: null };
 

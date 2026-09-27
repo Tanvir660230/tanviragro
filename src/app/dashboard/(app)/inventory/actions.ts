@@ -211,6 +211,7 @@ export async function addStock(
   if (!item_id) return { error: "Invalid item" };
   if (isNaN(qty) || qty <= 0) return { error: "Enter a valid quantity" };
   if (!recorded_at) return { error: "Date is required" };
+  if (recorded_at > todayDhaka()) return { error: "Stock cannot be added for a future date" };
 
   // Ownership check
   const businessId = await getCurrentBusinessId(supabase);
@@ -266,6 +267,7 @@ export async function logConsumption(
   if (!item_id) return { error: "Invalid item" };
   if (isNaN(qty) || qty <= 0) return { error: "Enter a valid quantity" };
   if (!recorded_at) return { error: "Date is required" };
+  if (recorded_at > todayDhaka()) return { error: "Use cannot be recorded for a future date" };
 
   // Ownership check
   const businessId2 = await getCurrentBusinessId(supabase);
@@ -313,9 +315,9 @@ export async function logConsumption(
   // Supplement auto-deduction logic removed as per user request
 
   revalidatePath("/dashboard/inventory");
-    revalidatePath("/dashboard");
-    revalidatePath("/dashboard/finance");
-    if (cattle_id) revalidatePath(`/dashboard/cattle/${cattle_id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/finance");
+  if (cattle_id) revalidatePath(`/dashboard/cattle/${cattle_id}`);
   revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
@@ -342,7 +344,7 @@ export async function recordDailyFeeding(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  if (!/^d{4}-d{2}-d{2}$/.test(recorded_at)) return { error: "Invalid date" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(recorded_at)) return { error: "Invalid date" };
   if (recorded_at > todayDhaka()) return { error: "Feeding cannot be recorded for a future date" };
 
   // one line per item (two lines for the same item would violate the one-row-per-day rule)
@@ -400,6 +402,15 @@ export async function archiveInventoryItem(
 
   if (item.is_active_roughage) {
     return { error: "This item is currently set as the active roughage. Please set a different roughage as active before deleting this one." };
+  }
+
+  // An item with stock or in use would stay on the list (it is never hidden while it holds
+  // stock), so "delete" would look like it did nothing: finish it first.
+  const { data: openLine } = await supabase.from("v_feed_usage_lines").select("period_id").eq("item_id", id).eq("status", "open").limit(1);
+  if ((openLine ?? []).length) return { error: "This feed is in use. Mark it finished first, then delete it." };
+  const stock = await getItemStock(supabase, id);
+  if (Math.abs(stock) > 0.0001) {
+    return { error: `There is still ${stock % 1 === 0 ? stock : stock.toFixed(2)} in stock. Mark it finished first (fed, used or lost), then delete it.` };
   }
 
   const { error } = await supabase
@@ -791,6 +802,11 @@ export async function markInventoryItemEmpty(
     .maybeSingle();
 
   if (!item || item.business_id !== bizId) return { error: "Unauthorized" };
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(finishDate)) return { error: "Choose the date it finished" };
+  if (finishDate > todayDhaka()) return { error: "The finish date cannot be in the future" };
+  const lockError = await checkFinancialLock(supabase, bizId, finishDate);
+  if (lockError) return { error: lockError };
 
   // If this feed is in an open usage period, "finished" ends that period with 0 left:
   // the stock used is FEED CONSUMPTION (Feed Expenses), reconciled by the database.
