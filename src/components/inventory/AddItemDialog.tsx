@@ -334,31 +334,36 @@ function AddItemForm({
   );
 }
 
-export function AddItemDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
+/** Opened by its own button, or controlled (open / onOpenChange) from a menu — then no button. */
+export function AddItemDialog({ defaultOpen = false, open: openProp, onOpenChange }: { defaultOpen?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const L = useL();
-  const [open, setOpen] = useState(defaultOpen);
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(defaultOpen);
+  const open = controlled ? openProp : openState;
   const [formKey, setFormKey] = useState(0);
 
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
+    if (controlled) onOpenChange?.(next); else setOpenState(next);
     if (next) setFormKey((k) => k + 1);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        className={buttonVariants({ size: "sm" })}
-        aria-label={L("জিনিস যোগ", "Add inventory item")}
-      >
-        <Plus className="mr-1.5 h-4 w-4" />
-        {L("জিনিস যোগ", "Add item")}
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger
+          className={buttonVariants({ size: "sm" })}
+          aria-label={L("জিনিস যোগ", "Add inventory item")}
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          {L("জিনিস যোগ", "Add item")}
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-md p-6">
         <DialogHeader>
           <DialogTitle>{L("নতুন জিনিস", "New Inventory Item")}</DialogTitle>
         </DialogHeader>
-        <AddItemForm formKey={formKey} onSuccess={() => setOpen(false)} />
+        <AddItemForm formKey={formKey} onSuccess={() => handleOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

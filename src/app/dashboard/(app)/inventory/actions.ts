@@ -13,6 +13,7 @@ import { todayDhaka } from "@/lib/dates";
 import { feedLedgerErrorMessage } from "@/lib/inventory/feed-batch";
 import { scaleRecipe } from "@/lib/inventory/recipe-math";
 import type { CostSource, MovementType } from "@/types/database";
+import { isEmptyQty } from "@/lib/inventory/stock-view";
 
 export type InventoryFormState =
   | { error?: string; success?: boolean; warning?: string }
@@ -149,6 +150,7 @@ export async function adjustStock(
 
   if (!item_id) return { error: "Item ID is required" };
   if (isNaN(adjustedQty) || adjustedQty < 0) return { error: "Valid adjusted quantity is required" };
+  if (recorded_at.slice(0, 10) > todayDhaka()) return { error: "A count cannot be dated in the future" };
 
   const businessId = await getCurrentBusinessId(supabase);
   if (!businessId) return { error: "Business not found" };
@@ -158,6 +160,13 @@ export async function adjustStock(
     .eq("id", item_id)
     .maybeSingle();
   if (!itemRow || itemRow.business_id !== businessId) return { error: "Unauthorized" };
+
+  const lockError = await checkFinancialLock(supabase, businessId, recorded_at.slice(0, 10));
+  if (lockError) return { error: lockError };
+
+  // a feed in use is counted on its usage period (the daily deduction is reconciled there)
+  const { data: openLine } = await supabase.from("v_feed_usage_lines").select("period_id").eq("item_id", item_id).eq("status", "open").limit(1);
+  if ((openLine ?? []).length) return { error: "This feed is in use: count it with “Count check” on its card, so the daily deduction is corrected too." };
 
   const currentStock = await CentralInventoryRepository.getItemStockOnHand(supabase, item_id);
 
@@ -188,6 +197,9 @@ export async function adjustStock(
   if (error) return { error: "Failed to record stock adjustment" };
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard");
+  revalidateTag("accounting", { expire: 0 });
   return { success: true };
 }
 
@@ -409,7 +421,7 @@ export async function archiveInventoryItem(
   const { data: openLine } = await supabase.from("v_feed_usage_lines").select("period_id").eq("item_id", id).eq("status", "open").limit(1);
   if ((openLine ?? []).length) return { error: "This feed is in use. Mark it finished first, then delete it." };
   const stock = await getItemStock(supabase, id);
-  if (Math.abs(stock) > 0.0001) {
+  if (!isEmptyQty(stock)) {
     return { error: `There is still ${stock % 1 === 0 ? stock : stock.toFixed(2)} in stock. Mark it finished first (fed, used or lost), then delete it.` };
   }
 

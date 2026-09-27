@@ -3,6 +3,7 @@ import { requestMemo } from "@/lib/request-memo";
 import { todayDhaka } from "@/lib/dates";
 import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 import { selectAll } from "@/lib/supabase/select-all";
+import { hasQty } from "@/lib/inventory/stock-view";
 import {
   autoRowsDue, computeFeedSnapshot, dayList, forecastDepletion,
   type Animal, type ChartVersion, type FeedSnapshot, type Period, type RecordedRow, type RuleType,
@@ -48,7 +49,7 @@ export type FeedItemStatus = {
 export type FeedRole = "mix" | "ingredient" | "direct";
 
 /** Retired only when the owner said so and nothing is left or in use (one rule for every page). */
-export const isRetired = (flagged: boolean, stockQty: number, inUse = false) => flagged && stockQty <= 0.0001 && !inUse;
+export const isRetired = (flagged: boolean, stockQty: number, inUse = false) => flagged && !hasQty(stockQty) && !inUse;
 
 /** Mix items: made on the Mix page, or named as a mix. Ingredients: in any mix or recipe, and not a mix. */
 export function feedRoles(input: {

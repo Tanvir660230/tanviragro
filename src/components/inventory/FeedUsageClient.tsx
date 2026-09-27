@@ -14,6 +14,7 @@ import { startFeedUsage, endFeedUsage, cancelFeedUsage, setFeedUsageRule, type U
 import type { LineResult, Period } from "@/lib/feed/usage-engine";
 import type { FeedItemStatus } from "@/lib/feed/feed-data";
 import { useL } from "@/i18n/text";
+import { hasQty } from "@/lib/inventory/stock-view";
 
 export type UsagePageData = {
   asOf: string;
@@ -56,7 +57,7 @@ export function FeedUsageClient({ data }: { data: UsagePageData }) {
   const openPeriods = data.periods.filter((p) => p.status === "open");
   const closedPeriods = data.periods.filter((p) => p.status !== "open");
   const lineOf = (periodId: string, itemId: string) => data.lines.find((l) => l.periodId === periodId && l.itemId === itemId);
-  const idleWithStock = data.items.filter((i) => !i.openPeriodId && i.stockQty > 0.0001);
+  const idleWithStock = data.items.filter((i) => !i.openPeriodId && hasQty(i.stockQty));
   const attention = data.periods.filter((p) => p.status === "unreconciled");
 
   return (

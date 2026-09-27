@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { recordFeedMix, undoFeedMix } from "@/app/dashboard/(app)/inventory/mix/actions";
 import { kgOf, type MixEntry } from "@/lib/inventory/mix-history";
 import { MIX_TEXT, type MixLang } from "@/components/inventory/mix-text";
+import { hasQty } from "@/lib/inventory/stock-view";
 
 export type MixItem = {
   id: string; name: string; unit: string; kgPerUnit: number | null; category: string;
@@ -52,7 +53,7 @@ export function MixClient({ data, lang }: { data: MixPageData; lang: MixLang }) 
   const choices = data.items
     .filter((i) => i.role !== "mix" && !i.discontinued && (i.unit.trim().toLowerCase() === "kg" || (i.kgPerUnit ?? 0) > 0))
     .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === "ingredient" ? -1 : 1));
-  const waiting = data.items.filter((i) => i.role === "ingredient" && i.stockQty > 0.0001);
+  const waiting = data.items.filter((i) => i.role === "ingredient" && hasQty(i.stockQty));
 
   const lines = rows.filter((r) => r.itemId && num(r.qty) > 0).map((r) => {
     const it = itemById.get(r.itemId);
@@ -65,9 +66,11 @@ export function MixClient({ data, lang }: { data: MixPageData; lang: MixLang }) 
   const over = lines.filter((l) => l.it && l.qtyN > l.it.stockQty + 0.0001);
   const colorOf = (itemId: string) => COLORS[Math.max(0, choices.findIndex((c) => c.id === itemId)) % COLORS.length];
 
+  // 4 decimals (what the database stores), rounded DOWN: "all the stock" never asks for more than
+  // there is, and leaves at most a crumb below STOCK_EPS (2 decimals left 0.004 kg showing as "0 kg")
   const setFrom = (list: { itemId: string; qty: number }[]) => {
     const next = list.filter((l) => itemById.has(l.itemId) && itemById.get(l.itemId)!.role !== "mix")
-      .map((l) => ({ key: newKey(), itemId: l.itemId, qty: String(Math.round(l.qty * 100) / 100) }));
+      .map((l) => ({ key: newKey(), itemId: l.itemId, qty: String(Math.floor(l.qty * 10000 + 1e-6) / 10000) }));
     setRows(next.length ? next : [{ key: newKey(), itemId: "", qty: "" }]);
   };
   const reset = () => { setRows([{ key: newKey(), itemId: "", qty: "" }]); setNote(""); setBatchId(newKey()); };

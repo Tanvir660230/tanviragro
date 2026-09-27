@@ -1,14 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { AlertTriangle, Blend, CheckCircle2, CircleStop, ClipboardCheck, PlayCircle, Scale, SlidersHorizontal, Wheat } from "lucide-react";
+import { AlertTriangle, CircleStop, ClipboardCheck, Info, PlayCircle, Scale, SlidersHorizontal, Wheat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDay } from "@/lib/format";
 import type { Dictionary } from "@/i18n/getDictionary";
 import type { LineResult, Period } from "@/lib/feed/usage-engine";
 import type { FeedItemStatus } from "@/lib/feed/feed-data";
-import { EndDialog, RuleDialog, StartDialog, type DialogLocale, type UsageDialogData } from "@/components/inventory/FeedUsageClient";
+import { hasQty } from "@/lib/inventory/stock-view";
 
 type TI = Dictionary["inventory_home"];
 type TH = Dictionary["home"];
@@ -18,209 +16,149 @@ const qty = (n: number, unit: string) => `${n.toLocaleString("en-IN", { maximumF
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 
-export function InventoryFeedBoard({ data, open, lines, canEdit, canMix = canEdit, ti, th, lang }: {
-  data: UsageDialogData;            // asOf, items (feed engine status), recipes
-  open: Period[];                   // usage periods currently running
-  lines: LineResult[];              // running estimates of the open periods
+/**
+ * "In use": one card per running feeding period — stock left, days left, today's rate and the
+ * cost so far (an estimate until counted). The dialogs live with the page (onStart / onCount /
+ * onFinish / onRule), so the same dialog opens from here, the to-do card and the stock list.
+ */
+export function InventoryFeedBoard({ asOf, items, open, lines, canEdit, ti, th, lang, notStartedCount, onStart, onCount, onFinish, onRule }: {
+  asOf: string;
+  items: FeedItemStatus[];           // feed engine status
+  open: Period[];                    // usage periods currently running
+  lines: LineResult[];               // running estimates of the open periods
   canEdit: boolean;
-  /** may make a mix (the "Make a mix" button) */
-  canMix?: boolean;
   ti: TI; th: TH;
-  lang: DialogLocale;
+  lang: "bn" | "en";
+  /** feeds in stock that are not started (they are listed in the to-do card) */
+  notStartedCount: number;
+  onStart: () => void;
+  onCount: (p: Period) => void;
+  onFinish: (p: Period) => void;
+  onRule: (p: Period) => void;
 }) {
-  const [start, setStart] = useState<string | null>(null);
-  const [ending, setEnding] = useState<Period | null>(null);
-  const [checking, setChecking] = useState<Period | null>(null);
-  const [ruleOf, setRuleOf] = useState<Period | null>(null);
   const ruleLabel = (p: Period) =>
     p.ruleType === "chart" ? ti.rule_chart
       : p.ruleType === "pct_live_weight" ? fill(ti.rule_pct, { v: p.ruleValue ?? "" })
       : p.ruleType === "per_head" ? fill(ti.rule_head, { v: p.ruleValue ?? "" })
       : ti.rule_learn;
-  const itemById = new Map<string, FeedItemStatus>(data.items.map((i) => [i.id, i]));
-  // ingredients are mixed, not fed as they are: they wait for a mix instead of "start using"
-  const notStarted = data.items.filter((i) => i.role !== "ingredient" && !i.discontinued && !i.openPeriodId && i.stockQty > 0);
+  const itemById = new Map<string, FeedItemStatus>(items.map((i) => [i.id, i]));
   const day = (d: string | null | undefined) => fmtDay(d, lang);
-  const waiting = data.items.filter((i) => i.role === "ingredient" && !i.openPeriodId && i.stockQty > 0.0001);
 
   return (
-    <div className="space-y-5">
-      {/* in use */}
-      <section aria-labelledby="inuse-title">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 id="inuse-title" className="flex items-center gap-2 text-base font-semibold tracking-tight">
-            <Wheat className="h-4 w-4 text-muted-foreground" aria-hidden />{ti.in_use_title} · {open.length}
+    <section id="in-use" aria-labelledby="inuse-title" className="scroll-mt-20 space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <h2 id="inuse-title" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <Wheat className="h-5 w-5 text-primary" aria-hidden />{ti.in_use_title}
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">{open.length}</span>
           </h2>
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard/inventory/feeding-chart" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><Scale className="h-3.5 w-3.5" aria-hidden />{ti.feeding_chart}</Link>
-            <Link href="/dashboard/inventory/usage" className="text-xs font-medium text-primary hover:underline">{ti.usage_history}</Link>
-          </div>
+          <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground"><Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />{ti.auto_note}</p>
         </div>
-        {open.length === 0 && notStarted.length > 0 ? (
-          <p className="rounded-xl border border-dashed border-border bg-card px-4 py-3 text-sm text-muted-foreground">{ti.nothing_running}</p>
-        ) : open.length === 0 ? (
-          <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold">{ti.none_in_use}</p>
-              <p className="text-xs text-muted-foreground">{ti.none_in_use_sub}</p>
-            </div>
-            {canEdit && (
-              <button type="button" onClick={() => setStart("")}
-                className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-                <PlayCircle className="h-4 w-4" aria-hidden />{ti.start_using}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {open.map((p) => {
-              const pl = lines.filter((l) => l.periodId === p.id);
-              // deducted so far + today's estimate, but no estimate for feed that has run out
-              const running = pl.reduce((s, l) => {
-                const posted = l.postedValue ?? 0;
-                const out = (itemById.get(l.itemId)?.stockQty ?? 0) <= 0.0001;
-                return s + (out ? posted : l.value ?? posted);
-              }, 0);
-              const deductedValue = pl.reduce((s, l) => s + (l.postedValue ?? 0), 0);
-              const lastPosted = pl.map((l) => l.lastPosted).filter(Boolean).sort().pop() ?? null;
-              return (
-                <article key={p.id} className="flex flex-col rounded-xl border border-border bg-card shadow-card">
-                  <div className="flex-1 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-base font-bold">{p.targetName}</h3>
-                        <p className="text-xs text-muted-foreground">{p.startDate > data.asOf ? fill(ti.starts_on, { date: day(p.startDate) }) : fill(ti.since, { date: day(p.startDate), days: daysBetween(p.startDate, data.asOf) + 1 })}</p>
-                        <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                          <Scale className="h-3 w-3" aria-hidden />{ruleLabel(p)}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">{th.in_use}</span>
-                    </div>
-                    <ul className="mt-3 space-y-2.5">
-                      {p.lines.map((l) => {
-                        const st = itemById.get(l.itemId);
-                        const dl = st?.daysLeft ?? null;
-                        const low = dl != null && dl <= 7;
-                        const r = pl.find((x) => x.itemId === l.itemId);
-                        const out = st != null && st.stockQty <= 0.0001;
-                        return (
-                          <li key={l.itemId}>
-                            <div className="flex items-baseline justify-between gap-2 text-sm">
-                              <span className="truncate">{l.itemName}</span>
-                              <span className="shrink-0 tabular-nums text-muted-foreground">{st ? qty(st.stockQty, st.unit) : "—"}</span>
-                            </div>
-                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-                              {dl != null && <div className={cn("h-full rounded-full", low ? "bg-red-500" : "bg-emerald-500")} style={{ width: `${Math.max(4, Math.min(100, (dl / 30) * 100))}%` }} />}
-                            </div>
-                            <p className={cn("mt-0.5 flex flex-wrap justify-between gap-x-2 text-[11px]", low ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
-                              <span>{dl != null ? fill(th.days_left, { days: Math.floor(dl) }) : th.days_left_unknown}</span>
-                              <span className="tabular-nums">{st?.dailyQty ? fill(ti.per_day, { qty: qty(st.dailyQty, st.unit) }) : ""}</span>
-                            </p>
-                            {r && (r.postedQty ?? 0) > 0 && (
-                              <p className="text-[11px] text-muted-foreground">{ti.deducted}: <span className="font-medium text-foreground tabular-nums">{qty(r.postedQty ?? 0, l.unit)}</span></p>
-                            )}
-                            {r?.estimateBasis === "none" && <p className="text-[11px] text-amber-700 dark:text-amber-400">{ti.no_rate}</p>}
-                            {out && <p className="mt-0.5 flex items-start gap-1 text-[11px] font-medium text-red-600 dark:text-red-400"><AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />{ti.stock_out}</p>}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      {ti.running_cost}: <span className="font-semibold text-foreground tabular-nums">{taka(running)}</span>
-                      <span className="ml-1 rounded-full border border-dashed border-amber-500/50 px-1.5 py-px text-[10px] font-medium uppercase text-amber-700 dark:text-amber-400">{th.estimate_badge}</span>
-                    </p>
-                    {deductedValue > 0 && (
-                      <p className="text-[11px] text-muted-foreground">{ti.deducted}: {taka(deductedValue)}{lastPosted ? ` · ${fill(ti.last_deducted, { date: day(lastPosted) })}` : ""}</p>
-                    )}
-                    <p className="mt-1 text-[11px] text-muted-foreground/80">{ti.auto_note}</p>
-                  </div>
-                  {canEdit && (
-                    <div className="grid grid-cols-[auto_1fr_1fr] divide-x divide-border/60 border-t border-border/60 text-sm font-semibold">
-                      <button type="button" onClick={() => setRuleOf(p)} aria-label={ti.change_rule}
-                        className="flex min-h-11 items-center justify-center gap-1.5 px-3 text-muted-foreground hover:bg-muted/60 hover:text-foreground">
-                        <SlidersHorizontal className="h-4 w-4" aria-hidden /><span className="sr-only sm:not-sr-only">{ti.change_rule}</span>
-                      </button>
-                      <button type="button" onClick={() => setChecking(p)}
-                        className="flex min-h-11 items-center justify-center gap-1.5 px-2 text-foreground hover:bg-muted/60">
-                        <ClipboardCheck className="h-4 w-4 shrink-0" aria-hidden />{ti.count_check}
-                      </button>
-                      <button type="button" onClick={() => setEnding(p)}
-                        className="flex min-h-11 items-center justify-center gap-1.5 px-2 text-primary hover:bg-primary/5">
-                        <CircleStop className="h-4 w-4 shrink-0" aria-hidden />{ti.finished}
-                      </button>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      </div>
 
-      {/* in stock, not started */}
-      {notStarted.length > 0 && (
-        <section aria-labelledby="notstarted-title" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-          <h2 id="notstarted-title" className="text-sm font-semibold">{fill(ti.not_started_title, { count: notStarted.length })}</h2>
-          <p className="mb-3 text-xs text-muted-foreground">{ti.not_started_sub}</p>
-          <ul className="divide-y divide-border/60">
-            {notStarted.map((i) => (
-              <li key={i.id} className="flex items-center justify-between gap-3 py-2">
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{i.name}</span>
-                  <span className="block text-xs tabular-nums text-muted-foreground">
-                    {qty(i.stockQty, i.unit)} · {taka(i.stockValue)}
-                    {i.suggestedStart ? ` · ${fill(ti.bought_on, { date: day(i.suggestedStart) })}` : ""}
-                    {i.learnedDaily ? ` · ${fill(ti.daily_hint, { qty: qty(i.learnedDaily, i.unit) })}` : ""}
-                  </span>
-                  {i.suggestedStart && daysBetween(i.suggestedStart, data.asOf) >= 2 && (
-                    <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-red-600 dark:text-red-400">
-                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />{fill(ti.idle_days, { days: daysBetween(i.suggestedStart, data.asOf) })}
-                    </span>
-                  )}
-                </span>
-                {canEdit && (
-                  <button type="button" onClick={() => setStart(`item:${i.id}`)}
-                    className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold hover:border-primary/40 hover:bg-primary/5">
-                    <PlayCircle className="h-4 w-4 text-primary" aria-hidden />{ti.start_using}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {canEdit && data.recipes.length > 0 && (
-            <button type="button" onClick={() => setStart("")} className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />{ti.start_recipe}
+      {open.length === 0 ? (
+        <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">{ti.none_in_use}</p>
+            <p className="text-sm text-muted-foreground">{notStartedCount > 0 ? ti.nothing_running : ti.none_in_use_sub}</p>
+          </div>
+          {canEdit && (
+            <button type="button" onClick={onStart}
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+              <PlayCircle className="h-4 w-4" aria-hidden />{ti.start_using}
             </button>
           )}
-        </section>
-      )}
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+          {open.map((p) => {
+            const pl = lines.filter((l) => l.periodId === p.id);
+            // deducted so far + today's estimate, but no estimate for feed that has run out
+            const running = pl.reduce((s, l) => {
+              const posted = l.postedValue ?? 0;
+              const out = !hasQty(itemById.get(l.itemId)?.stockQty ?? 0);
+              return s + (out ? posted : l.value ?? posted);
+            }, 0);
+            const deductedValue = pl.reduce((s, l) => s + (l.postedValue ?? 0), 0);
+            const lastPosted = pl.map((l) => l.lastPosted).filter(Boolean).sort().pop() ?? null;
+            return (
+              <article key={p.id} className="flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card">
+                <div className="flex-1 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-bold">{p.targetName}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {p.startDate > asOf ? fill(ti.starts_on, { date: day(p.startDate) }) : fill(ti.since, { date: day(p.startDate), days: daysBetween(p.startDate, asOf) + 1 })}
+                      </p>
+                    </div>
+                    {/* the rule: tap it to change it */}
+                    {canEdit ? (
+                      <button type="button" onClick={() => onRule(p)} title={ti.change_rule} aria-label={`${ti.change_rule}: ${ruleLabel(p)}`}
+                        className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground">
+                        <Scale className="h-3 w-3" aria-hidden />{ruleLabel(p)}<SlidersHorizontal className="ml-0.5 h-3 w-3" aria-hidden />
+                      </button>
+                    ) : (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        <Scale className="h-3 w-3" aria-hidden />{ruleLabel(p)}
+                      </span>
+                    )}
+                  </div>
 
-      {waiting.length > 0 && (
-        <section aria-labelledby="waiting-title" className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 id="waiting-title" className="text-sm font-semibold">{fill(ti.waiting_title, { count: waiting.length })}</h2>
-              <p className="text-xs text-muted-foreground">{ti.waiting_sub}</p>
-            </div>
-            {canMix && <Link href="/dashboard/inventory/mix"
-              className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
-              <Blend className="h-4 w-4" aria-hidden />{ti.make_mix}
-            </Link>}
-          </div>
-          <ul className="mt-3 flex flex-wrap gap-1.5">
-            {waiting.map((i) => (
-              <li key={i.id} className="rounded-full border border-border bg-card px-2.5 py-1 text-xs">
-                <span className="font-medium">{i.name}</span> <span className="tabular-nums text-muted-foreground">{qty(i.stockQty, i.unit)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+                  <ul className="mt-3 space-y-3">
+                    {p.lines.map((l) => {
+                      const st = itemById.get(l.itemId);
+                      const dl = st?.daysLeft ?? null;
+                      const low = dl != null && dl <= 7;
+                      const r = pl.find((x) => x.itemId === l.itemId);
+                      const out = st != null && !hasQty(st.stockQty);
+                      return (
+                        <li key={l.itemId}>
+                          <div className="flex items-baseline justify-between gap-2">
+                            {p.lines.length > 1 ? <span className="truncate text-sm">{l.itemName}</span> : <span className="text-xs text-muted-foreground">{ti.stock_left}</span>}
+                            <span className="shrink-0 text-lg font-bold tabular-nums leading-none">{st ? qty(st.stockQty, st.unit) : "—"}</span>
+                          </div>
+                          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
+                            {dl != null && <div className={cn("h-full rounded-full", low ? "bg-red-500" : "bg-emerald-500")} style={{ width: `${Math.max(4, Math.min(100, (dl / 30) * 100))}%` }} />}
+                          </div>
+                          <p className={cn("mt-1 flex flex-wrap justify-between gap-x-2 text-xs", low ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground")}>
+                            <span>{dl != null ? fill(th.days_left, { days: Math.floor(dl) }) : th.days_left_unknown}</span>
+                            <span className="tabular-nums">{st?.dailyQty ? fill(ti.per_day, { qty: qty(st.dailyQty, st.unit) }) : ""}</span>
+                          </p>
+                          {r?.estimateBasis === "none" && <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">{ti.no_rate}</p>}
+                          {out && <p className="mt-1 flex items-start gap-1 text-xs font-medium text-red-600 dark:text-red-400"><AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />{ti.stock_out}</p>}
+                        </li>
+                      );
+                    })}
+                  </ul>
 
-      {start !== null && <StartDialog data={data} preset={start} onClose={() => setStart(null)} lang={lang} />}
-      {ending && <EndDialog data={data} period={ending} onClose={() => setEnding(null)} lang={lang} />}
-      {checking && <EndDialog data={data} period={checking} checkpoint onClose={() => setChecking(null)} lang={lang} />}
-      {ruleOf && <RuleDialog data={data} period={ruleOf} onClose={() => setRuleOf(null)} lang={lang} />}
-    </div>
+                  <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-t border-border/60 pt-2.5 text-sm">
+                    <span className="text-muted-foreground">
+                      {ti.running_cost}{" "}
+                      <span className="rounded-full border border-dashed border-amber-500/50 px-1.5 py-px text-[10px] font-medium uppercase text-amber-700 dark:text-amber-400">{th.estimate_badge}</span>
+                    </span>
+                    <span className="font-semibold tabular-nums">{taka(running)}</span>
+                    {deductedValue > 0 && (
+                      <span className="w-full text-xs text-muted-foreground">{ti.deducted}: {taka(deductedValue)}{lastPosted ? ` · ${fill(ti.last_deducted, { date: day(lastPosted) })}` : ""}</span>
+                    )}
+                  </div>
+                </div>
+                {canEdit && (
+                  <div className="grid grid-cols-2 divide-x divide-border/60 border-t border-border/60 text-sm font-semibold">
+                    <button type="button" onClick={() => onCount(p)}
+                      className="flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap px-2 text-foreground hover:bg-muted/60">
+                      <ClipboardCheck className="h-4 w-4 shrink-0" aria-hidden />{ti.count_check}
+                    </button>
+                    <button type="button" onClick={() => onFinish(p)}
+                      className="flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap px-2 text-primary hover:bg-primary/5">
+                      <CircleStop className="h-4 w-4 shrink-0" aria-hidden />{ti.finished}
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

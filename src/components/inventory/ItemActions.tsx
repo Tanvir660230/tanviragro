@@ -117,27 +117,32 @@ function OwnStockForm({
   );
 }
 
-function OwnStockDialog({ item }: { item: InventoryItem }) {
+/** Opened by its own button, or controlled (open / onOpenChange) from a menu — then no button. */
+export function OwnStockDialog({ item, open: openProp, onOpenChange }: { item: InventoryItem; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const L = useL();
-  const [open, setOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const open = controlled ? openProp : openState;
   const [formKey, setFormKey] = useState(0);
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
+    if (controlled) onOpenChange?.(next); else setOpenState(next);
     if (next) setFormKey((k) => k + 1);
   };
   const title = L(`${item.name} — নিজের জমি থেকে`, `${item.name} — from own land`);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger className={buttonVariants({ size: "sm", variant: "outline" })} aria-label={title}>
-        <Sprout className="mr-1.5 h-3.5 w-3.5" />
-        {L("নিজের জমি", "Own land")}
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger className={buttonVariants({ size: "sm", variant: "outline" })} aria-label={title}>
+          <Sprout className="mr-1.5 h-3.5 w-3.5" />
+          {L("নিজের জমি", "Own land")}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <OwnStockForm item={item} formKey={formKey} onSuccess={() => setOpen(false)} />
+        <OwnStockForm item={item} formKey={formKey} onSuccess={() => handleOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
@@ -282,33 +287,42 @@ function LogConsumptionForm({
   );
 }
 
-function LogConsumptionDialog({
+/** Opened by its own button, or controlled (open / onOpenChange) from a menu — then no button. */
+export function LogConsumptionDialog({
   item,
   cattle,
   onOptimisticConsume,
+  open: openProp,
+  onOpenChange,
 }: {
   item: InventoryItem;
   cattle: CattleOption[];
   onOptimisticConsume?: (qty: number) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { t } = useTranslation();
   const tr = t.inventory.actions;
-  const [open, setOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const open = controlled ? openProp : openState;
   const [formKey, setFormKey] = useState(0);
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
+    if (controlled) onOpenChange?.(next); else setOpenState(next);
     if (next) setFormKey((k) => k + 1);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        className={buttonVariants({ size: "sm", variant: "ghost" })}
-        aria-label={tr.log_use_title.replace("{{name}}", item.name)}
-      >
-        <Minus className="mr-1.5 h-3.5 w-3.5" />
-        {tr.log_use}
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger
+          className={buttonVariants({ size: "sm", variant: "ghost" })}
+          aria-label={tr.log_use_title.replace("{{name}}", item.name)}
+        >
+          <Minus className="mr-1.5 h-3.5 w-3.5" />
+          {tr.log_use}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{tr.log_use_title.replace("{{name}}", item.name)}</DialogTitle>
@@ -317,7 +331,7 @@ function LogConsumptionDialog({
           item={item}
           cattle={cattle}
           formKey={formKey}
-          onSuccess={() => setOpen(false)}
+          onSuccess={() => handleOpenChange(false)}
           onOptimisticConsume={onOptimisticConsume}
         />
       </DialogContent>

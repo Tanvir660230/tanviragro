@@ -167,30 +167,35 @@ function EditItemForm({
   );
 }
 
-export function EditItemDialog({ item }: { item: InventoryRow }) {
+/** Opened by its own button, or controlled (open / onOpenChange) from a menu — then no button. */
+export function EditItemDialog({ item, open: openProp, onOpenChange }: { item: InventoryRow; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const L = useL();
-  const [open, setOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const open = controlled ? openProp : openState;
   const [formKey, setFormKey] = useState(0);
 
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
+    if (controlled) onOpenChange?.(next); else setOpenState(next);
     if (next) setFormKey((k) => k + 1);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-foreground h-8 w-8 text-muted-foreground"
-        aria-label={L("বদলান", "Edit item")}
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-foreground h-8 w-8 text-muted-foreground"
+          aria-label={L("বদলান", "Edit item")}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-sm p-6">
         <DialogHeader>
           <DialogTitle>{L("জিনিস বদলান", "Edit Inventory Item")}</DialogTitle>
         </DialogHeader>
-        <EditItemForm item={item} formKey={formKey} onSuccess={() => setOpen(false)} />
+        <EditItemForm item={item} formKey={formKey} onSuccess={() => handleOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
