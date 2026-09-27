@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectAll } from "@/lib/supabase/select-all";
 import { loadFeedData } from "@/lib/feed/feed-data";
 import { getAccountingData } from "@/lib/accounting/engine";
 import { capitalSummary } from "@/lib/money/summary";
@@ -52,17 +53,20 @@ export async function loadHomeInputs(supabase: SupabaseClient<any>, businessId: 
       .select("id, tag_id, purchase_date, purchase_price, initial_weight_kg, initial_weight_type, target_weight_kg")
       .eq("business_id", businessId).eq("status", "active").is("deleted_at", null),
     loadFeedData(supabase, businessId, today),
-    supabase.from("cost_entries").select("cattle_id, amount")
+    // every page: a per-animal total over the first 1,000 rows would be silently low
+    selectAll(() => supabase.from("cost_entries").select("cattle_id, amount")
       .eq("business_id", businessId).is("deleted_at", null).not("cattle_id", "is", null)
       .eq("type", "variable").eq("entry_class", "expense")
-      .neq("category", "Medical/Vet Fee"),   // that money is on the treatment row (counted below)
-    supabase.from("cattle_treatments").select("cattle_id, vet_fee, additional_medical_cost, cattle!inner(business_id)")
-      .eq("cattle.business_id", businessId),
+      .neq("category", "Medical/Vet Fee")   // that money is on the treatment row (counted below)
+      .order("id")).then((data) => ({ data })),
+    selectAll(() => supabase.from("cattle_treatments").select("cattle_id, vet_fee, additional_medical_cost, cattle!inner(business_id)")
+      .eq("cattle.business_id", businessId).order("id")).then((data) => ({ data })),
     supabase.from("market_prices").select("price_per_kg").eq("business_id", businessId)
       .order("date", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("health_events").select("title, scheduled_at, cattle_id")
+    selectAll(() => supabase.from("health_events").select("title, scheduled_at, cattle_id")
       .eq("business_id", businessId).is("deleted_at", null).is("completed_at", null)
-      .lte("scheduled_at", addDays(today, 3)).order("scheduled_at", { ascending: true }),   // no cap: the list length is the count shown
+      .lte("scheduled_at", addDays(today, 3)).order("scheduled_at", { ascending: true })
+      .order("id")).then((data) => ({ data })),   // no cap: the list length is the count shown
   ]);
 
   const cattleRows = (cattleRes.data ?? []) as {

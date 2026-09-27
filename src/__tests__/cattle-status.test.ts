@@ -1,7 +1,7 @@
 /** Cattle status rules and the one calculation behind the list, table and CSV. */
 import { buildBoard, matchesFilter, type BoardRow } from "@/lib/cattle/board";
 import { boardCsv } from "@/lib/cattle/board-csv";
-import { isOnFarm, hasLeft } from "@/lib/cattle/status";
+import { isOnFarm, hasLeft, isLossStatus } from "@/lib/cattle/status";
 import type { HomeInput } from "@/lib/home/home-model";
 import { computeFeedSnapshot } from "@/lib/feed/usage-engine";
 import fs from "fs";
@@ -23,11 +23,11 @@ const row = (id: string, status: string, over: Partial<BoardRow> = {}): BoardRow
 });
 const board = buildBoard({
   home,
-  rows: [row("A", "active"), row("Q", "quarantined", { purchase_price: 70000 }), row("D", "dead", { purchase_price: 60000 }), row("S", "stolen", { purchase_price: 50000 })],
+  rows: [row("A", "active"), row("Q", "quarantined", { purchase_price: 70000 }), row("D", "dead", { purchase_price: 60000 }), row("S", "stolen", { purchase_price: 50000 }), row("X", "archived", { purchase_price: 1000 })],
   logs: {}, feedByAnimal: {}, directCostByCattle: {},
   health: [{ cattle_id: "D", title: "FMD", date: "2026-09-01" }],
   sales: [],
-  deaths: [{ cattle_id: "D", date: "2026-09-10", cause: "Bloat" }],
+  deaths: [{ cattle_id: "D", date: "2026-09-10", cause: "Bloat" }, { cattle_id: "S", date: "2026-09-12", cause: "Stolen — from the shed" }],
 });
 const by = (id: string) => board.animals.find((a) => a.id === id)!;
 
@@ -56,8 +56,23 @@ describe("animals that left", () => {
     expect(d.nextHealth).toBeNull();
     expect(matchesFilter(d, "past", TODAY)).toBe(true);
   });
-  test("stolen / culled animals are 'gone', not labelled dead", () => {
-    expect(by("S").realised?.kind).toBe("gone");
+  test("a stolen animal carries the day it went missing and its whole cost as a loss", () => {
+    expect(by("S").realised).toMatchObject({ kind: "stolen", date: "2026-09-12", result: -50000 });
+    expect(matchesFilter(by("S"), "past", TODAY)).toBe(true);
+  });
+  test("other exits without a record are 'gone', not labelled dead", () => {
+    expect(by("X").realised?.kind).toBe("gone");
+  });
+  test("dead and stolen are losses (booked in Money and the partners' split); a sale is not", () => {
+    expect(isLossStatus("dead")).toBe(true);
+    expect(isLossStatus("stolen")).toBe(true);
+    expect(isLossStatus("sold")).toBe(false);
+    expect(isLossStatus("active")).toBe(false);
+  });
+  test("the accounting engine and the partners' position count a stolen animal as a loss", () => {
+    const src = (p: string) => fs.readFileSync(path.join(__dirname, "..", p), "utf8");
+    expect(src("lib/accounting/engine.ts")).toMatch(/isLossStatus\(c\.status\)/);
+    expect(src("lib/partners/load-positions.ts")).toMatch(/isLossStatus\(c\.status\)/);
   });
 });
 

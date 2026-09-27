@@ -82,6 +82,10 @@ export async function saveEnterpriseAnimalWizardAction(
       .eq("business_id", businessId);
 
     if (updateError) {
+      // bought together at one price: its share changes only from the "Bought together" card
+      if (/bought together/i.test(updateError.message)) {
+        return { error: "This animal was bought together with others at one price — change its price or date from the “Bought together” card on its page." };
+      }
       return { error: "Failed to update animal details: " + updateError.message };
     }
 

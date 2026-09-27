@@ -94,7 +94,7 @@ export function CattleDetailMoreMenu({
 
           <DropdownMenuContent align="end" className="w-52">
             {/* Quarantine — active/stolen only */}
-            {status !== "sold" && status !== "dead" && (
+            {status === "active" && (
               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={handleQuarantine}>
                 <ShieldAlert className={cn(
                   "h-4 w-4",
@@ -115,7 +115,7 @@ export function CattleDetailMoreMenu({
               </DropdownMenuItem>
             )}
 
-            {/* Mark as Dead — active only */}
+            {/* Died or stolen — active only */}
             {status === "active" && (
               <>
                 <DropdownMenuSeparator />
@@ -124,13 +124,13 @@ export function CattleDetailMoreMenu({
                   onClick={() => setConfirm("dead")}
                 >
                   <Skull className="h-4 w-4" />
-                  {L("মৃত লিখুন", "Mark as Dead")}
+                  {L("মারা গেছে / চুরি", "Died or stolen")}
                 </DropdownMenuItem>
               </>
             )}
 
-            {/* Undo dead — dead only */}
-            {status === "dead" && (
+            {/* Undo dead / stolen (recorded by mistake, or it came back) */}
+            {(status === "dead" || status === "stolen") && (
               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={handleUndoDead}>
                 <RotateCcw className="h-4 w-4 text-muted-foreground" />
                 {L("আবার সক্রিয় করুন", "Restore to Active")}

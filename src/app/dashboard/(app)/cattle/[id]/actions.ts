@@ -188,13 +188,17 @@ export async function revertSale(
 
     const { data: sale } = await supabase
       .from("sales")
-      .select("id, sold_at")
+      .select("id, sold_at, sale_group_id")
       .eq("cattle_id", cattleId)
       .is("deleted_at", null)
       .order("sold_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!sale) return { error: "No active sale found for this animal." };
+    // one price for several animals: undoing one would leave the others' shares wrong
+    if ((sale as { sale_group_id?: string | null }).sale_group_id) {
+      return { error: "This animal was sold together with others — undo the whole sale from the “Sold together” card." };
+    }
 
     // A sale inside a locked accounting period cannot be undone.
     const lockErr = await checkFinancialLock(supabase, ctx.businessId, sale.sold_at);

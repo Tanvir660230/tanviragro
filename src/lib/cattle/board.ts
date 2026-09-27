@@ -26,7 +26,7 @@ export type BoardAnimal = {
   targetWeightKg: number | null;
   series: { date: string; kg: number; type: "measured" | "estimated" }[];
   nextHealth: { title: string; date: string; overdue: boolean } | null;
-  realised: { kind: "sold" | "dead" | "gone"; date: string | null; salePrice: number | null; cost: number; result: number; cause?: string | null } | null;
+  realised: { kind: "sold" | "dead" | "stolen" | "gone"; date: string | null; salePrice: number | null; cost: number; result: number; cause?: string | null } | null;
 };
 
 export type BoardSummary = {
@@ -121,7 +121,9 @@ export function buildBoard(p: {
         ? { kind: "sold", date: sale.sold_at, salePrice: sale.price, cost, result: sale.price - cost }
         : status === "dead"
           ? { kind: "dead", date: death?.date ?? null, salePrice: null, cost, result: -cost, cause: death?.cause ?? null }
-          : { kind: status === "sold" ? "sold" : "gone", date: null, salePrice: null, cost, result: -cost };
+          : status === "stolen"
+            ? { kind: "stolen", date: death?.date ?? null, salePrice: null, cost, result: -cost, cause: death?.cause ?? null }
+            : { kind: status === "sold" ? "sold" : "gone", date: null, salePrice: null, cost, result: -cost };
     }
     return {
       id: r.id, tag: r.tag_id, breed: r.breed, gender: r.gender, status,

@@ -17,6 +17,16 @@ export const CATTLE_TEXT = {
     causes: ["Disease", "Bloat", "Accident / injury", "Snake bite", "Calving problem", "Unknown"],
     none: "No animals yet", none_sub: "Add your first animal, or import a sheet.",
     csv_note: "Same figures as the cards",
+    b_dead_or: "Died / stolen", m_dead_or: "Died or stolen",
+    stolen_on: "stolen {date}", badge_stolen: "Stolen",
+    k_dead: "Died", k_stolen: "Stolen / missing",
+    s_title: "Stolen / missing", s_title_many: "{n} animals stolen / missing", s_date: "Date it went missing", s_details: "Details",
+    s_details_ph: "e.g. taken from the shed at night, police case no…",
+    s_note: "Its cost so far is counted as a loss on this date. Open health tasks are cancelled. If it comes back, restore it from its page.",
+    s_go: "Mark stolen", s_ok: "{n} marked stolen",
+    // buying / selling several at one price
+    add_one: "One animal", add_many: "Several at one price",
+    b_sell: "Sell", b_link: "Bought together",
   },
   bn: {
     add: "গরু যোগ", weigh: "ওজন", more: "আরও",
@@ -35,6 +45,15 @@ export const CATTLE_TEXT = {
     causes: ["রোগ", "পেট ফাঁপা", "দুর্ঘটনা / আঘাত", "সাপে কাটা", "বাচ্চা প্রসবে সমস্যা", "জানা নেই"],
     none: "এখনো কোনো গরু নেই", none_sub: "প্রথম গরু যোগ করুন, বা শিট থেকে ইমপোর্ট করুন।",
     csv_note: "কার্ডের সংখ্যাই",
+    b_dead_or: "মৃত / চুরি", m_dead_or: "মারা গেছে / চুরি",
+    stolen_on: "চুরি {date}", badge_stolen: "চুরি",
+    k_dead: "মারা গেছে", k_stolen: "চুরি / হারিয়ে গেছে",
+    s_title: "চুরি / হারিয়ে গেছে", s_title_many: "{n}টি গরু চুরি / হারিয়ে গেছে", s_date: "কবে হারিয়েছে", s_details: "বিস্তারিত",
+    s_details_ph: "যেমন রাতে গোয়াল থেকে নিয়ে গেছে, থানার মামলা নং…",
+    s_note: "এ পর্যন্ত খরচ এই তারিখে ক্ষতি হিসেবে ধরা হবে। বাকি স্বাস্থ্য কাজ বাতিল হবে। ফিরে পেলে গরুর পাতা থেকে আবার সক্রিয় করুন।",
+    s_go: "চুরি লিখুন", s_ok: "{n}টি চুরি লেখা হলো",
+    add_one: "একটি গরু", add_many: "একসাথে কয়েকটি (এক দামে)",
+    b_sell: "বিক্রি", b_link: "একসাথে কেনা",
   },
 } as const;
 

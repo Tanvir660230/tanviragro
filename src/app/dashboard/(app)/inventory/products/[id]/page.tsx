@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { selectAll } from "@/lib/supabase/select-all";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
@@ -23,12 +24,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const [portfolio, ledgerResult, purchasesResult] = await Promise.all([
     CentralInventoryRepository.getInventoryPortfolio(supabase, businessId),
     CentralInventoryRepository.getItemStockLedger(supabase, businessId, id),
-    supabase
+    selectAll(() => supabase
       .from("inventory_transactions")
       .select("id, item_id, qty, unit_cost, recorded_at, notes")
       .eq("item_id", id)
       .eq("movement_type", "purchase")
-      .order("recorded_at", { ascending: true }),
+      .order("recorded_at", { ascending: true })
+      .order("id", { ascending: true })).then((data) => ({ data })),
   ]);
 
   if (!ledgerResult.item) notFound();

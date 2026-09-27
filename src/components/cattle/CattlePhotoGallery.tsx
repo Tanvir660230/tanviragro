@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+import { useL } from "@/i18n/text";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -47,6 +49,7 @@ interface Props {
 
 export function CattlePhotoGallery({ cattleId, photos: initialPhotos }: Props) {
   const { t } = useTranslation();
+  const L = useL();
   const router = useRouter();
   const [photos, setPhotos] = useState<CattlePhoto[]>(initialPhotos);
   const [open, setOpen] = useState(false);
@@ -91,10 +94,12 @@ export function CattlePhotoGallery({ cattleId, photos: initialPhotos }: Props) {
     fd.set("photo_type", photoType);
     setError(null);
     startTransition(async () => {
-      const result = await uploadCattlePhoto(fd);
+      const result = await uploadCattlePhoto(fd).catch(() => ({ error: L("ছবি তোলা যায়নি", "Could not upload the photo") }));
       if (result.error) {
         setError(result.error);
+        toast.error(result.error);
       } else {
+        toast.success(L("ছবি সেভ হলো", "Photo saved"));
         setOpen(false);
         setPreview(null);
         formRef.current?.reset();
@@ -108,8 +113,10 @@ export function CattlePhotoGallery({ cattleId, photos: initialPhotos }: Props) {
     const photo = confirmPhoto;
     setConfirmPhoto(null);
     startTransition(async () => {
-      await deleteCattlePhoto(photo.id, photo.storage_path, cattleId);
+      const res = await deleteCattlePhoto(photo.id, photo.storage_path, cattleId).catch(() => ({ error: L("ছবি মোছা যায়নি", "Could not delete the photo") }));
+      if (res && "error" in res && res.error) { toast.error(res.error); return; }
       setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      toast.success(L("ছবি মোছা হলো", "Photo deleted"));
     });
   }
 

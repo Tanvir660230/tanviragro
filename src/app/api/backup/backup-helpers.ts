@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readBackupTables } from "@/lib/backup/backup-tables";
 
 export function toCsv(rows: Record<string, unknown>[]): string {
   if (!rows.length) return "";
@@ -77,34 +78,14 @@ export async function runCronBackup(supabaseUrl: string, serviceKey: string, bac
   const { createClient } = await import("@supabase/supabase-js");
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  const [
-    { data: cattle },
-    { data: sales },
-    { data: costs },
-    { data: weightLogs },
-    { data: inventory },
-    { data: transactions },
-  ] = await Promise.all([
-    supabase.from("cattle").select("*").order("created_at", { ascending: false }),
-    supabase.from("sales").select("*").order("sold_at", { ascending: false }),
-    supabase.from("cost_entries").select("*").order("recorded_at", { ascending: false }),
-    supabase.from("weight_logs").select("*").order("recorded_at", { ascending: false }),
-    supabase.from("inventory_items").select("*"),
-    supabase.from("inventory_transactions").select("*").order("recorded_at", { ascending: false }),
-  ]);
+  // every backup table, every row — a single read would stop at 1,000 rows
+  const tables = await readBackupTables(supabase, null);
 
   const now = new Date();
   const dateStr = now.toISOString().split("T")[0];
   const weekNum = Math.ceil(now.getDate() / 7);
 
-  const csvFiles = [
-    { filename: `cattle_${dateStr}.csv`, content: toCsv((cattle ?? []) as Record<string, unknown>[]) },
-    { filename: `sales_${dateStr}.csv`, content: toCsv((sales ?? []) as Record<string, unknown>[]) },
-    { filename: `costs_${dateStr}.csv`, content: toCsv((costs ?? []) as Record<string, unknown>[]) },
-    { filename: `weight_logs_${dateStr}.csv`, content: toCsv((weightLogs ?? []) as Record<string, unknown>[]) },
-    { filename: `inventory_${dateStr}.csv`, content: toCsv((inventory ?? []) as Record<string, unknown>[]) },
-    { filename: `inventory_transactions_${dateStr}.csv`, content: toCsv((transactions ?? []) as Record<string, unknown>[]) },
-  ];
+  const csvFiles = Object.entries(tables).map(([table, rows]) => ({ filename: `${table}_${dateStr}.csv`, content: toCsv(rows) }));
 
   const storageResults = await Promise.all(
     csvFiles.map((f) =>
@@ -145,14 +126,7 @@ export async function runCronBackup(supabaseUrl: string, serviceKey: string, bac
   return {
     ok: true,
     generated_at: now.toISOString(),
-    rows: {
-      cattle: cattle?.length ?? 0,
-      sales: sales?.length ?? 0,
-      costs: costs?.length ?? 0,
-      weight_logs: weightLogs?.length ?? 0,
-      inventory: inventory?.length ?? 0,
-      transactions: transactions?.length ?? 0,
-    },
+    rows: Object.fromEntries(Object.entries(tables).map(([table, rows]) => [table, rows.length])),
     storage: { uploaded: storedCount, total: csvFiles.length },
     email_sent: emailSent,
     email_to: backupEmail ?? null,

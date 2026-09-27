@@ -109,18 +109,21 @@ export class CentralInventoryRepository {
     itemId: string,
     consumeQty = 1
   ): Promise<number | null> {
-    const [{ data: purchases }, { data: consumptions }] = await Promise.all([
-      supabase
+    // every page: one feed item alone has hundreds of daily consumption rows
+    const [purchases, consumptions] = await Promise.all([
+      selectAll<{ qty: number; unit_cost: number | null; recorded_at: string }>(() => supabase
         .from("inventory_transactions")
         .select("qty, unit_cost, recorded_at")
         .eq("item_id", itemId)
         .eq("type", "purchase").neq("movement_type", "consumption_reversal") // an undo is not a new price
-        .order("recorded_at", { ascending: true }),
-      supabase
+        .order("recorded_at", { ascending: true })
+        .order("id", { ascending: true })),
+      selectAll<{ qty: number }>(() => supabase
         .from("inventory_transactions")
         .select("qty")
         .eq("item_id", itemId)
-        .eq("type", "consumption"),
+        .eq("type", "consumption")
+        .order("id")),
     ]);
 
     if (!purchases || purchases.length === 0) return null;

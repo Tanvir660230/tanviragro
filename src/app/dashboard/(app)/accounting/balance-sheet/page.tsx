@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { selectAll } from "@/lib/supabase/select-all";
 import { siteTitle } from "@/components/navigation/site-map";
 import { createClient } from "@/lib/supabase/server";
 import { getAccountingData } from "@/lib/accounting/engine";
@@ -88,13 +89,14 @@ export default async function BalanceSheetPage() {
   ]);
 
   const { data: assetEntriesData } = businessId
-    ? await supabase
+    ? { data: await selectAll(() => supabase
         .from("cost_entries")
         .select("id, description, category, amount, recorded_at")
         .eq("business_id", businessId)
         .eq("entry_class", "asset")
         .is("deleted_at", null)
         .order("recorded_at", { ascending: false })
+        .order("id", { ascending: false })) }
     : { data: [] };
   // Asset payments that have a fixed-asset record are depreciated there (Fixed Assets page);
   // listing them here as well showed the same purchase twice with a different depreciation.

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectAll } from "@/lib/supabase/select-all";
 import { loadFarm, loadHomeInputs } from "@/lib/home/home-data";
 import { todayDhaka } from "@/lib/dates";
 import { buildBoard, type Board, type BoardRow } from "@/lib/cattle/board";
@@ -11,11 +12,12 @@ export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId:
     supabase.from("cattle")
       .select("id, tag_id, breed, gender, status, purchase_date, purchase_price, target_weight_kg, is_quarantined, is_qurbani_marked, initial_weight_kg, initial_weight_type")
       .eq("business_id", businessId).is("deleted_at", null),
-    supabase.from("health_events").select("cattle_id, title, scheduled_at")
+    // every page (a single read stops at 1,000 rows)
+    selectAll(() => supabase.from("health_events").select("cattle_id, title, scheduled_at")
       .eq("business_id", businessId).is("deleted_at", null).is("completed_at", null).not("cattle_id", "is", null)
-      .order("scheduled_at", { ascending: true }),
-    supabase.from("sales").select("cattle_id, sold_at, sale_price_total, cattle!inner(business_id)")
-      .eq("cattle.business_id", businessId).is("deleted_at", null),
+      .order("scheduled_at", { ascending: true }).order("id")).then((data) => ({ data })),
+    selectAll(() => supabase.from("sales").select("cattle_id, sold_at, sale_price_total, cattle!inner(business_id)")
+      .eq("cattle.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
     supabase.from("cattle_death_records").select("cattle_id, death_date, cause_of_death").eq("business_id", businessId),
   ]);
 

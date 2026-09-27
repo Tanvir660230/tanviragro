@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   AlertTriangle, ArrowUpDown, Banknote, Beef, CalendarCheck, CheckSquare, ChevronDown, Download, FileSpreadsheet, HeartPulse,
-  LayoutGrid, ListChecks, Moon, MoreHorizontal, Scale, Search, ShieldAlert, ShieldCheck, Skull, Square, Table2, Target, TrendingUp, Wallet, X,
+  HandCoins, Layers, LayoutGrid, ListChecks, Moon, MoreHorizontal, Scale, Search, ShieldAlert, ShieldCheck, Skull, Square, Table2, Target, TrendingUp, Wallet, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDay } from "@/lib/format";
@@ -18,6 +18,8 @@ import { BulkWeightDialog } from "@/components/cattle/BulkWeightDialog";
 import { BulkCostDialog } from "@/components/cattle/BulkCostDialog";
 import { BulkHealthEventDialog } from "@/components/cattle/BulkHealthEventDialog";
 import { DeathDialog } from "@/components/cattle/DeathDialog";
+import { GroupSaleDialog } from "@/components/cattle/GroupSaleDialog";
+import { LinkPurchaseDialog } from "@/components/cattle/LinkPurchaseDialog";
 import { BulkLivestockImportDialog } from "@/components/livestock/bulk/BulkLivestockImportDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toggleQurbaniMark } from "@/app/dashboard/(app)/cattle/actions";
@@ -29,7 +31,7 @@ type TB = Dictionary["cattle_board"];
 type TH = Dictionary["home"];
 
 /** what the viewer may do — each button shows only when allowed (the server checks again) */
-export type CattlePerms = { create: boolean; edit: boolean; weigh: boolean; health: boolean; cost: boolean; export: boolean };
+export type CattlePerms = { create: boolean; edit: boolean; weigh: boolean; health: boolean; cost: boolean; export: boolean; sell: boolean };
 
 const taka = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—" : `${n < 0 ? "−" : ""}৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`);
 const kg = (n: number | null | undefined) => (n == null ? "—" : `${Math.round(n).toLocaleString("en-IN")} kg`);
@@ -85,7 +87,7 @@ function Badges({ a, tb, th }: { a: BoardAnimal; tb: TB; th: TH }) {
   );
 }
 
-type RowAction = "quarantine" | "qurbani" | "dead";
+type RowAction = "quarantine" | "qurbani" | "dead" | "sell";
 
 /** An animal's "⋯" menu (card and table): open, weigh, health, quarantine, qurbani, mark dead. */
 function AnimalMenu({ a, tb, t, perms, onAction, className }: {
@@ -113,9 +115,14 @@ function AnimalMenu({ a, tb, t, perms, onAction, className }: {
             <Moon className="h-4 w-4" aria-hidden />{a.qurbani ? t.qurbani_off : t.qurbani_on}
           </DropdownMenuItem>
         )}
+        {perms.sell && (
+          <DropdownMenuItem className="min-h-10 gap-2.5" onClick={() => onAction("sell", a)}>
+            <HandCoins className="h-4 w-4" aria-hidden />{t.b_sell}
+          </DropdownMenuItem>
+        )}
         {perms.health && (
           <DropdownMenuItem variant="destructive" className="min-h-10 gap-2.5" onClick={() => onAction("dead", a)}>
-            <Skull className="h-4 w-4" aria-hidden />{tb.mark_dead}
+            <Skull className="h-4 w-4" aria-hidden />{t.m_dead_or}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -295,7 +302,8 @@ function AnimalTable({ list, tb, th, t, lang, perms, selecting, picked, onToggle
   );
 }
 
-type Dlg = { kind: "weigh" | "health" | "cost" | "import"; ids?: string[] } | { kind: "dead"; animals: BoardAnimal[] } | null;
+type Dlg = { kind: "weigh" | "health" | "cost" | "import"; ids?: string[] }
+  | { kind: "dead" | "sell" | "link"; animals: BoardAnimal[] } | null;
 
 export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh, openAdd, perms, lang, tb, th }: {
   board: Board; existingTagIds: string[]; allBreeds: string[];
@@ -327,7 +335,7 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
   const activeOptions = active.map((a) => ({ id: a.id, tag_id: a.tag }));
   const past = board.animals.filter((a) => a.status !== "active" && (!needle || a.tag.toLowerCase().includes(needle)));
 
-  const canSelect = perms.weigh || perms.health || perms.cost;
+  const canSelect = perms.weigh || perms.health || perms.cost || perms.sell || perms.edit;
   const toggle = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleAll = () => setPicked((p) => (shown.every((a) => p.has(a.id)) ? new Set() : new Set(shown.map((a) => a.id))));
   const stopSelecting = () => { setSelecting(false); setPicked(new Set()); };
@@ -347,6 +355,7 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
 
   const onAction = (x: RowAction, a: BoardAnimal) => {
     if (x === "dead") { setDlg({ kind: "dead", animals: [a] }); return; }
+    if (x === "sell") { setDlg({ kind: "sell", animals: [a] }); return; }
     start(async () => {
       const res = x === "quarantine"
         ? await toggleQuarantine(a.id, !a.quarantined).catch(() => ({ error: tb.failed }))
@@ -489,6 +498,7 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
               const r = a.realised;
               const badge = a.status === "sold" ? (r?.date ? fill(tb.sold_on, { date: fmtDay(r.date, lang) }) : tb.badge_sold)
                 : a.status === "dead" ? (r?.date ? fillC(t.died_on, { date: fmtDay(r.date, lang) }) : tb.badge_dead)
+                : a.status === "stolen" ? (r?.date ? fillC(t.stolen_on, { date: fmtDay(r.date, lang) }) : t.badge_stolen)
                 : t.badge_gone;
               return (
                 <li key={a.id}>
@@ -496,7 +506,7 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
                     <span className="min-w-0">
                       <span className="font-semibold">{a.tag}</span>
                       <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{badge}</span>
-                      {r?.cause && r.cause !== "Not recorded" && <span className="ml-2 text-xs text-muted-foreground">{t.cause}: {r.cause}</span>}
+                      {r?.cause && r.cause !== "Not recorded" && r.kind !== "stolen" && <span className="ml-2 text-xs text-muted-foreground">{t.cause}: {r.cause}</span>}
                     </span>
                     <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-muted-foreground">
                       {r?.salePrice != null && <span>{tb.sale_price}: {taka(r.salePrice)}</span>}
@@ -523,7 +533,9 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
               {perms.health && (pickedAnimals.some((a) => !a.quarantined)
                 ? <BarButton icon={ShieldAlert} label={t.b_q_on} onClick={() => quarantineMany(true)} />
                 : <BarButton icon={ShieldCheck} label={t.b_q_off} onClick={() => quarantineMany(false)} />)}
-              {perms.health && <BarButton icon={Skull} label={t.b_dead} danger onClick={() => setDlg({ kind: "dead", animals: pickedAnimals })} />}
+              {perms.sell && <BarButton icon={HandCoins} label={t.b_sell} onClick={() => setDlg({ kind: "sell", animals: pickedAnimals })} />}
+              {perms.edit && pickedAnimals.length > 1 && <BarButton icon={Layers} label={t.b_link} onClick={() => setDlg({ kind: "link", animals: pickedAnimals })} />}
+              {perms.health && <BarButton icon={Skull} label={t.b_dead_or} danger onClick={() => setDlg({ kind: "dead", animals: pickedAnimals })} />}
               <button type="button" onClick={() => setPicked(new Set())} aria-label={t.clear}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>
             </div>
@@ -544,6 +556,14 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
       )}
       {dlg?.kind === "dead" && (
         <DeathDialog animals={dlg.animals.map((a) => ({ id: a.id, tag: a.tag }))} lang={lang} onClose={close} onDone={stopSelecting} />
+      )}
+      {dlg?.kind === "sell" && (
+        <GroupSaleDialog lang={lang} onClose={close} onDone={stopSelecting}
+          animals={dlg.animals.map((a) => ({ id: a.id, tag: a.tag, lastKg: a.metrics?.weightKg ?? null, costSoFar: a.metrics?.costSoFar ?? a.purchasePrice }))} />
+      )}
+      {dlg?.kind === "link" && (
+        <LinkPurchaseDialog lang={lang} onClose={close} onDone={stopSelecting} fmtDay={(d) => fmtDay(d, lang)}
+          animals={dlg.animals.map((a) => ({ id: a.id, tag: a.tag, purchaseDate: a.purchaseDate, purchasePrice: a.purchasePrice }))} />
       )}
       <BulkLivestockImportDialog open={dlg?.kind === "import"} onOpenChange={(o) => { if (!o) close(); }} existingTagIds={existingTagIds} />
     </div>

@@ -42,6 +42,7 @@ export default async function CattlePage(props: { searchParams: Promise<{ open?:
     health: can(PERMISSIONS.HEALTH_MANAGE),
     cost: can(PERMISSIONS.COST_ENTRY_CREATE),
     export: can(PERMISSIONS.CATTLE_EXPORT),
+    sell: can(PERMISSIONS.CATTLE_SELL),
   };
 
   if (!board || board.animals.length === 0) {

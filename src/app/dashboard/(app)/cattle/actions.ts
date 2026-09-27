@@ -223,7 +223,9 @@ export async function bulkCreateCattle(
 }
 
 export type DeathDetails = {
-  /** the day it died (YYYY-MM-DD); default today */
+  /** died, or stolen / went missing (both leave without a sale: the cost is a loss) */
+  kind?: "dead" | "stolen";
+  /** the day it died / went missing (YYYY-MM-DD); default today */
   date?: string;
   /** what it died of */
   cause?: string;
@@ -253,6 +255,7 @@ export async function markAsDeceased(
   if (!businessId) return { error: "Business not found" };
 
   const d: DeathDetails = typeof details === "string" ? { notes: details } : details;
+  const kind = d.kind === "stolen" ? "stolen" : "dead";
   const date = (d.date ?? todayDhaka()).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Choose the date it died" };
   if (date > todayDhaka()) return { error: "The date cannot be in the future" };
@@ -265,7 +268,7 @@ export async function markAsDeceased(
 
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
   try {
-    CattleDomainService.validateStatusTransition(cattle.status, "dead");
+    CattleDomainService.validateStatusTransition(cattle.status, kind);
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Invalid status transition" };
   }
@@ -275,19 +278,20 @@ export async function markAsDeceased(
   const lockError = await checkFinancialLock(supabase, businessId, date);
   if (lockError) return { error: lockError };
 
-  // the dated record first: without it the death day is unknown
+  // the dated record first: without it the day it left is unknown (a theft uses the same record:
+  // the feed split, Money and partners read its date)
   const { error: recErr } = await deathRecords(supabase).upsert({
     business_id: businessId,
     cattle_id: id,
     death_date: date,
-    cause_of_death: d.cause?.trim() || "Not recorded",
+    cause_of_death: kind === "stolen" ? `Stolen${d.cause?.trim() ? ` — ${d.cause.trim()}` : ""}` : d.cause?.trim() || "Not recorded",
     post_mortem_notes: d.notes?.trim() || null,
   }, { onConflict: "cattle_id" });
   if (recErr) return { error: "Could not save the death record" };
 
   const { error } = await supabase
     .from("cattle")
-    .update({ status: "dead" })
+    .update({ status: kind })
     .eq("id", id)
     .eq("business_id", businessId);
   if (error) {
@@ -308,7 +312,7 @@ export async function markAsDeceased(
     "StatusChanged",
     businessId,
     id,
-    { previousStatus: cattle.status, newStatus: "dead", notes: d.notes, date, cause: d.cause },
+    { previousStatus: cattle.status, newStatus: kind, notes: d.notes, date, cause: d.cause },
     user.id
   ).catch(() => {});
 
@@ -320,7 +324,7 @@ export async function markAsDeceased(
   return {};
 }
 
-/** Recorded dead by mistake: back to active, the death record removed, its cancelled tasks back. */
+/** Recorded dead / stolen by mistake (or a stolen animal came back): back to active, the record removed, its cancelled tasks back. */
 export async function undoMarkAsDeceased(
   id: string
 ): Promise<{ error?: string }> {
@@ -340,7 +344,7 @@ export async function undoMarkAsDeceased(
     .maybeSingle();
 
   if (!cattle || cattle.business_id !== businessId) return { error: "Unauthorized" };
-  if (cattle.status !== "dead") return { error: "Cattle is not marked as dead" };
+  if (cattle.status !== "dead" && cattle.status !== "stolen") return { error: "Cattle is not marked as dead or stolen" };
 
   const { data: rec } = await deathRecords(supabase).select("death_date").eq("cattle_id", id).maybeSingle();
   if (rec?.death_date) {
@@ -393,7 +397,8 @@ export async function deleteCattle(id: string): Promise<{ error?: string }> {
     .from("cattle")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { error: "Failed to delete" };
+  // bought together with others: the database keeps the group's shares whole and says why
+  if (error) return { error: /bought together/i.test(error.message) ? "This animal was bought together with others at one price, so it cannot be deleted on its own." : "Failed to delete" };
 
   revalidatePath("/dashboard/cattle");
   revalidatePath("/dashboard");

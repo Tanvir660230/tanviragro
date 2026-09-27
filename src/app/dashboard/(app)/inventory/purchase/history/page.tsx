@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { selectAll } from "@/lib/supabase/select-all";
 import { siteTitle } from "@/components/navigation/site-map";
 import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { redirect } from "next/navigation";
@@ -40,7 +41,8 @@ export default async function PurchaseHistoryPage() {
   if (!businessId) redirect("/login");
 
   // Fetch all purchase transactions for this business
-  const { data: txns } = await supabase
+  // every page (a single read stops at 1,000 rows)
+  const txns = await selectAll(() => supabase
     .from("inventory_transactions")
     .select(`
       id,
@@ -55,7 +57,8 @@ export default async function PurchaseHistoryPage() {
     .eq("inventory_items.business_id", businessId)
     .eq("movement_type", "purchase")
     .order("recorded_at", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false }));
 
   // Undone (corrected) purchase rows stay in the ledger but are not part of a memo any more
   const undone = await undonePurchaseIds(supabase, (txns ?? []).map((t) => t.id));

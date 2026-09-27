@@ -9,3 +9,6 @@ export const isOnFarm = (status: string | null | undefined) => status === "activ
 
 /** left the farm: sold, dead, stolen, culled or archived */
 export const hasLeft = (status: string | null | undefined) => !isOnFarm(status);
+
+/** left without a sale — its whole cost is a loss, booked on the day it died / went missing */
+export const isLossStatus = (status: string | null | undefined) => status === "dead" || status === "stolen";

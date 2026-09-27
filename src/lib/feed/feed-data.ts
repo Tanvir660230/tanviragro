@@ -265,7 +265,7 @@ export async function loadFeedDataOnly(supabase: SupabaseClient<any>, businessId
   };
 
   const { data: mixInputRows } = itemIds.length
-    ? await supabase.from("inventory_transactions").select("item_id").in("item_id", itemIds).eq("movement_type", "feed_mix_input")
+    ? { data: await selectAll<{ item_id: string }>(() => supabase.from("inventory_transactions").select("item_id").in("item_id", itemIds).eq("movement_type", "feed_mix_input").order("id")) }
     : { data: [] };
   const roles = feedRoles({
     items,
