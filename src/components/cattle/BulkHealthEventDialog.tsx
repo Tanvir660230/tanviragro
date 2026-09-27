@@ -71,7 +71,7 @@ export function BulkHealthEventDialog({ activeCattle, open: externalOpen, onOpen
 
   useEffect(() => {
     if (state?.success) {
-      toast.success(L("স্বাস্থ্য কাজ যোগ হলো", "Health events scheduled"));
+      toast.success(L("স্বাস্থ্য কাজ লেখা হলো", "Health records saved"));
       setTimeout(() => {
         setOpen(false);
         setSelectedIds(new Set());

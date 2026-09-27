@@ -331,7 +331,8 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
   const toggle = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleAll = () => setPicked((p) => (shown.every((a) => p.has(a.id)) ? new Set() : new Set(shown.map((a) => a.id))));
   const stopSelecting = () => { setSelecting(false); setPicked(new Set()); };
-  const pickedAnimals = active.filter((a) => picked.has(a.id));
+  // only the selected animals still on screen: a filter or search change never acts on hidden ones
+  const pickedAnimals = shown.filter((a) => picked.has(a.id));
   const pickedIds = pickedAnimals.map((a) => a.id);
   const close = () => setDlg(null);
   // a file download (a route that answers with CSV), not a page to navigate to
@@ -511,10 +512,10 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
       )}
 
       {/* what to do with the selection */}
-      {selecting && picked.size > 0 && (
+      {selecting && pickedAnimals.length > 0 && (
         <div className="sticky bottom-20 z-30 md:bottom-4">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card/95 px-3 py-2.5 shadow-floating backdrop-blur">
-            <span className="px-1 text-sm font-semibold">{fillC(t.selected, { n: picked.size })}</span>
+            <span className="px-1 text-sm font-semibold">{fillC(t.selected, { n: pickedAnimals.length })}</span>
             <div className="flex flex-wrap items-center gap-1.5">
               {perms.weigh && <BarButton icon={Scale} label={t.b_weigh} onClick={() => setDlg({ kind: "weigh", ids: pickedIds })} />}
               {perms.health && <BarButton icon={CalendarCheck} label={t.b_health} onClick={() => setDlg({ kind: "health", ids: pickedIds })} />}
