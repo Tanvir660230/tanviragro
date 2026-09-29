@@ -3,10 +3,11 @@ import { selectAll } from "@/lib/supabase/select-all";
 import { loadFarm, loadHomeInputs } from "@/lib/home/home-data";
 import { todayDhaka } from "@/lib/dates";
 import { buildBoard, type Board, type BoardRow } from "@/lib/cattle/board";
+import { loadCostAtSale } from "@/lib/cattle/sale-snapshot";
 
 /** Cattle list data: the homepage calculation for active animals + history for sold/dead ones. */
 export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId: string, today = todayDhaka()): Promise<Board> {
-  const [inputs, farm, rowsRes, healthRes, salesRes, deathRes] = await Promise.all([
+  const [inputs, farm, rowsRes, healthRes, salesRes, deathRes, costAtSale] = await Promise.all([
     loadHomeInputs(supabase, businessId, today, { money: false }),
     loadFarm(supabase, businessId),
     supabase.from("cattle")
@@ -16,9 +17,10 @@ export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId:
     selectAll(() => supabase.from("health_events").select("cattle_id, title, scheduled_at")
       .eq("business_id", businessId).is("deleted_at", null).is("completed_at", null).not("cattle_id", "is", null)
       .order("scheduled_at", { ascending: true }).order("id")).then((data) => ({ data })),
-    selectAll(() => supabase.from("sales").select("cattle_id, sold_at, sale_price_total, cattle!inner(business_id)")
+    selectAll(() => supabase.from("sales").select("cattle_id, sold_at, sale_price_total, weight_at_sale_kg, buyer_name, cattle!inner(business_id)")
       .eq("cattle.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
     supabase.from("cattle_death_records").select("cattle_id, death_date, cause_of_death").eq("business_id", businessId),
+    loadCostAtSale(supabase, businessId),
   ]);
 
   const logs: Record<string, { date: string; kg: number; type: "measured" | "estimated" }[]> = {};
@@ -37,8 +39,9 @@ export async function loadCattleBoard(supabase: SupabaseClient<any>, businessId:
     directCostByCattle: inputs.directCostByCattle,
     health: ((healthRes.data ?? []) as { cattle_id: string; title: string; scheduled_at: string }[])
       .map((h) => ({ cattle_id: h.cattle_id, title: h.title, date: String(h.scheduled_at).slice(0, 10) })),
-    sales: ((salesRes.data ?? []) as { cattle_id: string; sold_at: string; sale_price_total: number | string }[])
-      .map((s) => ({ cattle_id: s.cattle_id, sold_at: String(s.sold_at).slice(0, 10), price: Number(s.sale_price_total) })),
+    sales: ((salesRes.data ?? []) as { cattle_id: string; sold_at: string; sale_price_total: number | string; weight_at_sale_kg: number | string | null; buyer_name: string | null }[])
+      .map((s) => ({ cattle_id: s.cattle_id, sold_at: String(s.sold_at).slice(0, 10), price: Number(s.sale_price_total),
+        weightKg: s.weight_at_sale_kg == null ? null : Number(s.weight_at_sale_kg), buyer: s.buyer_name, costAtSale: costAtSale[s.cattle_id] ?? null })),
     deaths: ((deathRes.data ?? []) as { cattle_id: string; death_date: string; cause_of_death: string | null }[])
       .map((d) => ({ cattle_id: d.cattle_id, date: String(d.death_date).slice(0, 10), cause: d.cause_of_death })),
   });

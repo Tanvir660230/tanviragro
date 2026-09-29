@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { selectAll } from "@/lib/supabase/select-all";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
@@ -21,7 +22,9 @@ import type { CattleTreatment } from "@/app/dashboard/(app)/cattle/medical-actio
 import { getDictionary } from "@/i18n/getDictionary";
 import { cookies } from "next/headers";
 import { DailyFeedRequirementCard } from "@/components/cattle/DailyFeedRequirementCard";
-import { UndoSaleButton } from "@/components/cattle/UndoSaleButton";
+import { UndoSaleControl } from "@/components/cattle/UndoSaleControl";
+import { SellAnimalButton } from "@/components/cattle/SellAnimalButton";
+import { ClosedReport } from "@/components/cattle/ClosedReport";
 import { calculateAlgorithmicFeedCost, ROUGHAGE_TYPES } from "@/utils/feed-calculator";
 import { InsuranceCard } from "@/components/cattle/InsuranceCard";
 import { CattleDetailTabs } from "@/components/cattle/CattleDetailTabs";
@@ -40,6 +43,10 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
 import { dayList, feedCostBetween, feedKgBetween } from "@/lib/feed/usage-engine";
+import { animalCostParts } from "@/lib/cattle/cost-parts";
+import { daysOnFarm, saleReport } from "@/lib/cattle/closed";
+import { loadCostAtSale } from "@/lib/cattle/sale-snapshot";
+import { isOnFarm } from "@/lib/cattle/status";
 import { getL } from "@/i18n/server-text";
 
 
@@ -370,7 +377,7 @@ async function ProfileSection({ id }: { id: string }) {
       .not("active_from", "is", null),
     supabase
       .from("sales")
-      .select("sold_at, sale_price_total")
+      .select("sold_at, sale_price_total, weight_at_sale_kg, buyer_name, sale_group_id")
       .eq("cattle_id", id)
       .is("deleted_at", null)
       .order("sold_at", { ascending: false })
@@ -405,11 +412,23 @@ async function ProfileSection({ id }: { id: string }) {
   const c = cattleData as Cattle;
 
   // bought / sold together with others at one price (each animal carries its share)
-  const [purchaseGroup, saleGroup, ctx] = await Promise.all([
+  const onFarm = isOnFarm(c.status);
+  const [purchaseGroup, saleGroup, ctx, deathRec, costAtSale] = await Promise.all([
     loadAnimalPurchaseGroup(supabase, businessId, c.id),
     c.status === "sold" ? loadAnimalSaleGroup(supabase, businessId, c.id) : Promise.resolve(null),
     getBusinessContext(supabase).catch(() => null),
+    // the day it died / went missing, and why
+    onFarm ? Promise.resolve(null) : (supabase as unknown as SupabaseClient<any>).from("cattle_death_records").select("death_date, cause_of_death")
+      .eq("cattle_id", c.id).eq("business_id", businessId).maybeSingle()
+      .then((r) => r.data as { death_date: string; cause_of_death: string | null } | null),
+    c.status === "sold" ? loadCostAtSale(supabase, businessId, c.id) : Promise.resolve({} as Record<string, number>),
   ]);
+  const sale = latestSaleData as { sold_at: string; sale_price_total: number | string; weight_at_sale_kg: number | string | null; buyer_name: string | null; sale_group_id: string | null } | null;
+  // the day it left the farm: its sale, its recorded death; for other exits the last change of its record
+  const leftOn: string | null = onFarm ? null
+    : c.status === "sold" && sale?.sold_at ? String(sale.sold_at).slice(0, 10)
+    : deathRec?.death_date ? String(deathRec.death_date).slice(0, 10)
+    : c.updated_at ? String(c.updated_at).slice(0, 10) : null;
   const canEditCattle = ctx ? hasPermission(ctx, PERMISSIONS.CATTLE_EDIT) : false;
   const canSell = ctx ? hasPermission(ctx, PERMISSIONS.CATTLE_SELL) : false;
 
@@ -507,9 +526,10 @@ async function ProfileSection({ id }: { id: string }) {
   // This way overhead is stable — 2 cattle or 20, each animal only pays for
   // the days it occupied the pen.
 
-  const endMs = (c.status === "active" || !c.updated_at) ? nowMs : new Date(c.updated_at).getTime();
+  // on the farm: up to now; gone: up to the day it left (never a later edit of its record)
+  const endMs = leftOn ? new Date(leftOn + "T00:00:00").getTime() : nowMs;
   const startMs = new Date(c.purchase_date + "T00:00:00").getTime();
-  const daysInPen = Math.max(0, Math.floor((endMs - startMs) / 86400000));
+  const daysInPen = leftOn ? daysOnFarm(c.purchase_date, leftOn) : Math.max(0, Math.floor((endMs - startMs) / 86400000));
 
   // Overhead cost calculation removed. Cattle profiles now show direct margin.
 
@@ -638,10 +658,11 @@ async function ProfileSection({ id }: { id: string }) {
   const totalFeedCost = actualFeedCost;
 
   const overheadCost = 0;
-  const ownTotal = Number(c.purchase_price) + totalFeedCost + medicalCost + otherIndividualCost;
-  const totalCost = fa?.fullCost ?? ownTotal;
+  // one split for the header, the cost timeline and the cattle list (lib/cattle/cost-parts.ts)
+  const costParts = animalCostParts({ fullCost: fa?.fullCost, purchase: Number(c.purchase_price ?? 0), feed: totalFeedCost, medical: medicalCost, other: otherIndividualCost });
+  const totalCost = costParts.total;
   // feed + the farm's running costs shared to this animal (what the full cost adds to purchase and own costs)
-  const farmShare = fa ? Math.max(0, fa.fullCost - Number(c.purchase_price ?? 0) - medicalCost - otherIndividualCost) : null;
+  const farmShare = costParts.farmShare;
   // Marginal cost = everything spent AFTER purchase (feed, vet, transport, etc.)
   // Used for "cost per kg gained" — purchase price is excluded because it's a sunk
   // cost paid regardless of how much weight the animal gains.
@@ -721,10 +742,10 @@ async function ProfileSection({ id }: { id: string }) {
         subtitle={[c.gender === "male" ? t.cattle_details.table.gender_male : t.cattle_details.table.gender_female, c.breed].filter(Boolean).join(" · ")}
         badges={{ ready: !!hm?.readyToSell, quarantined: !!c.is_quarantined, qurbani: !!c.is_qurbani_marked }}
         actions={<>
-          {/* Undo Sale — time-limited */}
-          {c.status === "sold" && !saleGroup && latestSaleData?.sold_at &&
-            nowMs - new Date(latestSaleData.sold_at).getTime() <= 7 * 86400000 && (
-            <UndoSaleButton cattleId={c.id} tagId={c.tag_id} soldAt={latestSaleData.sold_at} />
+          {/* one sale form for the whole app (also used by the cattle list) */}
+          {onFarm && canSell && (
+            <SellAnimalButton id={c.id} tag={c.tag_id} lastKg={hm?.weightKg ?? (latestWeight || null)} costSoFar={totalCost}
+              lang={locale} label={t.cattle_details.dialogs.record_sale} />
           )}
           <EditCattleDialog
             cattle={{
@@ -769,9 +790,6 @@ async function ProfileSection({ id }: { id: string }) {
           breakEvenPerKg: (hm?.weightKg ?? latestWeight) > 0 ? totalCost / (hm?.weightKg ?? latestWeight) : null,
         }}
         value={c.status === "active" && hm ? { worth: hm.valueToday, profit: hm.profitToday } : null}
-        realised={c.status === "sold"
-          ? { kind: "sold", salePrice: latestSaleData?.sale_price_total != null ? Number(latestSaleData.sale_price_total) : null, result: latestSaleData?.sale_price_total != null ? Number(latestSaleData.sale_price_total) - totalCost : -totalCost }
-          : c.status === "dead" || c.status === "stolen" ? { kind: "dead", salePrice: null, result: -totalCost } : null}
         perKg={{
           cost: weightGain > 0 && gainWindowCost > 0 ? gainWindowCost / weightGain : null,
           feed: weightGain > 0 && gainWindowFeed > 0 ? gainWindowFeed / weightGain : null,
@@ -780,15 +798,41 @@ async function ProfileSection({ id }: { id: string }) {
           ? { title: nextHealthData.title, date: String(nextHealthData.scheduled_at).slice(0, 10), overdue: String(nextHealthData.scheduled_at).slice(0, 10) < todayDhaka() }
           : null}
         notes={c.notes ?? null}
+        report={onFarm ? undefined : (
+          <ClosedReport
+            lang={locale}
+            kind={c.status === "sold" || c.status === "dead" || c.status === "stolen" ? c.status : "gone"}
+            date={leftOn}
+            buyer={sale?.buyer_name ?? null}
+            cause={deathRec?.cause_of_death ?? null}
+            purchaseDate={c.purchase_date}
+            days={leftOn ? daysInPen : null}
+            parts={costParts}
+            costLabels={{ purchase: t.cattle_profile.purchase, feed: t.cattle_profile.feed, farmShare: t.cattle_profile.farm_share, medical: t.cattle_profile.medical, other: t.cattle_profile.other }}
+            sale={c.status === "sold" && sale ? saleReport({
+              salePrice: Number(sale.sale_price_total), cost: totalCost, costAtSale: costAtSale[c.id] ?? null,
+              purchaseDate: c.purchase_date, soldOn: String(sale.sold_at).slice(0, 10),
+              saleWeightKg: sale.weight_at_sale_kg == null ? null : Number(sale.weight_at_sale_kg),
+              animal: c, logs,
+            }) : null}
+            initial={{ kg: c.initial_weight_kg ?? null, estimated: c.initial_weight_type === "estimated" }}
+            lastWeighed={measured.length ? { kg: Number(measured.at(-1)!.weight_kg), date: String(measured.at(-1)!.recorded_at).slice(0, 10) } : null}
+            undo={c.status === "sold" && sale && canSell ? (
+              <UndoSaleControl cattleId={c.id} tag={c.tag_id} groupId={sale.sale_group_id} lang={locale}
+                tags={saleGroup?.lines.length ? saleGroup.lines.map((l) => l.tag) : [c.tag_id]} />
+            ) : undefined}
+          />
+        )}
       />
 
       <CattleDetailTabs
-        defaultTab={c.status === "active" ? "weight" : "overview"}
+        defaultTab={onFarm ? "weight" : "overview"}
         overview={
           <>
-            {saleGroup && <SaleGroupCard sale={saleGroup} cattleId={c.id} lang={locale} canUndo={canSell} />}
+            {saleGroup && saleGroup.lines.length > 1 && <SaleGroupCard sale={saleGroup} cattleId={c.id} lang={locale} canUndo={false} />}
             {purchaseGroup && <PurchaseGroupCard group={purchaseGroup} cattleId={c.id} lang={locale} canEdit={canEditCattle} />}
-            <DailyFeedRequirementCard
+            {/* what it should eat today — only while it is on the farm */}
+            {onFarm && <DailyFeedRequirementCard
               cattleId={c.id}
               initialWeightKg={c.initial_weight_kg ?? 0}
               latestLoggedWeightKg={latestWeight}
@@ -797,7 +841,7 @@ async function ProfileSection({ id }: { id: string }) {
               expectedDailyGainKg={c.expected_daily_gain_kg ?? 0.8}
               roughageOverrideKg={(c.manual_feed_override as { roughageKg?: number } | null)?.roughageKg ?? null}
               activeRoughage={currentRoughage}
-            />
+            />}
             <WeightSection
               cattleId={c.id}
               cattleStatus={c.status}
@@ -840,7 +884,8 @@ async function ProfileSection({ id }: { id: string }) {
               initialWeight={c.initial_weight_kg}
               totalConsumed={actualFeedKgForGain}
             />
-            <GrowthForecastCard
+            {/* forecasts and "sell at" estimates — only while it is on the farm */}
+            {onFarm && <GrowthForecastCard
               initialWeight={c.initial_weight_kg}
               currentWeight={latestWeight}
               estimatedWeightToday={hm?.weightKg ?? estimatedWeightToday}
@@ -852,11 +897,11 @@ async function ProfileSection({ id }: { id: string }) {
               breedAverageAdg={breedAverageAdg}
               breed={c.breed}
               defaultMarketPrice={marketPriceData?.price_per_kg}
-            />
+            />}
           </>
         }
-        feed={
-          <DailyFeedRequirementCard
+        feed={onFarm
+          ? <DailyFeedRequirementCard
             cattleId={c.id}
             initialWeightKg={c.initial_weight_kg ?? 0}
             latestLoggedWeightKg={latestWeight}
@@ -866,6 +911,7 @@ async function ProfileSection({ id }: { id: string }) {
             roughageOverrideKg={(c.manual_feed_override as { roughageKg?: number } | null)?.roughageKg ?? null}
             activeRoughage={currentRoughage}
           />
+          : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">{L("এই গরু আর খামারে নেই, তাই দৈনিক খাবারের চাহিদা দেখানো হয় না। খামারে থাকাকালীন খাবারের খরচ \"টাকার হিসাব\" ট্যাবে আছে।", "This animal is no longer on the farm, so no daily feed need is shown. The feed it ate while here is in the Money tab.")}</p>
         }
         finance={
           <>
@@ -909,6 +955,8 @@ async function ProfileSection({ id }: { id: string }) {
               individualCosts={individualCosts}
               overheadCost={overheadCost}
               allocatedFeedCost={0 /* the timeline shows actual costs only; the estimate is shown separately */}
+              farmShare={farmShare}
+              farmShareUntil={fa?.endDate ?? null}
               allocatedConcentrateKg={allocatedConcentrateKg}
               allocatedRoughageKg={allocatedRoughageKg}
               activeRoughage={currentRoughage}

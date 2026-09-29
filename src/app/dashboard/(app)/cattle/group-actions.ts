@@ -14,6 +14,7 @@ import {
   type SplitMethod, type SplitResult, type MemberEvidence, type Basis,
 } from "@/lib/cattle/cost-split";
 import { loadPurchaseGroupMembers } from "@/lib/cattle/groups";
+import { keepCostAtSale } from "@/lib/cattle/sale-snapshot";
 
 /**
  * One purchase or sale of several animals at one price. The database functions
@@ -315,6 +316,8 @@ export async function sellCattleGroup(input: GroupSaleInput): Promise<Result<{ g
       p_lines: lines.map((l) => ({ cattle_id: l.cattleId, weight_kg: Number(l.weightKg) > 0 ? Number(l.weightKg) : null, price: split.amounts[l.cattleId] })),
     });
     if (error || !data) return { ok: false, error: await friendly(error?.message) };
+    // keep each animal's full cost as of the sale (reference for later changes; never blocks the sale)
+    await keepCostAtSale(supabase as SupabaseClient<any>, ctx.businessId, String(data), lines.map((l) => l.cattleId));
     touch(lines.map((l) => l.cattleId));
     return { ok: true, groupId: String(data), shares: split.amounts };
   } catch (e) {

@@ -3,6 +3,7 @@ import { ArrowLeft, HeartPulse, Receipt, Scale, Target, TrendingDown, TrendingUp
 import { cn } from "@/lib/utils";
 import type { Dictionary } from "@/i18n/getDictionary";
 import type { WeightBasis } from "@/lib/home/home-model";
+import { CostBar } from "./CostBar";
 
 type TP = Dictionary["cattle_profile"];
 type TH = Dictionary["home"];
@@ -25,11 +26,12 @@ export type ProfileHeroProps = {
   /** farmShare: the feed and running costs shared by taka × days (the farm position) — when set, "feed" is not shown apart */
   cost: { total: number; purchase: number; feed: number; medical: number; other: number; running: number; planReference: number | null; breakEvenPerKg: number | null; farmShare?: number | null };
   value: { worth: number | null; profit: number | null } | null;                       // active animals (estimates)
-  realised: { kind: "sold" | "dead"; salePrice: number | null; result: number } | null;  // sold / dead
   perKg: { cost: number | null; feed: number | null };
   nextHealth: { title: string; date: string; overdue: boolean } | null;
   notes: string | null;
   id: string;
+  /** an animal that has left the farm: its report replaces the day-to-day panels and quick actions */
+  report?: React.ReactNode;
 };
 
 function Estimate({ th }: { th: TH }) {
@@ -49,15 +51,6 @@ export function CattleProfileHero(p: ProfileHeroProps) {
   const { tp, th } = p;
   const basis = p.weight.basis === "measured" ? th.measured : p.weight.basis === "projected" ? th.projected : p.weight.basis === "estimated" ? th.estimated : th.not_weighed;
   const tierClass = { good: "text-emerald-700 dark:text-emerald-400", fair: "text-amber-700 dark:text-amber-400", poor: "text-red-600 dark:text-red-400", none: "text-muted-foreground" }[p.adg.tier];
-  const segments = [
-    { label: tp.purchase, amount: p.cost.purchase, color: "bg-blue-500" },
-    p.cost.farmShare != null
-      ? { label: tp.farm_share, amount: p.cost.farmShare, color: "bg-amber-500" }
-      : { label: tp.feed, amount: p.cost.feed, color: "bg-amber-500" },
-    { label: tp.medical, amount: p.cost.medical, color: "bg-red-400" },
-    { label: tp.other, amount: p.cost.other, color: "bg-slate-400" },
-  ].filter((s) => s.amount > 0);
-
   return (
     <div className="w-full min-w-0 space-y-4">
       {/* header */}
@@ -81,6 +74,7 @@ export function CattleProfileHero(p: ProfileHeroProps) {
         <div className="flex shrink-0 items-center gap-2">{p.actions}</div>
       </header>
 
+      {p.report ?? (<>
       {/* quick actions */}
       <nav className="grid grid-cols-3 gap-2" aria-label={tp.quick_actions}>
         {[
@@ -159,28 +153,12 @@ export function CattleProfileHero(p: ProfileHeroProps) {
               <div className="flex justify-between gap-2"><dt className="text-muted-foreground">{th.profit}<Estimate th={th} /></dt>
                 <dd className={cn("font-semibold tabular-nums", p.value.profit == null ? "" : p.value.profit >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{taka(p.value.profit)}</dd></div>
             </>)}
-            {p.realised && (<>
-              {p.realised.salePrice != null && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">{tp.sale_price}</dt><dd className="font-medium tabular-nums">{taka(p.realised.salePrice)}</dd></div>}
-              <div className="flex justify-between gap-2"><dt className="text-muted-foreground">{p.realised.kind === "dead" ? tp.loss : tp.result}</dt>
-                <dd className={cn("font-semibold tabular-nums", p.realised.result >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{taka(p.realised.result)}</dd></div>
-            </>)}
             <div className="flex justify-between gap-2"><dt className="text-muted-foreground">{tp.break_even}</dt><dd className="tabular-nums">{p.cost.breakEvenPerKg != null ? `${taka(p.cost.breakEvenPerKg)}/kg` : "—"}</dd></div>
           </dl>
-          {p.cost.total > 0 && segments.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <div className="flex h-2 w-full gap-px overflow-hidden rounded-full bg-muted">
-                {segments.map((s) => <div key={s.label} className={cn("h-full", s.color)} style={{ width: `${(s.amount / p.cost.total) * 100}%` }} title={`${s.label}: ${taka(s.amount)}`} />)}
-              </div>
-              <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                {segments.map((s) => (
-                  <li key={s.label} className="flex items-center justify-between gap-1">
-                    <span className="flex items-center gap-1"><span className={cn("inline-block h-2 w-2 rounded-full", s.color)} />{s.label}</span>
-                    <span className="tabular-nums">{taka(s.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="mt-3">
+            <CostBar parts={{ total: p.cost.total, purchase: p.cost.purchase, feed: p.cost.farmShare != null ? null : p.cost.feed, farmShare: p.cost.farmShare ?? null, medical: p.cost.medical, other: p.cost.other }}
+              labels={{ purchase: tp.purchase, feed: tp.feed, farmShare: tp.farm_share, medical: tp.medical, other: tp.other }} />
+          </div>
           {(p.cost.running > 0 || p.cost.planReference != null) && (
             <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
               {p.cost.running > 0 && <span className="block text-amber-700 dark:text-amber-400">{fill(tp.running, { amount: taka(p.cost.running) })}</span>}
@@ -189,6 +167,7 @@ export function CattleProfileHero(p: ProfileHeroProps) {
           )}
         </Panel>
       </div>
+      </>)}
 
       {p.notes && (
         <Panel title={tp.notes}><p className="whitespace-pre-line text-sm leading-relaxed">{p.notes}</p></Panel>

@@ -43,7 +43,7 @@ describe("quarantine is a flag on an animal still on the farm", () => {
     expect(q.status).toBe("active");
     expect(q.quarantined).toBe(true);
     expect(q.realised).toBeNull();
-    expect(matchesFilter(q, "past", TODAY)).toBe(false);
+    expect(matchesFilter(q, "lost", TODAY)).toBe(false);
     expect(matchesFilter(q, "quarantine", TODAY)).toBe(true);
     expect(q.metrics?.tag).toBe("Q-1");
   });
@@ -54,11 +54,11 @@ describe("animals that left", () => {
     const d = by("D");
     expect(d.realised).toMatchObject({ kind: "dead", date: "2026-09-10", cause: "Bloat", result: -60000 });
     expect(d.nextHealth).toBeNull();
-    expect(matchesFilter(d, "past", TODAY)).toBe(true);
+    expect(matchesFilter(d, "lost", TODAY)).toBe(true);
   });
   test("a stolen animal carries the day it went missing and its whole cost as a loss", () => {
     expect(by("S").realised).toMatchObject({ kind: "stolen", date: "2026-09-12", result: -50000 });
-    expect(matchesFilter(by("S"), "past", TODAY)).toBe(true);
+    expect(matchesFilter(by("S"), "lost", TODAY)).toBe(true);
   });
   test("other exits without a record are 'gone', not labelled dead", () => {
     expect(by("X").realised?.kind).toBe("gone");

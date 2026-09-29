@@ -113,6 +113,7 @@ export function GroupSaleDialog({ animals, lang, onClose, onDone }: {
             })}
           </ol>
 
+          {!allWeights && <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">{g.weight_hint}</p>}
           {!one && <SumCheck lang={lang} total={totalN} sum={sum} />}
           <dl className="grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-3 text-sm">
             <div><dt className="text-xs text-muted-foreground">{g.total_cost}</dt><dd className="font-semibold tabular-nums">{takaG(totalCost)}</dd></div>

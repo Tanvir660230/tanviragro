@@ -69,7 +69,7 @@ test("a sold animal shows its realised result: sale price − purchase − feed 
 test("filters", () => {
   const ids = (f: Parameters<typeof matchesFilter>[1]) => board.animals.filter((a) => matchesFilter(a, f, TODAY)).map((a) => a.id);
   expect(ids("all")).toEqual(["A", "B"]);
-  expect(ids("past")).toEqual(["S"]);
+  expect(ids("sold")).toEqual(["S"]);
   expect(ids("quarantine")).toEqual(["B"]);
   expect(ids("health")).toEqual(["B"]);
   expect(ids("weigh")).toEqual(["A", "B"]);          // A 23 days, B never weighed

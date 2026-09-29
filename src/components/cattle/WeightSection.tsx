@@ -4,7 +4,6 @@ import { useOptimistic, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Scale } from "lucide-react";
 import { AddWeightDialog, type WeightLogRow } from "./AddWeightDialog";
-import { RecordSaleDialog } from "./RecordSaleDialog";
 import { WeightChart } from "./WeightChart";
 import { WeightLogTable } from "./WeightLogTable";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -148,15 +147,13 @@ export function WeightSection({
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          {cattleStatus === "active" && (
-            <>
-              <RecordSaleDialog cattleId={cattleId} currentWeight={latestWeight} />
-            </>
+          {/* selling is on the animal's header (one sale form for the whole app); no weighing once it has left */}
+          {(cattleStatus === "active" || cattleStatus === "quarantined") && (
+            <AddWeightDialog
+              cattleId={cattleId}
+              onOptimisticAdd={handleOptimisticAdd}
+            />
           )}
-          <AddWeightDialog
-            cattleId={cattleId}
-            onOptimisticAdd={handleOptimisticAdd}
-          />
         </div>
       </div>
 
