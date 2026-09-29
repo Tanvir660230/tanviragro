@@ -75,106 +75,11 @@ export async function createWeightLog(
   }
 }
 
-export type SaleFormState = { error?: string; success?: boolean } | undefined;
-
 const SALE_CANCEL_NOTE = "Auto-cancelled due to animal sale";
 
-export async function recordSale(
-  _prevState: SaleFormState,
-  formData: FormData
-): Promise<SaleFormState> {
-  try {
-    const supabase = await createClient();
-    const ctx = await getBusinessContext(supabase);
-    requirePermission(ctx, PERMISSIONS.CATTLE_SELL);
-
-    const cattle_id = (formData.get("cattle_id") as string)?.trim();
-    const sale_price_total = parseFloat(formData.get("sale_price_total") as string);
-    const weight_at_sale_kg = parseFloat(formData.get("weight_at_sale_kg") as string);
-    const sold_at = formData.get("sold_at") as string;
-    const buyer_name = (formData.get("buyer_name") as string)?.trim() || null;
-
-    if (!cattle_id) return { error: "Invalid cattle" };
-    if (isNaN(sale_price_total) || sale_price_total <= 0)
-      return { error: "Enter a valid sale price" };
-    if (isNaN(weight_at_sale_kg) || weight_at_sale_kg <= 0)
-      return { error: "Enter a valid weight at sale" };
-    if (!sold_at) return { error: "Sale date is required" };
-
-    const cattleRow = await assertResourceOwnership<Cattle>(supabase, "cattle", cattle_id, ctx.businessId);
-    CattleDomainService.assertSaleEligibility(cattleRow.tag_id, cattleRow.status);
-
-    const lockErr = await checkFinancialLock(supabase, ctx.businessId, sold_at);
-    if (lockErr) return { error: lockErr };
-
-    const { count: activeSales } = await supabase
-      .from("sales")
-      .select("id", { count: "exact", head: true })
-      .eq("cattle_id", cattle_id)
-      .is("deleted_at", null);
-    if ((activeSales ?? 0) > 0) return { error: "This animal already has a recorded sale." };
-
-    const { data: sale, error: saleError } = await supabase
-      .from("sales")
-      .insert({
-        cattle_id,
-        sold_at,
-        sale_price_total,
-        weight_at_sale_kg,
-        buyer_name,
-      })
-      .select("id")
-      .single();
-
-    if (saleError || !sale) return { error: "Failed to record sale. Please try again." };
-
-    // Conditional update: only one concurrent sale can flip active -> sold.
-    // If we lose (0 rows) or the update fails, remove our sale row so no orphan remains.
-    // (Full atomicity comes with the sell_cattle RPC, plan task 3.2.)
-    const { data: flipped, error: updateError } = await supabase
-      .from("cattle")
-      .update({ status: "sold" })
-      .eq("id", cattle_id)
-      .eq("status", "active")
-      .select("id");
-
-    if (updateError || !flipped?.length) {
-      await supabase.from("sales").delete().eq("id", sale.id);
-      return {
-        error: updateError
-          ? "Failed to record sale. Please try again."
-          : "This animal is no longer active (it may have just been sold).",
-      };
-    }
-
-    // no more vaccine / task reminders for an animal that has left (undoing the sale brings them back)
-    await supabase
-      .from("health_events")
-      .update({ deleted_at: new Date().toISOString(), notes: SALE_CANCEL_NOTE })
-      .eq("cattle_id", cattle_id)
-      .eq("business_id", ctx.businessId)
-      .is("completed_at", null)
-      .is("deleted_at", null);
-
-    await LivestockEventBus.publish(
-      "CattleSold",
-      ctx.businessId,
-      cattle_id,
-      { salePriceTotal: sale_price_total, weightAtSaleKg: weight_at_sale_kg, soldAt: sold_at, buyerName: buyer_name },
-      ctx.user?.id
-    ).catch(() => {});
-
-    revalidatePath(`/dashboard/cattle/${cattle_id}`);
-    revalidatePath("/dashboard/cattle");
-    revalidatePath("/dashboard/finance");
-    revalidatePath("/dashboard");
-    revalidateTag("accounting", { expire: 0 });
-    return { success: true };
-  } catch (err: unknown) {
-    return { error: err instanceof Error ? err.message : "Failed to record sale" };
-  }
-}
-
+// Selling is done only through sellCattleGroup (group-actions.ts → sell_cattle_group, one
+// transaction), for one animal or several. revertSale undoes a sale recorded before that
+// (no sale group); a group sale is undone with revertSaleGroup.
 export async function revertSale(
   cattleId: string
 ): Promise<{ error?: string; success?: boolean }> {

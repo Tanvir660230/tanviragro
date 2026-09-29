@@ -1,5 +1,5 @@
 /**
- * recordSale / revertSale behaviour with a scripted fake Supabase client.
+ * revertSale behaviour (sales recorded before sale groups) with a scripted fake Supabase client.
  * Each awaited query is matched against `responders` by table + operation.
  */
 type Call = { table: string; op: string; payload?: unknown; filters: [string, string, unknown][] };
@@ -51,16 +51,8 @@ jest.mock("@/lib/utils/financialLock", () => ({ checkFinancialLock: (...a: unkno
 jest.mock("@/lib/livestock/events", () => ({ LivestockEventBus: { publish: async () => {} } }));
 jest.mock("@/lib/services/cattle.service", () => ({ CattleDomainService: { assertSaleEligibility: () => {}, validateWeightLog: () => {} } }));
 
-import { recordSale, revertSale } from "@/app/dashboard/(app)/cattle/[id]/actions";
+import { revertSale } from "@/app/dashboard/(app)/cattle/[id]/actions";
 
-function saleForm() {
-  const fd = new FormData();
-  fd.set("cattle_id", "cow-1");
-  fd.set("sale_price_total", "150000");
-  fd.set("weight_at_sale_kg", "320");
-  fd.set("sold_at", "2026-09-20");
-  return fd;
-}
 const find = (table: string, op: string) => calls.filter((c) => c.table === table && c.op === op);
 
 beforeEach(() => {
@@ -68,58 +60,6 @@ beforeEach(() => {
   responders = [];
   mockCattle.status = "active";
   mockLock.mockResolvedValue(null);
-});
-
-describe("recordSale", () => {
-  test("happy path: inserts one sale and flips status only if still active", async () => {
-    responders = [
-      (c) => (c.table === "sales" && c.op === "select" ? { count: 0 } : undefined),
-      (c) => (c.table === "sales" && c.op === "insert" ? { data: { id: "sale-1" } } : undefined),
-      (c) => (c.table === "cattle" && c.op === "update" ? { data: [{ id: "cow-1" }] } : undefined),
-    ];
-    await expect(recordSale(undefined, saleForm())).resolves.toEqual({ success: true });
-    const upd = find("cattle", "update")[0];
-    expect(upd.filters).toEqual(expect.arrayContaining([["eq", "status", "active"]]));
-    expect(find("sales", "delete")).toHaveLength(0);
-  });
-
-  test("refuses when an active sale already exists", async () => {
-    responders = [(c) => (c.table === "sales" && c.op === "select" ? { count: 1 } : undefined)];
-    const res = await recordSale(undefined, saleForm());
-    expect(res?.error).toMatch(/already has a recorded sale/);
-    expect(find("sales", "insert")).toHaveLength(0);
-  });
-
-  test("losing a concurrent race removes its own sale row", async () => {
-    responders = [
-      (c) => (c.table === "sales" && c.op === "select" ? { count: 0 } : undefined),
-      (c) => (c.table === "sales" && c.op === "insert" ? { data: { id: "sale-2" } } : undefined),
-      (c) => (c.table === "cattle" && c.op === "update" ? { data: [] } : undefined),
-    ];
-    const res = await recordSale(undefined, saleForm());
-    expect(res?.error).toMatch(/no longer active/);
-    const del = find("sales", "delete");
-    expect(del).toHaveLength(1);
-    expect(del[0].filters).toEqual([["eq", "id", "sale-2"]]);
-  });
-
-  test("status update failure leaves no orphan sale", async () => {
-    responders = [
-      (c) => (c.table === "sales" && c.op === "select" ? { count: 0 } : undefined),
-      (c) => (c.table === "sales" && c.op === "insert" ? { data: { id: "sale-3" } } : undefined),
-      (c) => (c.table === "cattle" && c.op === "update" ? { error: { message: "boom" } } : undefined),
-    ];
-    const res = await recordSale(undefined, saleForm());
-    expect(res?.error).toBeTruthy();
-    expect(find("sales", "delete")[0].filters).toEqual([["eq", "id", "sale-3"]]);
-  });
-
-  test("locked period blocks the sale before any write", async () => {
-    mockLock.mockResolvedValue("period locked");
-    const res = await recordSale(undefined, saleForm());
-    expect(res?.error).toBe("period locked");
-    expect(calls.filter((c) => c.op !== "select")).toHaveLength(0);
-  });
 });
 
 describe("revertSale", () => {

@@ -23,6 +23,7 @@ export const GROUP_TEXT = {
     // selling several
     s_title: "Sell {n} animals", s_title_one: "Sell {tag}", s_sub: "One price for the group. Each animal's share is its sale price, so each has its own profit or loss.",
     sale_weight: "Weight at sale (kg)", last: "last {kg}", cost: "Cost so far", profit: "Profit",
+    weight_hint: "Add the weight at sale if you can: it gives the price per kg and the animal's growth up to the sale. It is not required.",
     total_cost: "Total cost", total_profit: "Total profit",
     h_weight_sell: "Weigh each animal at the sale; the price is shared by those weights (how cattle are priced).",
     save_sell: "Record sale", ok_sell: "{n} sold for ৳{total}",
@@ -70,6 +71,7 @@ export const GROUP_TEXT = {
     need_total: "মোট দাম লিখুন", need_tags: "প্রতিটি গরুর ট্যাগ দিন",
     s_title: "{n}টি গরু বিক্রি", s_title_one: "{tag} বিক্রি", s_sub: "দলের এক দাম। প্রতিটি গরুর ভাগই তার বিক্রির দাম — তাই প্রত্যেকটির লাভ-ক্ষতি আলাদা।",
     sale_weight: "বিক্রির সময় ওজন (কেজি)", last: "শেষ {kg}", cost: "এ পর্যন্ত খরচ", profit: "লাভ",
+    weight_hint: "পারলে বিক্রির সময়ের ওজন দিন: এতে কেজিপ্রতি দাম আর বিক্রি পর্যন্ত গরুর বৃদ্ধি হিসাব হবে। না দিলেও চলবে।",
     total_cost: "মোট খরচ", total_profit: "মোট লাভ",
     h_weight_sell: "বিক্রির সময় প্রতিটি গরু মাপুন; সেই ওজনের অনুপাতে দাম ভাগ হবে (হাটে যেভাবে দাম হয়)।",
     save_sell: "বিক্রি লিখুন", ok_sell: "{n}টি বিক্রি হলো ৳{total}-তে",

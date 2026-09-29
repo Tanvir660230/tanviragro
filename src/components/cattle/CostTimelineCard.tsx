@@ -32,6 +32,11 @@ interface Props {
   allocatedConcentrateKg?: number;
   allocatedRoughageKg?: number;
   activeRoughage?: { id: string; name: string; unit: string } | null;
+  /** feed + the farm's running costs shared to this animal (lib/cattle/cost-parts.ts). When set,
+   *  it replaces the feed rows so the timeline total is the same full cost as the header and the list. */
+  farmShare?: number | null;
+  /** last day on the farm (sale / death date); today while on the farm */
+  farmShareUntil?: string | null;
 }
 
 function fmtDate(d: string) {
@@ -63,6 +68,8 @@ export function CostTimelineCard({
   allocatedConcentrateKg = 0,
   allocatedRoughageKg = 0,
   activeRoughage = null,
+  farmShare = null,
+  farmShareUntil = null,
 }: Props) {
   const L = useL();
   // Hooks must be before any early return
@@ -71,7 +78,7 @@ export function CostTimelineCard({
 
   const costedConsumptions = consumptions.filter((c) => c.unit_cost != null && c.unit_cost > 0);
 
-  if (costedConsumptions.length === 0 && purchasePrice === 0 && overheadCost === 0 && allocatedFeedCost === 0) return null;
+  if (costedConsumptions.length === 0 && purchasePrice === 0 && overheadCost === 0 && allocatedFeedCost === 0 && !farmShare) return null;
 
   type TimelineEvent = {
     sortDate: string;          // for ordering
@@ -104,7 +111,8 @@ export function CostTimelineCard({
     }
   }
 
-  const feedEvents: TimelineEvent[] = [...feedMap.values()].map((item) => ({
+  // with the farm share, feed is inside it (split per head per day) — a second feed figure would not add up
+  const feedEvents: TimelineEvent[] = farmShare != null ? [] : [...feedMap.values()].map((item) => ({
     sortDate: item.lastDate,
     displayDate: fmtDateRange(item.firstDate, item.lastDate),
     label: item.name,
@@ -115,7 +123,7 @@ export function CostTimelineCard({
 
   // Only show algorithmic estimate when there are no direct consumption logs.
   // If costed logs exist, the allocated cost would double-count the same feed.
-  if (allocatedFeedCost > 0 && costedConsumptions.length === 0) {
+  if (farmShare == null && allocatedFeedCost > 0 && costedConsumptions.length === 0) {
     feedEvents.push({
       sortDate: todayDhaka(),
       displayDate: t.cattle_details.smart.to_date_label,
@@ -179,6 +187,17 @@ export function CostTimelineCard({
           sublabel: t.cattle_details.smart.overhead_sub,
           amount: overheadCost,
           icon: "overhead" as const,
+        }]
+      : []),
+    // built up day by day, so shown last (like overhead)
+    ...(farmShare
+      ? [{
+          sortDate: lastDate + "Z",
+          displayDate: fmtDateRange(purchaseDate.slice(0, 10), farmShareUntil ?? todayDhaka()),
+          label: L("খাবার ও খামারের খরচের ভাগ", "Feed & share of farm costs"),
+          sublabel: L("প্রতিদিন খামারে থাকা গরুগুলোর মধ্যে সমান ভাগে", "shared equally among the animals on the farm each day"),
+          amount: farmShare,
+          icon: "feed" as const,
         }]
       : []),
   ].sort((a, b) => a.sortDate.localeCompare(b.sortDate));

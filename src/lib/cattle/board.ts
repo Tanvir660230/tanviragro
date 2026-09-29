@@ -1,12 +1,15 @@
 /**
  * Cattle list ("board") model — pure. Active animals use exactly the homepage calculation
  * (lib/home/home-model.ts), so the homepage, the list and the profile show the same figures.
- * Sold / dead animals get their realised result (sale price − full cost, or the loss).
+ * Sold / dead animals get their realised result (sale price − full cost, or the loss) and
+ * the days they were on the farm (lib/cattle/closed.ts — the same figures as their page).
  */
 import { buildHomeModel, WEIGH_EVERY_DAYS, type HomeCattle, type HomeInput } from "@/lib/home/home-model";
 import { alignHomeWithFarm } from "@/lib/home/farm-align";
 import type { FarmPosition } from "@/lib/partners/position";
 import { isOnFarm } from "@/lib/cattle/status";
+import { animalCostParts } from "@/lib/cattle/cost-parts";
+import { daysOnFarm } from "@/lib/cattle/closed";
 
 export type BoardRow = {
   id: string; tag_id: string; breed: string | null; gender: string | null; status: string;
@@ -15,7 +18,7 @@ export type BoardRow = {
   initial_weight_kg?: number | null; initial_weight_type?: string | null;
 };
 export type HealthEvent = { cattle_id: string; title: string; date: string };
-export type Sale = { cattle_id: string; sold_at: string; price: number };
+export type Sale = { cattle_id: string; sold_at: string; price: number; weightKg?: number | null; buyer?: string | null; costAtSale?: number | null };
 export type Death = { cattle_id: string; date: string; cause: string | null };
 
 export type BoardAnimal = {
@@ -26,7 +29,14 @@ export type BoardAnimal = {
   targetWeightKg: number | null;
   series: { date: string; kg: number; type: "measured" | "estimated" }[];
   nextHealth: { title: string; date: string; overdue: boolean } | null;
-  realised: { kind: "sold" | "dead" | "stolen" | "gone"; date: string | null; salePrice: number | null; cost: number; result: number; cause?: string | null } | null;
+  realised: {
+    kind: "sold" | "dead" | "stolen" | "gone"; date: string | null; salePrice: number | null; cost: number; result: number; cause?: string | null;
+    /** days from purchase to the day it left (null when that day is not recorded) */
+    days: number | null;
+    weightKg?: number | null; buyer?: string | null;
+    /** full cost when the sale was recorded (lib/cattle/sale-snapshot.ts) */
+    costAtSale?: number | null;
+  } | null;
 };
 
 export type BoardSummary = {
@@ -42,7 +52,10 @@ export type Board = { animals: BoardAnimal[]; summary: BoardSummary };
 export const SLOW_ADG_KG = 0.5;
 export const HEALTH_SOON_DAYS = 3;
 
-export type BoardFilter = "all" | "ready" | "weigh" | "health" | "slow" | "losing" | "quarantine" | "qurbani" | "past";
+/** "sold" and "lost" (died, stolen, gone) are the animals no longer on the farm */
+export type BoardFilter = "all" | "ready" | "weigh" | "health" | "slow" | "losing" | "quarantine" | "qurbani" | "sold" | "lost";
+
+export const CLOSED_FILTERS: BoardFilter[] = ["sold", "lost"];
 
 export function matchesFilter(a: BoardAnimal, f: BoardFilter, today: string): boolean {
   const m = a.metrics;
@@ -60,7 +73,8 @@ export function matchesFilter(a: BoardAnimal, f: BoardFilter, today: string): bo
     case "losing": return active && m?.profitToday != null && m.profitToday < 0;
     case "quarantine": return active && a.quarantined;
     case "qurbani": return active && a.qurbani;
-    case "past": return !active;
+    case "sold": return a.status === "sold";
+    case "lost": return !active && a.status !== "sold";
   }
 }
 
@@ -114,16 +128,20 @@ export function buildBoard(p: {
     const status = isOnFarm(r.status) ? "active" : r.status;
     let realised: BoardAnimal["realised"] = null;
     if (status !== "active") {
-      const cost = farmBy.get(r.id)?.fullCost ?? Number(r.purchase_price ?? 0) + (p.feedByAnimal[r.id] ?? 0) + (p.directCostByCattle[r.id] ?? 0);
+      // the same total the profile shows (lib/cattle/cost-parts.ts)
+      const cost = animalCostParts({ fullCost: farmBy.get(r.id)?.fullCost, purchase: Number(r.purchase_price ?? 0),
+        feed: p.feedByAnimal[r.id] ?? 0, medical: 0, other: p.directCostByCattle[r.id] ?? 0 }).total;
       const sale = saleBy.get(r.id);
       const death = deathBy.get(r.id);
+      const days = (d: string | null | undefined) => (d ? daysOnFarm(r.purchase_date, d) : null);
       realised = status === "sold" && sale
-        ? { kind: "sold", date: sale.sold_at, salePrice: sale.price, cost, result: sale.price - cost }
+        ? { kind: "sold", date: sale.sold_at, salePrice: sale.price, cost, result: sale.price - cost, days: days(sale.sold_at),
+            weightKg: sale.weightKg ?? null, buyer: sale.buyer ?? null, costAtSale: sale.costAtSale ?? null }
         : status === "dead"
-          ? { kind: "dead", date: death?.date ?? null, salePrice: null, cost, result: -cost, cause: death?.cause ?? null }
+          ? { kind: "dead", date: death?.date ?? null, salePrice: null, cost, result: -cost, cause: death?.cause ?? null, days: days(death?.date) }
           : status === "stolen"
-            ? { kind: "stolen", date: death?.date ?? null, salePrice: null, cost, result: -cost, cause: death?.cause ?? null }
-            : { kind: status === "sold" ? "sold" : "gone", date: null, salePrice: null, cost, result: -cost };
+            ? { kind: "stolen", date: death?.date ?? null, salePrice: null, cost, result: -cost, cause: death?.cause ?? null, days: days(death?.date) }
+            : { kind: status === "sold" ? "sold" : "gone", date: null, salePrice: null, cost, result: -cost, days: null };
     }
     return {
       id: r.id, tag: r.tag_id, breed: r.breed, gender: r.gender, status,

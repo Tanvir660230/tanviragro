@@ -5,14 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, ArrowUpDown, Banknote, Beef, CalendarCheck, CheckSquare, ChevronDown, Download, FileSpreadsheet, HeartPulse,
+  AlertTriangle, ArrowUpDown, Banknote, Beef, CalendarCheck, CheckSquare, Download, FileSpreadsheet, HeartPulse,
   HandCoins, Layers, LayoutGrid, ListChecks, Moon, MoreHorizontal, Scale, Search, ShieldAlert, ShieldCheck, Skull, Square, Table2, Target, TrendingUp, Wallet, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDay } from "@/lib/format";
 import type { Dictionary } from "@/i18n/getDictionary";
 import type { Board, BoardAnimal, BoardFilter, BoardSort } from "@/lib/cattle/board";
-import { matchesFilter, sortAnimals } from "@/lib/cattle/board";
+import { CLOSED_FILTERS, matchesFilter, sortAnimals } from "@/lib/cattle/board";
+import { ClosedList, CLOSED_TEXT } from "@/components/cattle/ClosedList";
 import { AddCattleDialog } from "@/components/cattle/AddCattleDialog";
 import { BulkWeightDialog } from "@/components/cattle/BulkWeightDialog";
 import { BulkCostDialog } from "@/components/cattle/BulkCostDialog";
@@ -310,6 +311,7 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
   today: string; openWeigh: boolean; openAdd: boolean; perms: CattlePerms; lang: CattleLang; tb: TB; th: TH;
 }) {
   const t = CATTLE_TEXT[lang];
+  const tc = CLOSED_TEXT[lang];
   const router = useRouter();
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [sort, setSort] = useState<BoardSort>("tag");
@@ -324,16 +326,19 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
   const filters: { id: BoardFilter; label: string }[] = [
     { id: "all", label: tb.f_all }, { id: "ready", label: tb.f_ready }, { id: "weigh", label: tb.f_weigh },
     { id: "health", label: tb.f_health }, { id: "slow", label: tb.f_slow }, { id: "losing", label: tb.f_losing },
-    { id: "quarantine", label: tb.f_quarantine }, { id: "qurbani", label: tb.f_qurbani }, { id: "past", label: tb.f_past },
+    { id: "quarantine", label: tb.f_quarantine }, { id: "qurbani", label: tb.f_qurbani },
+    // the animals that have left: each its own view with its totals
+    { id: "sold", label: tc.f_sold }, { id: "lost", label: tc.f_lost },
   ];
   const counts = useMemo(() => Object.fromEntries(filters.map((f) => [f.id, board.animals.filter((a) => matchesFilter(a, f.id, today)).length])), [board, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const closedView = CLOSED_FILTERS.includes(filter);
 
   const needle = q.trim().toLowerCase();
-  const shown = useMemo(() => sortAnimals(board.animals.filter((a) => a.status === "active" && filter !== "past" && matchesFilter(a, filter, today)
+  const shown = useMemo(() => sortAnimals(board.animals.filter((a) => a.status === "active" && !CLOSED_FILTERS.includes(filter) && matchesFilter(a, filter, today)
     && (!needle || a.tag.toLowerCase().includes(needle) || (a.breed ?? "").toLowerCase().includes(needle))), sort), [board, filter, sort, needle, today]);
   const active = board.animals.filter((a) => a.status === "active");
   const activeOptions = active.map((a) => ({ id: a.id, tag_id: a.tag }));
-  const past = board.animals.filter((a) => a.status !== "active" && (!needle || a.tag.toLowerCase().includes(needle)));
+  const closed = closedView ? board.animals.filter((a) => matchesFilter(a, filter, today) && (!needle || a.tag.toLowerCase().includes(needle))) : [];
 
   const canSelect = perms.weigh || perms.health || perms.cost || perms.sell || perms.edit;
   const toggle = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -446,7 +451,7 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
               </button>
             ))}
           </div>
-          {canSelect && active.length > 0 && (
+          {canSelect && active.length > 0 && !closedView && (
             <button type="button" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}
               className={cn("inline-flex h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium",
                 selecting ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground")}>
@@ -455,7 +460,7 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
           )}
         </div>
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist">
-          {filters.map((f) => (
+          {filters.filter((f) => !CLOSED_FILTERS.includes(f.id) || counts[f.id] > 0 || filter === f.id).map((f) => (
             <button key={f.id} type="button" role="tab" aria-selected={filter === f.id} onClick={() => setFilter(f.id)}
               className={cn("flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors",
                 filter === f.id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>
@@ -472,7 +477,9 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
       </div>
 
       {/* the animals */}
-      {filter === "past" ? null : shown.length === 0 ? (
+      {closedView ? (
+        <ClosedList kind={filter === "sold" ? "sold" : "lost"} animals={closed} lang={lang} />
+      ) : shown.length === 0 ? (
         <p className="flex items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-sm text-muted-foreground"><AlertTriangle className="h-4 w-4" aria-hidden />{tb.no_match}</p>
       ) : view === "table" ? (
         <AnimalTable list={shown} tb={tb} th={th} t={t} lang={lang} perms={perms} selecting={selecting} picked={picked}
@@ -484,41 +491,6 @@ export function CattleBoard({ board, existingTagIds, allBreeds, today, openWeigh
               selecting={selecting} picked={picked.has(a.id)} onToggle={() => toggle(a.id)} onAction={onAction} />
           ))}
         </div>
-      )}
-
-      {/* sold, dead and gone */}
-      {past.length > 0 && (
-        <details open={filter === "past"} className="group rounded-xl border border-border bg-card shadow-card">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-4 text-sm font-semibold">
-            {t.past_title} · {past.length}
-            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
-          </summary>
-          <ul className="divide-y divide-border/60 border-t border-border/60">
-            {past.map((a) => {
-              const r = a.realised;
-              const badge = a.status === "sold" ? (r?.date ? fill(tb.sold_on, { date: fmtDay(r.date, lang) }) : tb.badge_sold)
-                : a.status === "dead" ? (r?.date ? fillC(t.died_on, { date: fmtDay(r.date, lang) }) : tb.badge_dead)
-                : a.status === "stolen" ? (r?.date ? fillC(t.stolen_on, { date: fmtDay(r.date, lang) }) : t.badge_stolen)
-                : t.badge_gone;
-              return (
-                <li key={a.id}>
-                  <Link href={`/dashboard/cattle/${a.id}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-muted/40">
-                    <span className="min-w-0">
-                      <span className="font-semibold">{a.tag}</span>
-                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{badge}</span>
-                      {r?.cause && r.cause !== "Not recorded" && r.kind !== "stolen" && <span className="ml-2 text-xs text-muted-foreground">{t.cause}: {r.cause}</span>}
-                    </span>
-                    <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums text-muted-foreground">
-                      {r?.salePrice != null && <span>{tb.sale_price}: {taka(r.salePrice)}</span>}
-                      <span>{tb.total_cost}: {taka(r?.cost)}</span>
-                      <span className={cn("font-semibold", (r?.result ?? 0) >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{tb.result}: {taka(r?.result)}</span>
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </details>
       )}
 
       {/* what to do with the selection */}
