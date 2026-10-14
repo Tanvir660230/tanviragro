@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { submitBulkPurchase } from "@/app/dashboard/(app)/inventory/purchase/actions";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 import { findSameMemo, type PurchaseContext } from "@/lib/inventory/purchase-memo";
 import { PURCHASE_TEXT, type PurchaseLang } from "@/components/inventory/purchase-text";
 
@@ -67,6 +68,7 @@ export function BulkPurchaseClient({ items, context, today, lang, initialItemId 
   const [notes, setNotes] = useState("");
   const [payment, setPayment] = useState<"cash" | "partial" | "due">("cash");
   const [paid, setPaid] = useState("");
+  const [holder, setHolder] = useState("");   // whose cash paid ("" = say later)
   const [rows, setRows] = useState<Row[]>(() => [blankRow(initialItemId ? { itemId: initialItemId } : {})]);
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
@@ -129,6 +131,7 @@ export function BulkPurchaseClient({ items, context, today, lang, initialItemId 
     fd.set("paidAmount", String(payment === "partial" ? paidNow : ""));
     fd.set("notes", notes);
     fd.set("memoKey", memoKey);
+    fd.set("cash_holder_id", holder);
     const payload = filled.map((r) => ({
       isNew: r.isNew,
       itemId: r.itemId,
@@ -148,6 +151,7 @@ export function BulkPurchaseClient({ items, context, today, lang, initialItemId 
       toast.success("duplicate" in res && res.duplicate ? t.saved_before : t.saved, {
         action: { label: t.view_stock, onClick: () => router.push("/dashboard/inventory") },
       });
+      if ("warning" in res && res.warning) toast.warning(res.warning);
       reset();
       window.scrollTo({ top: 0, behavior: "smooth" });
       router.refresh();
@@ -297,6 +301,7 @@ export function BulkPurchaseClient({ items, context, today, lang, initialItemId 
                 <Input id="pm_paid" type="number" inputMode="decimal" min="0" max={bill || undefined} step="any" value={paid} onChange={(e) => setPaid(e.target.value)} required className="text-lg font-semibold" />
               </div>
             )}
+            <CashHolderPicker direction="out" value={holder} onChange={setHolder} className="pt-1" />{/* on full credit the memo and its due cancel in that hand */}
             {payment !== "cash" && due > 0 && (
               <p className="flex items-start gap-1.5 rounded-lg bg-amber-500/10 p-2.5 text-xs text-amber-800 dark:text-amber-300">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />{fill(t.due_note, { amount: taka(due), shop: supplier || "—" })}

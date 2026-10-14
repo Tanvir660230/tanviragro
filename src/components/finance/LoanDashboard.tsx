@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { cn } from "@/lib/utils";
+import { CashHolderField } from "@/components/finance/money/CashHolderPicker";
 import { todayDhaka } from "@/lib/dates";
 
 export type LoanRow = {
@@ -49,6 +50,7 @@ function AddLoanDialog({ open, onClose }: { open: boolean; onClose: () => void }
   useEffect(() => {
     if (state?.success) {
       toast.success(tr.loan_saved);
+      if (state.warning) toast.warning(state.warning);
       onClose();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,6 +90,7 @@ function AddLoanDialog({ open, onClose }: { open: boolean; onClose: () => void }
               <label className="text-xs font-medium text-muted-foreground">{tr.loan_date} *</label>
               <input name="loan_date" type="date" required defaultValue={todayStr()} className={inputClass} />
             </div>
+            <CashHolderField direction="in" className="col-span-2" />
             <div>
               <label className="text-xs font-medium text-muted-foreground">{tr.due_date}</label>
               <input name="due_date" type="date" className={inputClass} />
@@ -128,6 +131,7 @@ function PayDialog({ loan, open, onClose }: { loan: LoanRow; open: boolean; onCl
   useEffect(() => {
     if (state?.success) {
       toast.success(tr.payment_saved);
+      if (state.warning) toast.warning(state.warning);
       onClose();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -168,6 +172,7 @@ function PayDialog({ loan, open, onClose }: { loan: LoanRow; open: boolean; onCl
             <label className="text-xs font-medium text-muted-foreground">{tr.date} *</label>
             <input name="paid_at" type="date" required defaultValue={todayStr()} className={inputClass} />
           </div>
+          <CashHolderField direction="out" />
           <div>
             <label className="text-xs font-medium text-muted-foreground">{tr.notes}</label>
             <input name="notes" className={inputClass} />

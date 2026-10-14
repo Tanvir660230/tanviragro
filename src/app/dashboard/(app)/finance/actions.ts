@@ -9,8 +9,10 @@ import { PERMISSIONS } from "@/constants/roles";
 import { validateDate, validatePositiveNumber } from "@/lib/validate";
 import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { FinancialEventBus } from "@/lib/financial/events";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { TAG_WARNING, holderFromForm, tagCashRows } from "@/lib/accounting/cash-holder-data";
 
-export type CostFormState = { error?: string; success?: boolean } | undefined;
+export type CostFormState = { error?: string; success?: boolean; warning?: string } | undefined;
 
 export async function createCostEntry(
   _prevState: CostFormState,
@@ -75,6 +77,12 @@ export async function createCostEntry(
       }
     }
 
+    // paid from the farm's cash: whose hand it left (never blocks the expense)
+    let warning: string | undefined;
+    if (!paidBy && inserted?.id &&
+      await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, [inserted.id], holderFromForm(formData.get("cash_holder_id"))))
+      warning = TAG_WARNING.bn;
+
     await FinancialEventBus.publish(
       "ExpenseCreated",
       ctx.businessId,
@@ -91,7 +99,7 @@ export async function createCostEntry(
     revalidatePath("/dashboard/finance");
     revalidatePath("/dashboard");
     revalidateTag("accounting", { expire: 0 });
-    return { success: true };
+    return { success: true, warning };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to create cost entry" };
   }
@@ -199,7 +207,7 @@ export type BulkCostItem = {
   description: string;
 };
 
-export async function submitBulkCosts(items: BulkCostItem[]) {
+export async function submitBulkCosts(items: BulkCostItem[], cashHolderId?: string | null) {
   try {
     const supabase = await createClient();
     const ctx = await getBusinessContext(supabase);
@@ -231,14 +239,16 @@ export async function submitBulkCosts(items: BulkCostItem[]) {
       });
     }
 
-    const { error } = await supabase.from("cost_entries").insert(costEntries);
+    const { data: saved, error } = await supabase.from("cost_entries").insert(costEntries).select("id");
     if (error) return { error: "Failed to save bulk cost entries" };
+    // all of them left one hand
+    const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, (saved ?? []).map((r) => r.id), cashHolderId ?? null);
 
     revalidatePath("/dashboard/finance");
     revalidatePath("/dashboard");
     revalidateTag("accounting", { expire: 0 });
 
-    return { success: true };
+    return { success: true, ...(tagErr ? { warning: TAG_WARNING.bn } : {}) };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to save bulk costs" };
   }

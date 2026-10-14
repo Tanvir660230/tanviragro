@@ -5,6 +5,8 @@ import type { Locale } from "@/i18n/getDictionary";
 import Link from "next/link";
 import { loadHomeModel } from "@/lib/home/home-data";
 import { HomeScreen } from "@/components/home/HomeScreen";
+import { loadMyCash } from "@/lib/money/holder-view";
+import { getAuthUser } from "@/lib/context/business-context";
 
 export const revalidate = 0; // Ensures fresh data for the dashboard
 
@@ -33,12 +35,19 @@ export default async function DashboardPage() {
   }
 
   // One model for the whole home screen, from the audited sources (see lib/home/home-model.ts)
-  const model = await loadHomeModel(supabase, businessId);
+  const user = await getAuthUser();
+  const [model, mine] = await Promise.all([loadHomeModel(supabase, businessId), loadMyCash(supabase, businessId, user?.id ?? null)]);
+  // the signed-in person's own cash (cash holders, lib/money/holder-view.ts)
+  const amount = mine ? `${mine.balance < -0.004 ? "−" : ""}৳${Math.round(Math.abs(mine.balance)).toLocaleString("en-IN")}` : "";
+  const myCash = mine
+    ? (locale === "bn" ? `আপনার কাছে ${amount}` : `You hold ${amount}`)
+      + (mine.waiting ? (locale === "bn" ? ` · ${mine.waiting}টি হাতবদল নিশ্চিত করুন` : ` · confirm ${mine.waiting} handover(s)`) : "")
+    : null;
   const now = new Date();
   const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Asia/Dhaka" }).format(now));
   const dateLabel = new Intl.DateTimeFormat(locale === "bn" ? "bn-BD" : "en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Dhaka",
   }).format(now);
 
-  return <HomeScreen model={model} t={t.home} hour={hour} dateLabel={dateLabel} />;
+  return <HomeScreen model={model} t={t.home} hour={hour} dateLabel={dateLabel} myCash={myCash} />;
 }

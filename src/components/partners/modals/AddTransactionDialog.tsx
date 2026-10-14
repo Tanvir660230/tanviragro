@@ -14,6 +14,7 @@ import { FormField } from "@/components/partners/partner-ui";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useL } from "@/i18n/text";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 
 type MoneyType = "investment" | "withdrawal" | "advance" | "loan_in" | "loan_repay";
 
@@ -43,12 +44,14 @@ export function AddTransactionDialog({ partners, positions, cash, today, t, mone
   const [partnerId, setPartnerId] = useState(fixedPartnerId ?? "");
   const [type, setType] = useState<MoneyType>("investment");
   const [confirm, setConfirm] = useState(false);
+  const [holder, setHolder] = useState("");
   const [state, action, pending] = useActionState(addPartnerTransaction, undefined);
 
   useEffect(() => {
     if (state?.success) {
       setTimeout(() => {
         toast.success(L("লেনদেন সেভ হলো", "Entry saved"));
+        if (state.warning) toast.warning(state.warning);
         setOpen(false); setConfirm(false);
         if (!fixedPartnerId) setPartnerId("");
       }, 0);
@@ -119,6 +122,8 @@ export function AddTransactionDialog({ partners, positions, cash, today, t, mone
           <FormField label={`${t.partners.amount} *`} id="tamount">
             <Input id="tamount" name="amount" type="number" min="1" step="any" required onChange={() => setConfirm(false)} />
           </FormField>
+          <CashHolderPicker direction={type === "investment" || type === "loan_in" ? "in" : "out"} name="cash_holder_id"
+            value={holder} onChange={setHolder} partnerId={type === "investment" || type === "loan_in" ? partnerId || null : null} />
           <FormField label={t.partners.date} id="tdate">
             <Input id="tdate" name="recorded_at" type="date" max={today} defaultValue={today} />
           </FormField>

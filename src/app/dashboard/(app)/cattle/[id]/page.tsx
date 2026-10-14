@@ -35,7 +35,7 @@ import { loadUnitCostMap } from "@/lib/inventory/unit-cost";
 import { loadFarm, loadHomeInputs } from "@/lib/home/home-data";
 import { alignHomeWithFarm } from "@/lib/home/farm-align";
 import { buildHomeModel } from "@/lib/home/home-model";
-import { CattleProfileHero } from "@/components/cattle/CattleProfileHero";
+import { CattleProfileHero, costBarLabels } from "@/components/cattle/CattleProfileHero";
 import { PurchaseGroupCard, SaleGroupCard } from "@/components/cattle/PurchaseGroupCard";
 import { loadAnimalPurchaseGroup, loadAnimalSaleGroup } from "@/lib/cattle/groups";
 import { getBusinessContext } from "@/lib/context/business-context";
@@ -659,7 +659,7 @@ async function ProfileSection({ id }: { id: string }) {
 
   const overheadCost = 0;
   // one split for the header, the cost timeline and the cattle list (lib/cattle/cost-parts.ts)
-  const costParts = animalCostParts({ fullCost: fa?.fullCost, purchase: Number(c.purchase_price ?? 0), feed: totalFeedCost, medical: medicalCost, other: otherIndividualCost });
+  const costParts = animalCostParts({ fullCost: fa?.fullCost, purchase: Number(c.purchase_price ?? 0), feed: totalFeedCost, medical: medicalCost, other: otherIndividualCost, running: fa?.runningByKind });
   const totalCost = costParts.total;
   // feed + the farm's running costs shared to this animal (what the full cost adds to purchase and own costs)
   const farmShare = costParts.farmShare;
@@ -785,8 +785,8 @@ async function ProfileSection({ id }: { id: string }) {
         adg={{ kg: adg, tier: adgTier, tierLabel: adgLabel, adg14, breedAvg: breedAverageAdg }}
         target={c.target_weight_kg && (hm?.weightKg ?? latestWeight) ? { kg: Number(c.target_weight_kg), progress: ((hm?.weightKg ?? latestWeight) / Number(c.target_weight_kg)) * 100 } : null}
         cost={{
-          total: totalCost, purchase: Number(c.purchase_price ?? 0), feed: totalFeedCost, medical: medicalCost, other: otherIndividualCost,
-          running: runningFeedEstimate, planReference: allocatedFeedCost > 0 ? allocatedFeedCost : null, farmShare,
+          total: totalCost, parts: costParts,
+          running: runningFeedEstimate, planReference: allocatedFeedCost > 0 ? allocatedFeedCost : null,
           breakEvenPerKg: (hm?.weightKg ?? latestWeight) > 0 ? totalCost / (hm?.weightKg ?? latestWeight) : null,
         }}
         value={c.status === "active" && hm ? { worth: hm.valueToday, profit: hm.profitToday } : null}
@@ -808,7 +808,7 @@ async function ProfileSection({ id }: { id: string }) {
             purchaseDate={c.purchase_date}
             days={leftOn ? daysInPen : null}
             parts={costParts}
-            costLabels={{ purchase: t.cattle_profile.purchase, feed: t.cattle_profile.feed, farmShare: t.cattle_profile.farm_share, medical: t.cattle_profile.medical, other: t.cattle_profile.other }}
+            costLabels={costBarLabels(t.cattle_profile)}
             sale={c.status === "sold" && sale ? saleReport({
               salePrice: Number(sale.sale_price_total), cost: totalCost, costAtSale: costAtSale[c.id] ?? null,
               purchaseDate: c.purchase_date, soldOn: String(sale.sold_at).slice(0, 10),

@@ -30,14 +30,16 @@ export async function loadMoneyData(supabase: SupabaseClient<any>, businessId: s
     Promise.all(last6.map(async (m) => ({ month: m, data: await getAccountingData(supabase, `${m}-01`, m === month ? today : monthEnd(m)) }))),
     loadPartnerData(supabase, businessId),
     supabase.from("market_prices").select("price_per_kg, date").eq("business_id", businessId).order("date", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("cash_counts").select("id, counted_on, amount, note").eq("business_id", businessId).is("deleted_at", null)
-      .order("counted_on", { ascending: false }).order("created_at", { ascending: false }).limit(20),
+    // "*": holder_id exists only after migration 20261014090000; one holder's count is not the farm's
+    supabase.from("cash_counts").select("*").eq("business_id", businessId).is("deleted_at", null)
+      .order("counted_on", { ascending: false }).order("created_at", { ascending: false }).limit(60),
   ]);
   // before migration 20260927120000 the table is missing: counting is simply not offered
   const e = countsRes.error as { code?: string; message?: string } | null;
   const countsMissing = !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table/i.test(e.message ?? ""));
   if (e && !countsMissing) throw new Error(`cash counts: ${e.message}`);
-  const cashCounts = countsMissing ? null : ((countsRes.data ?? []) as { id: string; counted_on: string; amount: number | string; note: string | null }[])
+  const cashCounts = countsMissing ? null : ((countsRes.data ?? []) as { id: string; counted_on: string; amount: number | string; note: string | null; holder_id?: string | null }[])
+    .filter((c) => !c.holder_id).slice(0, 20)
     .map((c) => ({ id: c.id, date: String(c.counted_on).slice(0, 10), amount: Number(c.amount), note: c.note }));
   const price = priceRes.data as { price_per_kg: number | string; date: string } | null;
 

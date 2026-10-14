@@ -28,6 +28,7 @@ import { useL } from "@/i18n/text";
 import { costCategoryLabel } from "@/lib/expenses/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { todayDhaka } from "@/lib/dates";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 
 // ── Category lists ─────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ export function CostForm({ formKey, onSuccess, payers = [] }: { formKey: number;
   const [category, setCategory] = useState("");
   const [paidBy, setPaidBy]     = useState("");            // "" = the farm's cash
   const [paidAs, setPaidAs]     = useState<"capital" | "loan">("capital");
+  const [holder, setHolder]     = useState("");            // whose farm cash paid ("" = say later)
 
   const [state, formAction, isPending] = useActionState<CostFormState, FormData>(
     createCostEntry,
@@ -71,11 +73,12 @@ export function CostForm({ formKey, onSuccess, payers = [] }: { formKey: number;
   useEffect(() => {
     if (state?.success) {
       toast.success(entryClass === "asset" ? L("সম্পদ যোগ হলো", "Asset recorded") : L("খরচ সেভ হলো", "Cost entry saved"));
+      if (state.warning) toast.warning(state.warning);
       onSuccess();
       router.refresh();
     }
     if (state?.error) toast.error(state.error);
-  }, [state?.success, state?.error, onSuccess, router, entryClass, L]);
+  }, [state?.success, state?.error, state?.warning, onSuccess, router, entryClass, L]);
 
   return (
     <form key={formKey} action={formAction} className="space-y-4 pt-1">
@@ -186,6 +189,9 @@ export function CostForm({ formKey, onSuccess, payers = [] }: { formKey: number;
           {paidBy && <p className="text-[11px] text-muted-foreground">{L("খরচ খামারের হিসাবে লেখা হবে, আর একই টাকা ওই অংশীদারের নামে জমা হবে — নগদ বদলাবে না।", "The expense is booked for the farm and the same amount is credited to the partner — cash does not change.")}</p>}
         </div>
       )}
+
+      {/* the farm's cash: whose hand it left */}
+      {!paidBy && <CashHolderPicker direction="out" name="cash_holder_id" value={holder} onChange={setHolder} />}
 
       {state?.error && (
         <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>

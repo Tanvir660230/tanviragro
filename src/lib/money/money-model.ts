@@ -55,7 +55,14 @@ export const COUNT_EVERY_DAYS = 7;
 /** A market price older than this is flagged: every cattle value leans on it. */
 export const PRICE_STALE_DAYS = 7;
 
-export type MoneyCheck = { key: "books" | "engines" | "price" | "weights" | "stock" | "cash" | "count"; ok: boolean; amount?: number; count?: number; date?: string };
+export type MoneyCheck = {
+  key: "books" | "engines" | "price" | "weights" | "stock" | "cash" | "count"
+    // who holds the cash (lib/money/holder-view.ts)
+    | "holders_unsaid" | "holder_negative" | "handover_pending" | "holder_count";
+  ok: boolean; amount?: number; count?: number; date?: string;
+  /** the holder a holder check is about */
+  name?: string;
+};
 
 export type MoneyModel = ReturnType<typeof buildMoneyModel>;
 

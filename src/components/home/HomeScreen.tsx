@@ -149,7 +149,7 @@ function MoneyTile({ icon: Icon, label, value, sub, tone, estimate, t }: { icon:
 }
 
 // ── page ─────────────────────────────────────────────────────────────
-export function HomeScreen({ model, t, hour, dateLabel }: { model: HomeModel; t: T; hour: number; dateLabel: string }) {
+export function HomeScreen({ model, t, hour, dateLabel, myCash }: { model: HomeModel; t: T; hour: number; dateLabel: string; /** "you hold ৳X" when the person keeps farm cash */ myCash?: string | null }) {
   const { money, cattle, feed, eid } = model;
   const profitTone = money.herdProfit == null ? undefined : money.herdProfit >= 0 ? "good" : "bad";
   const actions = [
@@ -185,7 +185,8 @@ export function HomeScreen({ model, t, hour, dateLabel }: { model: HomeModel; t:
       <section aria-label={t.money_title}>
         <SectionTitle icon={Banknote} href="/dashboard/finance" linkLabel={t.money_title}>{t.money_title}</SectionTitle>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MoneyTile icon={Wallet} label={t.cash} value={money.cash} sub={t.cash_sub} tone={money.cash != null && money.cash < 0 ? "bad" : undefined} t={t} />
+          <MoneyTile icon={Wallet} label={t.cash} value={money.cash}
+            sub={myCash ? <>{t.cash_sub}<Link href="/dashboard/finance?tab=holders" className="mt-0.5 block font-semibold text-primary hover:underline">{myCash}</Link></> : t.cash_sub} tone={money.cash != null && money.cash < 0 ? "bad" : undefined} t={t} />
           <MoneyTile icon={Package} label={t.month_expenses} value={money.monthOperatingExpenses} sub={t.month_expenses_sub} t={t} />
           <MoneyTile icon={Beef} label={t.herd_cost} value={money.herdCost} sub={<>{t.herd_value}: {taka(money.herdValue)}<EstimateChip t={t} /></>} t={t} />
           <MoneyTile icon={TrendingUp} label={t.profit_today} value={money.herdProfit} sub={t.profit_today_sub} tone={profitTone} estimate t={t} />

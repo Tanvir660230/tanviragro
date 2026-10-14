@@ -24,6 +24,7 @@ import { createBulkCost, type BulkCostFormState } from "@/app/dashboard/(app)/ca
 import { toast } from "sonner";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { todayDhaka } from "@/lib/dates";
+import { CashHolderField } from "@/components/finance/money/CashHolderPicker";
 
 interface CattleOption {
   id: string;
@@ -69,6 +70,7 @@ export function BulkCostDialog({ activeCattle, open: externalOpen, onOpenChange:
   useEffect(() => {
     if (state?.success) {
       toast.success(sm.batch_cost_success);
+      if (state.warning) toast.warning(state.warning);
       setTimeout(() => {
         setOpen(false);
         setSelectedIds(new Set());
@@ -215,6 +217,8 @@ export function BulkCostDialog({ activeCattle, open: externalOpen, onOpenChange:
               required 
             />
           </div>
+
+          <CashHolderField direction="out" />
 
           {/* Notes */}
           <div className="space-y-1.5">

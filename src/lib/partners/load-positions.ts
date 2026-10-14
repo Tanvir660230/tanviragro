@@ -11,8 +11,9 @@ import { isLossStatus } from "@/lib/cattle/status";
 import { assetDailyCosts, spread } from "@/lib/partners/asset-costs";
 import {
   buildPartnerPositions, type FarmPosition, type FeeRate, type PartnerPosition, type PositionAnimal,
-  type PositionPartner, type ShareRule,
+  type PositionPartner, type RunningKind, type ShareRule,
 } from "@/lib/partners/position";
+import { accountForCostEntry } from "@/lib/expenses/categories";
 
 export type ShareRuleRow = ShareRule & { id: string; note: string | null; createdAt: string };
 
@@ -42,6 +43,9 @@ export type PartnerData = {
 const DAY = 86400000;
 const dayNum = (d: string) => Math.floor(Date.parse(`${d.slice(0, 10)}T00:00:00Z`) / DAY);
 const dayStr = (n: number) => new Date(n * DAY).toISOString().slice(0, 10);
+/** The kind a running cost is shown under on an animal's cost (by its account, as the accounts book it). */
+const KIND_BY_ACCOUNT: Record<string, RunningKind> = { "5200": "feed", "6100": "medical", "6200": "labor", "6300": "utility", "6400": "rent", "6500": "depreciation" };
+const MEDICINE_ITEMS = new Set(["medicine", "supplement"]);
 const missingTable = (e: { code?: string; message?: string } | null) =>
   !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table/i.test(e.message ?? ""));
 
@@ -93,18 +97,24 @@ export const loadPartnerData = requestMemo((_s: SupabaseClient<any>, businessId:
     .sort((a, b) => a.from.localeCompare(b.from));
 
   // ── running costs by day — the same rows and totals the accounts expense ──
-  const dailyCosts: { date: string; amount: number }[] = [];
+  const dailyCosts: { date: string; amount: number; kind?: RunningKind }[] = [];
   for (const c of db.costs) {
     if ((c.entry_class ?? "expense") === "asset" || (c.cattle_id && c.type === "variable")) continue;
-    dailyCosts.push({ date: String(c.recorded_at).slice(0, 10), amount: Number(c.amount) });
+    const kind = KIND_BY_ACCOUNT[accountForCostEntry({ category: c.category ?? "", kind: c.expense_categories?.kind }).code] ?? "other";
+    dailyCosts.push({ date: String(c.recorded_at).slice(0, 10), amount: Number(c.amount), kind });
   }
   for (const t of db.invTx) {
     const v = unallocatedCostOf({ ...t, category: t.inventory_items?.category ?? null });
-    if (v) dailyCosts.push({ date: String(t.recorded_at).slice(0, 10), amount: v });
+    if (v) dailyCosts.push({ date: String(t.recorded_at).slice(0, 10), amount: v, kind: MEDICINE_ITEMS.has(String(t.inventory_items?.category ?? "")) ? "medical" : "feed" });
   }
-  dailyCosts.push(...assetDailyCosts(acc.fixedAssets, today));   // depreciation, and a sold asset's gain or loss
+  // depreciation, and a sold asset's gain or loss
+  dailyCosts.push(...assetDailyCosts(acc.fixedAssets, today).map((c) => ({ ...c, kind: "depreciation" as const })));
   const firstLoan = db.loansData.map((l) => String(l.loan_date).slice(0, 10)).sort()[0];
-  if (firstLoan) spread(dailyCosts, acc.incomeStatement.interestExpense, firstLoan, today);
+  if (firstLoan) {
+    const interest: { date: string; amount: number }[] = [];
+    spread(interest, acc.incomeStatement.interestExpense, firstLoan, today);
+    dailyCosts.push(...interest.map((c) => ({ ...c, kind: "interest" as const })));
+  }
 
   // ── costs recorded on each animal (the rows the engine capitalises) ──
   const own: Record<string, number> = {};

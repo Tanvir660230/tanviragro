@@ -52,6 +52,8 @@ export interface AnimalWizardFinancial {
   haatHasil: number;
   insuranceProvider: string;
   insuranceAmount: number | null;
+  /** whose cash paid the price, transport and haat (lib/accounting/cash-holders.ts); "" = say later */
+  cashHolderId?: string;
 }
 
 export interface AnimalWizardDocument {

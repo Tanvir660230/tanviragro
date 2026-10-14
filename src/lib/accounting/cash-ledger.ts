@@ -39,11 +39,14 @@ export type CashRow = {
   category: CashCategory;
   amount: number; // always ≥ 0; the sign is `direction`
   direction: "in" | "out";
+  /** a partner's credit for an expense they paid from their own pocket: the id of that expense's row
+   *  (the two cancel — no farm cash moved, so neither sits with a cash holder) */
+  pairOf?: string;
 };
 
 /** Raw rows, already filtered to one business and to rows that are not soft-deleted. */
 export type CashLedgerInput = {
-  partnerTx: { id: string; amount: number | string; type: string; recorded_at: string; partner_name?: string | null }[];
+  partnerTx: { id: string; amount: number | string; type: string; recorded_at: string; partner_name?: string | null; cost_entry_id?: string | null }[];
   sales: { id: string; sale_price_total: number | string; sold_at: string; buyer_name?: string | null; tag?: string | null }[];
   cattle: { id: string; purchase_price: number | string | null; purchase_date: string; tag_id?: string | null }[];
   costs: { id: string; amount: number | string; recorded_at: string; description?: string | null; category: string; entry_class: string | null }[];
@@ -69,16 +72,17 @@ export function buildCashLedger(input: CashLedgerInput): CashRow[] {
   const push = (r: Omit<CashRow, "amount" | "direction"> & { signed: number }) => {
     if (!Number.isFinite(r.signed) || Math.abs(r.signed) < 0.005) return;
     rows.push({ id: r.id, date: r.date, description: r.description, category: r.category,
-      amount: Math.abs(r.signed), direction: r.signed > 0 ? "in" : "out" });
+      amount: Math.abs(r.signed), direction: r.signed > 0 ? "in" : "out", ...(r.pairOf ? { pairOf: r.pairOf } : {}) });
   };
 
   for (const t of input.partnerTx) {
     const who = t.partner_name ?? "Partner";
-    if (t.type === "investment") push({ id: t.id, date: day(t.recorded_at), description: `Investment — ${who}`, category: "Capital In", signed: Number(t.amount) });
+    const pairOf = t.cost_entry_id ?? undefined;
+    if (t.type === "investment") push({ id: t.id, date: day(t.recorded_at), description: `Investment — ${who}`, category: "Capital In", signed: Number(t.amount), pairOf });
     else if (t.type === "withdrawal") push({ id: t.id, date: day(t.recorded_at), description: `Withdrawal — ${who}`, category: "Capital Out", signed: -Number(t.amount) });
     else if (t.type === "profit") push({ id: t.id, date: day(t.recorded_at), description: `Profit paid — ${who}`, category: "Capital Out", signed: -Number(t.amount) });
     else if (t.type === "advance") push({ id: t.id, date: day(t.recorded_at), description: `Profit advance — ${who}`, category: "Profit Advance", signed: -Number(t.amount) });
-    else if (t.type === "loan_in") push({ id: t.id, date: day(t.recorded_at), description: `Loan from partner — ${who}`, category: "Partner Loan", signed: Number(t.amount) });
+    else if (t.type === "loan_in") push({ id: t.id, date: day(t.recorded_at), description: `Loan from partner — ${who}`, category: "Partner Loan", signed: Number(t.amount), pairOf });
     else if (t.type === "loan_repay") push({ id: t.id, date: day(t.recorded_at), description: `Loan repaid to partner — ${who}`, category: "Partner Loan", signed: -Number(t.amount) });
     // loss_allocation moves no money
   }
@@ -125,7 +129,15 @@ export function buildCashLedger(input: CashLedgerInput): CashRow[] {
     const owedNow = l.settled_at ? 0 : Number(l.outstanding);
     const shop = l.lender ?? l.name ?? "supplier";
     push({ id: `due-${l.id}`, date: day(l.recorded_at ?? "0000-01-01"), description: `Bought on credit — ${shop}`, category: "Supplier Due", signed: owedNow + paid });
-    payments.forEach((p, i) => push({ id: `duepay-${l.id}-${i}`, date: p.date, description: `Due paid — ${shop}`, category: "Supplier Due", signed: -p.amount }));
+    // keyed by day + amount (+ which of identical ones), not by place in the notes: a holder tag
+    // (lib/accounting/cash-holders.ts) stays on its payment even if an earlier note line changes
+    const seen = new Map<string, number>();
+    payments.forEach((p) => {
+      const base = `duepay-${l.id}-${p.date}-${p.amount}`;
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      push({ id: `${base}-${n}`, date: p.date, description: `Due paid — ${shop}`, category: "Supplier Due", signed: -p.amount });
+    });
   }
 
   for (const l of input.loans) {

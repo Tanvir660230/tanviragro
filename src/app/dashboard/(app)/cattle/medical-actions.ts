@@ -18,6 +18,7 @@ import type {
 } from "@/lib/livestock/types";
 import type { UserRole } from "@/types/database";
 import { actionPermissionError } from "@/lib/auth/action-guard";
+import { tagCashRows } from "@/lib/accounting/cash-holder-data";
 import { PERMISSIONS } from "@/constants/roles";
 
 export type TreatmentFormState = { error?: string; success?: boolean } | undefined;
@@ -141,6 +142,8 @@ export async function administerMedicine(
 
   // The vet fee lives on the treatment row only. A second "Medical/Vet Fee" cost entry for the
   // same money was counted twice (capitalised via the treatment AND expensed / paid again).
+  if (vet_fee + additional_medical_cost > 0)
+    await tagCashRows(supabase as unknown as SupabaseClient<any>, bizId, [treatment.id], String(formData.get("cash_holder_id") ?? "") || null);
 
   await LivestockEventBus.publish(
     "TreatmentRecorded",
@@ -163,7 +166,7 @@ export async function administerMedicine(
  * automated inventory deduction, financial cost linkage, and follow-up scheduling.
  */
 export async function recordClinicalVisitAction(
-  payload: ClinicalVisitRecord & { actorRole?: UserRole }
+  payload: ClinicalVisitRecord & { actorRole?: UserRole; /** whose cash paid the fee */ cashHolderId?: string | null }
 ): Promise<{ success: boolean; visitId?: string; error?: string }> {
   const permissionDenied = await actionPermissionError(PERMISSIONS.HEALTH_MANAGE);
   if (permissionDenied) return { success: false, error: permissionDenied };
@@ -211,10 +214,11 @@ export async function recordClinicalVisitAction(
       }
     }
 
+    const feeRowIds: string[] = [];
     for (const [i, item] of (payload.prescriptions || []).entries()) {
       // one visit = one fee: it goes on the first prescription row only (it used to be
       // repeated on every medicine row, multiplying the fee by the number of medicines)
-      const { error: treatErr } = await supabase.from("cattle_treatments").insert({
+      const { data: treatRow, error: treatErr } = await supabase.from("cattle_treatments").insert({
         cattle_id: payload.cattleId,
         medicine_item_id: item.medicineItemId || null,
         dose_administered: item.dose || null,
@@ -224,12 +228,13 @@ export async function recordClinicalVisitAction(
         diagnosis: `${payload.primaryDiagnosis}${item.route ? ` [${item.route}]` : ""}`,
         notes: payload.recommendations || item.notes || null,
         treated_at: payload.visitDate,
-      });
+      }).select("id").single();
       if (treatErr) throw treatErr;
+      if (i === 0 && treatRow) feeRowIds.push(treatRow.id);
     }
 
     if (!payload.prescriptions || payload.prescriptions.length === 0) {
-      await supabase.from("cattle_treatments").insert({
+      const { data: feeRow } = await supabase.from("cattle_treatments").insert({
         cattle_id: payload.cattleId,
         medicine_item_id: null,
         dose_administered: null,
@@ -239,8 +244,11 @@ export async function recordClinicalVisitAction(
         diagnosis: payload.primaryDiagnosis,
         notes: payload.recommendations || null,
         treated_at: payload.visitDate,
-      });
+      }).select("id").single();
+      if (feeRow) feeRowIds.push(feeRow.id);
     }
+    // the fee's cash row is the treatment row it sits on
+    await tagCashRows(supabase as unknown as SupabaseClient<any>, bizId, feeRowIds, payload.cashHolderId ?? null);
 
     for (const deduction of medicineDeductions) {
       await supabase.from("inventory_transactions").insert({

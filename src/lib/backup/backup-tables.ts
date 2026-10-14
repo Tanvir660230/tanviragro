@@ -9,7 +9,8 @@ import { selectAll } from "@/lib/supabase/select-all";
  * (an animal, a stock item, a recipe, a partner or a feed period).
  */
 type Scope = "business" | "cattle" | "items" | "recipes" | "partners" | "periods";
-export const BACKUP_TABLES: { table: string; scope: Scope; column: string }[] = [
+/** `optional`: a table a newer migration adds — before it is applied the backup goes on without it */
+export const BACKUP_TABLES: { table: string; scope: Scope; column: string; optional?: boolean }[] = [
   { table: "cattle", scope: "business", column: "business_id" },
   { table: "cattle_purchase_groups", scope: "business", column: "business_id" },
   { table: "cattle_sale_groups", scope: "business", column: "business_id" },
@@ -37,6 +38,11 @@ export const BACKUP_TABLES: { table: string; scope: Scope; column: string }[] = 
   { table: "partner_cycles", scope: "business", column: "business_id" },
   { table: "management_fee_rates", scope: "business", column: "business_id" },
   { table: "cash_counts", scope: "business", column: "business_id" },
+  // who holds the cash (migration 20261014090000)
+  { table: "cash_holders", scope: "business", column: "business_id", optional: true },
+  { table: "cash_holder_tags", scope: "business", column: "business_id", optional: true },
+  { table: "cash_handovers", scope: "business", column: "business_id", optional: true },
+  { table: "cash_holder_log", scope: "business", column: "business_id", optional: true },
   { table: "financial_locks", scope: "business", column: "business_id" },
   { table: "liabilities", scope: "business", column: "business_id" },
   { table: "loans", scope: "business", column: "business_id" },
@@ -75,6 +81,14 @@ export async function readBackupTables(supabase: SupabaseClient, businessId: str
     : { business: null, cattle: null, items: null, recipes: null, partners: null, periods: null };
 
   const out: Record<string, Record<string, unknown>[]> = {};
-  for (const t of BACKUP_TABLES) out[t.table] = await readTable(supabase, t.table, t.column, parents[t.scope]);
+  for (const t of BACKUP_TABLES) {
+    try {
+      out[t.table] = await readTable(supabase, t.table, t.column, parents[t.scope]);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      if (!t.optional || !/does not exist|could not find the table|schema cache/i.test(m)) throw e;
+      out[t.table] = [];
+    }
+  }
   return out;
 }

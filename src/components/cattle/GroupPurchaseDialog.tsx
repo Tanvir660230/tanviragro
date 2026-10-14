@@ -11,6 +11,7 @@ import { todayDhaka } from "@/lib/dates";
 import { splitTotal, type SplitMethod } from "@/lib/cattle/cost-split";
 import { createPurchaseGroup } from "@/app/dashboard/(app)/cattle/group-actions";
 import { GROUP_TEXT, fillG, takaG, nextTags, type GroupLang } from "./group-text";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 
 type Row = { tag: string; gender: "male" | "female"; weight: string; weightType: "measured" | "estimated"; price: string };
 
@@ -76,6 +77,7 @@ export function GroupPurchaseDialog({ open, onOpenChange, existingTagIds, breeds
   const [touchedMethod, setTouchedMethod] = useState(false);
   const [transport, setTransport] = useState("");
   const [haat, setHaat] = useState("");
+  const [holder, setHolder] = useState("");
   const [pending, start] = useTransition();
 
   const totalN = num(total) ?? 0;
@@ -113,7 +115,7 @@ export function GroupPurchaseDialog({ open, onOpenChange, existingTagIds, breeds
     }
     start(async () => {
       const res = await createPurchaseGroup({
-        date, total: totalN, seller, method: eff,
+        date, total: totalN, seller, method: eff, cashHolderId: holder || null,
         extraCosts: { transport: num(transport) ?? 0, haat: num(haat) ?? 0 },
         animals: rows.map((r) => ({
           tagId: r.tag, gender: r.gender, breed: breed || undefined,
@@ -150,6 +152,8 @@ export function GroupPurchaseDialog({ open, onOpenChange, existingTagIds, breeds
               <input value={seller} onChange={(e) => setSeller(e.target.value)} maxLength={120} className={field} />
             </label>
           </div>
+
+          <CashHolderPicker direction="out" value={holder} onChange={setHolder} />
 
           {/* how many + breed */}
           <div className="flex flex-wrap items-end gap-3">

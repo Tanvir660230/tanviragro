@@ -9,8 +9,10 @@ import { PERMISSIONS } from "@/constants/roles";
 import { calcAccruedInterest } from "@/lib/loan-utils";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { todayDhaka } from "@/lib/dates";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { TAG_WARNING, holderFromForm, tagCashRows } from "@/lib/accounting/cash-holder-data";
 
-export type LoanFormState = { error?: string; success?: boolean } | undefined;
+export type LoanFormState = { error?: string; success?: boolean; warning?: string } | undefined;
 
 export async function createLoan(
   _prev: LoanFormState,
@@ -41,7 +43,7 @@ export async function createLoan(
     const lockErr = await checkFinancialLock(supabase, ctx.businessId, loanDate);
     if (lockErr) return { error: lockErr };
 
-    const { error } = await supabase.from("loans").insert({
+    const { data: loanRow, error } = await supabase.from("loans").insert({
       business_id: ctx.businessId,
       lender_name: lenderName,
       principal_amount: principal,
@@ -51,13 +53,15 @@ export async function createLoan(
       purpose,
       notes,
       status: "active",
-    });
+    }).select("id").single();
 
-    if (error) return { error: "সংরক্ষণ ব্যর্থ হয়েছে" };
+    if (error || !loanRow) return { error: "সংরক্ষণ ব্যর্থ হয়েছে" };
+    // who received the loan money (its cash row is "loan-<id>")
+    const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, [`loan-${loanRow.id}`], holderFromForm(formData.get("cash_holder_id")));
     revalidatePath("/dashboard/finance/loans");
     revalidatePath("/dashboard/finance");
     revalidateTag("accounting", { expire: 0 });
-    return { success: true };
+    return { success: true, ...(tagErr ? { warning: TAG_WARNING.bn } : {}) };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to create loan" };
   }
@@ -93,14 +97,16 @@ export async function recordLoanPayment(
     const payLockErr = await checkFinancialLock(supabase, ctx.businessId, paidAt);
     if (payLockErr) return { error: payLockErr };
 
-    const { error } = await supabase.from("loan_payments").insert({
+    const { data: payRow, error } = await supabase.from("loan_payments").insert({
       loan_id: loanId,
       amount,
       paid_at: paidAt,
       notes,
-    });
+    }).select("id").single();
 
-    if (error) return { error: "পেমেন্ট সংরক্ষণ ব্যর্থ হয়েছে" };
+    if (error || !payRow) return { error: "পেমেন্ট সংরক্ষণ ব্যর্থ হয়েছে" };
+    // whose cash paid it (its cash row is "loanpay-<id>")
+    const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, [`loanpay-${payRow.id}`], holderFromForm(formData.get("cash_holder_id")));
 
     // Check if fully paid
     const { data: payments } = await supabase
@@ -123,7 +129,7 @@ export async function recordLoanPayment(
     revalidatePath("/dashboard/finance/loans");
     revalidatePath("/dashboard/finance");
     revalidateTag("accounting", { expire: 0 });
-    return { success: true };
+    return { success: true, ...(tagErr ? { warning: TAG_WARNING.bn } : {}) };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to record loan payment" };
   }

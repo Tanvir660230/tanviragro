@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { declareDistribution } from "@/app/dashboard/(app)/partners/actions";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 import type { Dictionary } from "@/i18n/getDictionary";
 import { bdt } from "@/lib/partners/calculations";
 import { useL } from "@/i18n/text";
@@ -29,6 +30,7 @@ export function DeclareDistributionModal({ entries, today, t, onClose }: Props) 
   const [date, setDate] = useState(today);
   const [error, setError] = useState<string | null>(null);
   const [lockBooks, setLockBooks] = useState(true);
+  const [holder, setHolder] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const rows = entries.map((e) => ({ ...e, amount: parseFloat(amounts[e.id] ?? "0") || 0 }));
@@ -42,9 +44,9 @@ export function DeclareDistributionModal({ entries, today, t, onClose }: Props) 
     const paid = rows.filter((r) => r.amount > 0).map((r) => ({ partnerId: r.id, amount: r.amount }));
     if (!paid.length) return setError(L("কোনো পরিমাণ নেই", "Nothing to pay"));
     startTransition(async () => {
-      const res = await declareDistribution({ totalAmount: total, date, isLoss: false, entries: paid, lockBooks });
+      const res = await declareDistribution({ totalAmount: total, date, isLoss: false, entries: paid, lockBooks, cashHolderId: holder || null });
       if (res.error) { setError(res.error); toast.error(res.error); }
-      else { toast.success(L("লাভ বণ্টন লেখা হলো", "Profit payout recorded")); onClose(); }
+      else { toast.success(L("লাভ বণ্টন লেখা হলো", "Profit payout recorded")); if (res.warning) toast.warning(res.warning); onClose(); }
     });
   }
 
@@ -76,6 +78,7 @@ export function DeclareDistributionModal({ entries, today, t, onClose }: Props) 
             <span>{L("মোট", "Total")}</span><span>{bdt(total)}</span>
           </div>
         </div>
+        <CashHolderPicker direction="out" value={holder} onChange={setHolder} />
         <label className="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs">
           <input type="checkbox" checked={lockBooks} onChange={(e) => setLockBooks(e.target.checked)} className="mt-0.5 h-4 w-4" />
           <span>

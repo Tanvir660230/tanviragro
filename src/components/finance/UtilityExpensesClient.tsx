@@ -19,6 +19,7 @@ import {
 import type { ExpenseCategory } from "@/types/database";
 import { useL } from "@/i18n/text";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { CashHolderField } from "@/components/finance/money/CashHolderPicker";
 
 export type UtilityExpense = {
   id: string;
@@ -260,8 +261,8 @@ function ExpenseDialog({ expense, categories, today, onClose }: {
   const router = useRouter();
   const [state, action, pending] = useActionState<UtilityFormState, FormData>(saveUtilityExpense, undefined);
   useEffect(() => {
-    if (state?.success) { toast.success(expense ? L("খরচ ঠিক করা হলো (আগেরটা ইতিহাসে আছে)", "Expense corrected (change recorded in history)") : L("খরচ যোগ হলো", "Expense added")); onClose(); router.refresh(); }
-  }, [state?.success, expense, onClose, router, L]);
+    if (state?.success) { toast.success(expense ? L("খরচ ঠিক করা হলো (আগেরটা ইতিহাসে আছে)", "Expense corrected (change recorded in history)") : L("খরচ যোগ হলো", "Expense added")); if (state.warning) toast.warning(state.warning); onClose(); router.refresh(); }
+  }, [state?.success, state?.warning, expense, onClose, router, L]);
 
   const options = categories.filter((c) => c.is_active || c.id === expense?.category_id);
   return (
@@ -288,6 +289,7 @@ function ExpenseDialog({ expense, categories, today, onClose }: {
               <Input id="ue_date" name="recorded_at" type="date" max={today} required defaultValue={expense?.recorded_at?.slice(0, 10) ?? today} />
             </div>
           </div>
+          {!expense && <CashHolderField direction="out" />}
           <div className="space-y-1.5">
             <Label htmlFor="ue_desc">{L("নোট", "Notes")}</Label>
             <Textarea id="ue_desc" name="description" rows={2} maxLength={500} defaultValue={expense?.description ?? ""} placeholder={L("যেমন বিলের মাস, মিটার রিডিং, কোম্পানি", "e.g. bill month, meter reading, provider")} />

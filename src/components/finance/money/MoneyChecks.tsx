@@ -42,6 +42,14 @@ export function MoneyChecks({ checks }: { checks: MoneyModel["checks"] }) {
           : L(`শেষবার টাকা গোনা হয়েছে ${c.count} দিন আগে — আবার গুনে মেলান`, `Last counted ${c.count} days ago — count again`),
         href: "?tab=cash#cash-count", action: L("গুনে মেলান", "Count") };
       case "cash": return { msg: L(`নগদ শূন্যের নিচে (−${taka(c.amount ?? 0)}) — কোনো টাকা আসা লেখা হয়নি`, `Cash is below zero (−${taka(c.amount ?? 0)}) — money that came in is not recorded`), href: "?tab=cash", action: L("নগদ বিবরণী", "Cash statement") };
+      case "holders_unsaid": return { msg: L(`${c.count}টি লেনদেনে টাকা কার — বলা হয়নি (${taka(c.amount ?? 0)}) — তাই কার কাছে কত, তা পুরো ঠিক নয়`, `${c.count} entries (${taka(c.amount ?? 0)}) have no holder — who-has-how-much is not exact yet`), href: "?tab=holders#unassigned", action: L("ঠিক করুন", "Set them") };
+      case "holder_negative": return { msg: L(`${c.name}-এর ঘর মাইনাস (−${taka(c.amount ?? 0)}) — তাঁকে দেওয়া কোনো হাতবদল বা তাঁর পাওয়া কোনো টাকা লেখা বাকি`, `${c.name} is below zero (−${taka(c.amount ?? 0)}) — a handover to them or money they got is not entered`), href: "?tab=holders", action: L("দেখুন", "Open") };
+      case "handover_pending": return { msg: c.name === "me" ? L("আপনাকে দেওয়া টাকার হাতবদল নিশ্চিত করুন", "Confirm the money handed to you") : L(`${c.count}টি হাতবদল প্রাপকের নিশ্চিত করা বাকি`, `${c.count} handover(s) wait for the receiver to confirm`), href: "?tab=holders#pending", action: L("দেখুন", "Open") };
+      case "holder_count": return {
+        msg: !c.date ? L(`${c.name}-এর কাছের টাকা কখনো গুনে মেলানো হয়নি`, `${c.name}'s cash has never been counted`)
+          : c.amount != null ? L(`${day(c.date)} ${c.name}-এর টাকা গুনে ${taka(c.amount)} ${c.amount < 0 ? "কম" : "বেশি"} পাওয়া গেছে`, `${c.name}'s count on ${day(c.date)} was ${taka(c.amount)} ${c.amount < 0 ? "short" : "over"}`)
+          : L(`${c.name}-এর টাকা শেষ গোনা হয়েছে ${c.count} দিন আগে`, `${c.name}'s cash was last counted ${c.count} days ago`),
+        href: "?tab=holders", action: L("গুনে মেলান", "Count") };
     }
   };
 
@@ -54,7 +62,7 @@ export function MoneyChecks({ checks }: { checks: MoneyModel["checks"] }) {
         {problems.map((c) => {
           const t = text(c);
           return (
-            <li key={c.key} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+            <li key={`${c.key}-${c.name ?? ""}`} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
               <span className="text-amber-900 dark:text-amber-200">• {t.msg}</span>
               <Link href={t.href} className="shrink-0 font-medium text-primary hover:underline">{t.action}</Link>
             </li>

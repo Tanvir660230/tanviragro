@@ -12,6 +12,7 @@ import { splitTotal, type SplitMethod } from "@/lib/cattle/cost-split";
 import { sellCattleGroup } from "@/app/dashboard/(app)/cattle/group-actions";
 import { GROUP_TEXT, fillG, takaG, type GroupLang } from "./group-text";
 import { SplitPicker, SumCheck } from "./GroupPurchaseDialog";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 
 export type SaleAnimal = { id: string; tag: string; lastKg: number | null; costSoFar: number };
 
@@ -36,6 +37,7 @@ export function GroupSaleDialog({ animals, lang, onClose, onDone }: {
   const [method, setMethod] = useState<SplitMethod>(one ? "equal" : "weight");
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [holder, setHolder] = useState("");
   const [pending, start] = useTransition();
 
   const totalN = num(total) ?? 0;
@@ -48,11 +50,12 @@ export function GroupSaleDialog({ animals, lang, onClose, onDone }: {
 
   const submit = () => start(async () => {
     const res = await sellCattleGroup({
-      date, total: totalN, buyer, method,
+      date, total: totalN, buyer, method, cashHolderId: holder || null,
       lines: animals.map((a) => ({ cattleId: a.id, weightKg: num(weights[a.id] ?? ""), price: method === "manual" ? num(prices[a.id] ?? "") : null })),
     }).catch(() => ({ ok: false as const, error: g.failed }));
     if (!res.ok) { toast.error(res.error); return; }
     toast.success(fillG(g.ok_sell, { n: animals.length, total: totalN.toLocaleString("en-IN") }));
+    if (res.warning) toast.warning(res.warning);
     router.refresh();
     onDone?.();
     onClose();
@@ -78,6 +81,8 @@ export function GroupSaleDialog({ animals, lang, onClose, onDone }: {
               <input value={buyer} onChange={(e) => setBuyer(e.target.value)} maxLength={120} className={field} />
             </label>
           </div>
+
+          <CashHolderPicker direction="in" value={holder} onChange={setHolder} />
 
           {!one && <SplitPicker lang={lang} method={method} setMethod={setMethod} canWeight={allWeights} sale />}
 

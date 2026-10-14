@@ -10,11 +10,15 @@ import type { AnimalWizardState } from "@/lib/validation/cattle-wizard";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { TAG_WARNING, tagCashRows } from "@/lib/accounting/cash-holder-data";
 
 export type WizardActionResult = {
   success?: boolean;
   error?: string;
   cattleId?: string;
+  /** saved, but whose cash it was could not be */
+  warning?: string;
 };
 
 export async function saveEnterpriseAnimalWizardAction(
@@ -146,9 +150,14 @@ export async function saveEnterpriseAnimalWizardAction(
     });
   }
 
+  let costIds: string[] = [];
   if (costsToInsert.length > 0) {
-    await supabase.from("cost_entries").insert(costsToInsert);
+    const { data: costRows } = await supabase.from("cost_entries").insert(costsToInsert).select("id");
+    costIds = (costRows ?? []).map((r) => r.id);
   }
+  // whose cash paid the price (the cattle row is its cash row) and the transport / haat; never blocks the save
+  const tagErr = await tagCashRows(supabase as SupabaseClient<any>, businessId, [...(payload.origin.originType === "purchase" ? [newCattle.id] : []), ...costIds],
+    payload.financial.cashHolderId);
 
   // Schedule automatic health protocols for active animal
   const protocolEvents = buildProtocolEvents(newCattle.id, businessId, purchaseDate);
@@ -176,5 +185,5 @@ export async function saveEnterpriseAnimalWizardAction(
   revalidatePath("/dashboard");
   revalidateTag("accounting", { expire: 0 });
 
-  return { success: true, cattleId: newCattle.id };
+  return { success: true, cattleId: newCattle.id, ...(tagErr ? { warning: TAG_WARNING.bn } : {}) };
 }

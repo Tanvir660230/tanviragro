@@ -61,8 +61,8 @@ export type PositionInput = {
   rules: ShareRule[];
   feeRates: FeeRate[];
   txns: PositionTxn[];
-  /** running costs by day (all dated rows the accounts expense that are not on one animal) */
-  dailyCosts: { date: string; amount: number }[];
+  /** running costs by day (all dated rows the accounts expense that are not on one animal); `kind` groups them for display */
+  dailyCosts: { date: string; amount: number; kind?: RunningKind }[];
   animals: PositionAnimal[];
   marketPricePerKg: number | null;
   /** cycles the owner closed: results that became final on or before `closedOn` are settled there */
@@ -71,7 +71,11 @@ export type PositionInput = {
 
 export type CycleResult = { id: string; closedOn: string; from: string | null; items: number; net: number; fee: number; shares: Record<string, number> };
 
-export type AnimalResult = PositionAnimal & { days: number; runningShare: number; fullCost: number; result: number };
+/** What a running cost was for — only to show an animal's share split up; the sums never depend on it. */
+export type RunningKind = "feed" | "labor" | "utility" | "rent" | "medical" | "depreciation" | "interest" | "other";
+
+/** `runningByKind` adds up to `runningShare` */
+export type AnimalResult = PositionAnimal & { days: number; runningShare: number; runningByKind: Partial<Record<RunningKind, number>>; fullCost: number; result: number };
 
 /** What a partner's share is on a given day (after rules, joining and leaving). */
 export type Terms = { shareMode: "auto" | "manual"; fixedPct: number; bearsLoss: boolean; active: boolean };
@@ -304,17 +308,28 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
   // ── 1. running costs, day by day, among the animals on the farm that day ──
   const lastDay = (a: PositionAnimal) => (a.endDate && a.endDate < asOf ? a.endDate : asOf);
   const costByDay = new Map<number, number>();
+  const kindsByDay = new Map<number, Partial<Record<RunningKind, number>>>();
   for (const c of input.dailyCosts) {
     if (c.date > asOf) continue;
-    costByDay.set(dayNum(c.date), (costByDay.get(dayNum(c.date)) ?? 0) + c.amount);
+    const d = dayNum(c.date), kind = c.kind ?? "other";
+    costByDay.set(d, (costByDay.get(d) ?? 0) + c.amount);
+    const k = kindsByDay.get(d) ?? {};
+    k[kind] = (k[kind] ?? 0) + c.amount;
+    kindsByDay.set(d, k);
   }
   const running: Record<string, number> = Object.fromEntries(input.animals.map((a) => [a.id, 0]));
+  const runningKinds: Record<string, Partial<Record<RunningKind, number>>> = Object.fromEntries(input.animals.map((a) => [a.id, {}]));
   const orphanByDay: { date: string; amount: number }[] = [];
   const spans = input.animals.map((a) => ({ id: a.id, from: dayNum(a.purchaseDate), to: dayNum(lastDay(a)) }));
   for (const [d, amount] of costByDay) {
     const here = spans.filter((s) => s.from <= d && d <= s.to);
     if (here.length === 0) { orphanByDay.push({ date: dayStr(d), amount }); continue; }
-    for (const s of here) running[s.id] += amount / here.length;
+    const kinds = Object.entries(kindsByDay.get(d) ?? {}) as [RunningKind, number][];
+    for (const s of here) {
+      running[s.id] += amount / here.length;
+      const mine = runningKinds[s.id];
+      for (const [kind, v] of kinds) mine[kind] = (mine[kind] ?? 0) + v / here.length;
+    }
   }
   const runningTotal = [...costByDay.values()].reduce((s, x) => s + x, 0);
   const headDays = spans.reduce((s, x) => s + Math.max(0, x.to - x.from + 1), 0);
@@ -324,7 +339,7 @@ export function buildPartnerPositions(input: PositionInput): { farm: FarmPositio
     const runningShare = running[a.id] ?? 0;
     const fullCost = a.purchasePrice + a.ownCost + runningShare;
     const worth = a.status === "active" ? (a.valueToday ?? fullCost) : (a.salePrice ?? 0);
-    return { ...a, days, runningShare, fullCost, result: worth - fullCost };
+    return { ...a, days, runningShare, runningByKind: runningKinds[a.id] ?? {}, fullCost, result: worth - fullCost };
   });
 
   // ── 2. split each result over its days, with the terms of each piece ──

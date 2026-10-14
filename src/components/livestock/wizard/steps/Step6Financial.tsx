@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import type { AnimalWizardFinancial } from "@/lib/validation/cattle-wizard";
 import { DollarSign, Truck, Receipt, Shield } from "lucide-react";
 import { useL } from "@/i18n/text";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 
 interface Props {
   data: AnimalWizardFinancial;
@@ -74,6 +75,8 @@ export function Step6Financial({ data, onChange, errors }: Props) {
           />
         </div>
       </div>
+
+      <CashHolderPicker direction="out" value={data.cashHolderId ?? ""} onChange={(id) => onChange({ cashHolderId: id })} />
 
       <div className="p-3 bg-muted/40 rounded-lg border border-border/60 flex justify-between items-center text-xs">
         <span className="text-muted-foreground">{L("কেনার সাথে বাড়তি খরচ:", "Total Initial Acquisition Overheads:")}</span>

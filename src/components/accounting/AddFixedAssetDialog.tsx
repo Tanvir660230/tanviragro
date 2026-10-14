@@ -27,6 +27,7 @@ import { toast } from "sonner";
 
 import { useL } from "@/i18n/text";
 import { todayDhaka } from "@/lib/dates";
+import { CashHolderField } from "@/components/finance/money/CashHolderPicker";
 export function AddFixedAssetDialog() {
   const L = useL();
   const router = useRouter();
@@ -92,6 +93,8 @@ export function AddFixedAssetDialog() {
               <Input id="fa_date" name="purchase_date" type="date" max={today} defaultValue={today} required />
             </div>
           </div>
+
+          <CashHolderField direction="out" />
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

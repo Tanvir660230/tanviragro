@@ -13,6 +13,7 @@ import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
 import { todayDhaka } from "@/lib/dates";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { TAG_WARNING, holderFromForm, tagCashRows } from "@/lib/accounting/cash-holder-data";
 
 export type CattleFormState =
   | { error?: string; success?: boolean }
@@ -591,7 +592,7 @@ export async function createBulkHealthEvents(
   return { success: true, count: rows.length };
 }
 
-export type BulkCostFormState = { error?: string; success?: boolean; count?: number } | undefined;
+export type BulkCostFormState = { error?: string; success?: boolean; count?: number; warning?: string } | undefined;
 
 export async function createBulkCost(
   _prevState: BulkCostFormState,
@@ -645,12 +646,14 @@ export async function createBulkCost(
     description: description ? `${description} (Batch Cost: ৳${totalAmount} / ${cattleIds.length})` : `Batch Cost: ৳${totalAmount} / ${cattleIds.length}`,
   }));
 
-  const { error } = await supabase.from("cost_entries").insert(rows);
+  const { data: saved, error } = await supabase.from("cost_entries").insert(rows).select("id");
   if (error) return { error: "Failed to add batch cost" };
+  // whose cash paid the batch
+  const tagErr = await tagCashRows(supabase as unknown as SupabaseClient<any>, businessId, (saved ?? []).map((r) => r.id), holderFromForm(formData.get("cash_holder_id")));
 
   revalidatePath("/dashboard/cattle");
   revalidatePath("/dashboard/finance");
-  return { success: true, count: rows.length };
+  return { success: true, count: rows.length, ...(tagErr ? { warning: TAG_WARNING.bn } : {}) };
 }
 
 // ── Qurbani Marking ──────────────────────────────────────────────────────────

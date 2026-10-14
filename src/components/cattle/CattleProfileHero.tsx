@@ -3,13 +3,20 @@ import { ArrowLeft, HeartPulse, Receipt, Scale, Target, TrendingDown, TrendingUp
 import { cn } from "@/lib/utils";
 import type { Dictionary } from "@/i18n/getDictionary";
 import type { WeightBasis } from "@/lib/home/home-model";
-import { CostBar } from "./CostBar";
+import type { CostParts } from "@/lib/cattle/cost-parts";
+import { CostBar, type CostBarLabels } from "./CostBar";
 
 type TP = Dictionary["cattle_profile"];
 type TH = Dictionary["home"];
 
 const taka = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—" : `${n < 0 ? "−" : ""}৳${Math.round(Math.abs(n)).toLocaleString("en-IN")}`);
 const fill = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
+
+/** The cost-split labels in the profile's language (header and closed report). */
+export const costBarLabels = (tp: TP): CostBarLabels => ({
+  purchase: tp.purchase, feed: tp.feed, farmShare: tp.farm_share, medical: tp.medical, other: tp.other,
+  labor: tp.labor, utility: tp.utility, rent: tp.rent, depreciation: tp.depreciation, interest: tp.interest,
+});
 
 export type ProfileHeroProps = {
   tp: TP; th: TH;
@@ -24,7 +31,7 @@ export type ProfileHeroProps = {
   adg: { kg: number | null; tier: "good" | "fair" | "poor" | "none"; tierLabel: string; adg14: number | null; breedAvg: number | null };
   target: { kg: number; progress: number } | null;
   /** farmShare: the feed and running costs shared by taka × days (the farm position) — when set, "feed" is not shown apart */
-  cost: { total: number; purchase: number; feed: number; medical: number; other: number; running: number; planReference: number | null; breakEvenPerKg: number | null; farmShare?: number | null };
+  cost: { total: number; parts: CostParts; running: number; planReference: number | null; breakEvenPerKg: number | null };
   value: { worth: number | null; profit: number | null } | null;                       // active animals (estimates)
   perKg: { cost: number | null; feed: number | null };
   nextHealth: { title: string; date: string; overdue: boolean } | null;
@@ -155,9 +162,9 @@ export function CattleProfileHero(p: ProfileHeroProps) {
             </>)}
             <div className="flex justify-between gap-2"><dt className="text-muted-foreground">{tp.break_even}</dt><dd className="tabular-nums">{p.cost.breakEvenPerKg != null ? `${taka(p.cost.breakEvenPerKg)}/kg` : "—"}</dd></div>
           </dl>
-          <div className="mt-3">
-            <CostBar parts={{ total: p.cost.total, purchase: p.cost.purchase, feed: p.cost.farmShare != null ? null : p.cost.feed, farmShare: p.cost.farmShare ?? null, medical: p.cost.medical, other: p.cost.other }}
-              labels={{ purchase: tp.purchase, feed: tp.feed, farmShare: tp.farm_share, medical: tp.medical, other: tp.other }} />
+          <div className="mt-3 border-t border-border pt-3">
+            <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tp.cost_split}</h3>
+            <CostBar parts={p.cost.parts} labels={costBarLabels(tp)} />
           </div>
           {(p.cost.running > 0 || p.cost.planReference != null) && (
             <p className="mt-2 text-[11px] leading-snug text-muted-foreground">

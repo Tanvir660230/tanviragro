@@ -135,7 +135,7 @@ describe("paying a supplier due", () => {
     const rows = buildCashLedger(f);
     expect(cashOnDate(rows, 0, "2026-09-24")).toBe(0);      // bought on credit: no cash moved yet
     expect(cashOnDate(rows, 0, "2026-09-25")).toBe(-600);   // paid the shop
-    expect(rows.find((r) => r.id === "duepay-d-0")).toMatchObject({ date: "2026-09-25", direction: "out", amount: 600 });
+    expect(rows.find((r) => r.id === "duepay-d-2026-09-25-600-0")).toMatchObject({ date: "2026-09-25", direction: "out", amount: 600 });
   });
   it("a fully paid (settled) due has taken the whole bill out of cash", () => {
     const f = empty();

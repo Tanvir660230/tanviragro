@@ -9,6 +9,9 @@ import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { CostingEngine } from "@/lib/inventory/costing-engine";
 import { InventoryEventBus } from "@/lib/inventory/events";
 import { FinancialEventBus } from "@/lib/financial/events";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { TAG_WARNING, addTagPart, holderFromForm, tagCashRows } from "@/lib/accounting/cash-holder-data";
+import { duePayments } from "@/lib/accounting/cash-ledger";
 
 export type PurchaseItem = {
   isNew: boolean;
@@ -129,9 +132,16 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
       };
     });
 
-    const { error: txErr } = await supabase.from("inventory_transactions").insert(txnsToInsert);
+    const { data: txRows, error: txErr } = await supabase.from("inventory_transactions").insert(txnsToInsert).select("id");
     if (txErr?.code === "23505") return { success: true, duplicate: true };   // the same memo form was saved a moment ago
     if (txErr) return { error: "Failed to record transactions" };
+
+    // whose cash paid: every item row of the memo (cash rows of the ledger). The part left on credit comes
+    // back on the supplier's due row ("due-<id>"), so that row goes to the same hand — unless an earlier
+    // memo already gave it to someone else.
+    const holderId = holderFromForm(formData.get("cash_holder_id"));
+    const cashKeys = ((txRows ?? []) as { id: string | number }[]).map((r) => String(r.id));
+    let dueRowId: string | null = null;
 
     // Create or Update Liability if due
     if (dueAmount > 0) {
@@ -156,8 +166,9 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
             notes: (existingLiab.notes || "") + `\n+ ${dueAmount} on ${date} (Bulk Purchase).`,
           })
           .eq("id", existingLiab.id);
+        dueRowId = existingLiab.id;
       } else {
-        await supabase.from("liabilities").insert({
+        const { data: newLiab } = await supabase.from("liabilities").insert({
           business_id: ctx.businessId,
           name: `Due to ${supplierName} (Inv)`,
           category: "accounts_payable",
@@ -166,8 +177,18 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
           recorded_at: date,
           lender: supplierName,
           notes: `Due for bulk purchase invoice on ${date}`,
-        });
+        }).select("id").single();
+        dueRowId = newLiab?.id ?? null;
       }
+    }
+
+    let warning: string | undefined;
+    if (holderId) {
+      const db = supabase as SupabaseClient<any>;
+      const tagErr = (await tagCashRows(db, ctx.businessId, cashKeys, holderId))
+        // this memo's share of the supplier's running due: two people buying from one shop each keep their own part
+        ?? (dueRowId ? await addTagPart(db, ctx.businessId, `due-${dueRowId}`, holderId, dueAmount) : null);
+      if (tagErr) warning = TAG_WARNING.bn;
     }
 
     // Publish domain events
@@ -203,7 +224,7 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
     revalidatePath("/dashboard");
     revalidateTag("accounting", { expire: 0 });
 
-    return { success: true };
+    return { success: true, warning };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to record bulk purchase" };
   }
@@ -215,7 +236,7 @@ export async function submitBulkPurchase(formData: FormData, items: PurchaseItem
  * that day (lib/accounting/cash-ledger.ts). Before this there was no way to pay a due, so the
  * amount stayed in cash for ever.
  */
-export async function paySupplierDue(formData: FormData): Promise<{ success?: true; error?: string }> {
+export async function paySupplierDue(formData: FormData): Promise<{ success?: true; error?: string; warning?: string }> {
   try {
     const supabase = await createClient();
     const ctx = await getBusinessContext(supabase);
@@ -247,11 +268,20 @@ export async function paySupplierDue(formData: FormData): Promise<{ success?: tr
     }).eq("id", id);
     if (error) return { error: "Could not save the payment" };
 
+    // whose cash paid the shop: the payment's cash row is keyed by day + amount (lib/accounting/cash-ledger.ts)
+    let warning: string | undefined;
+    const holderId = holderFromForm(formData.get("cash_holder_id"));
+    if (holderId) {
+      const n = duePayments(liab.notes).filter((p) => p.date === date && p.amount === amount).length;
+      const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, [`duepay-${id}-${date}-${amount}-${n}`], holderId);
+      if (tagErr) warning = TAG_WARNING.bn;
+    }
+
     revalidatePath("/dashboard/inventory/purchase");
     revalidatePath("/dashboard/finance");
     revalidatePath("/dashboard");
     revalidateTag("accounting", { expire: 0 });
-    return { success: true };
+    return { success: true, warning };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Could not save the payment" };
   }

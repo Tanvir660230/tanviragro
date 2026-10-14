@@ -10,8 +10,10 @@ import { validateDate, validatePositiveNumber } from "@/lib/validate";
 import { verifyFinancialLock } from "@/lib/financial/financial-lock";
 import { BILL_MAX_BYTES, BILL_TYPES, categoryNameError } from "@/lib/expenses/categories";
 import type { ExpenseKind } from "@/types/database";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { TAG_WARNING, holderFromForm, tagCashRows } from "@/lib/accounting/cash-holder-data";
 
-export type UtilityFormState = { error?: string; success?: boolean } | undefined;
+export type UtilityFormState = { error?: string; success?: boolean; warning?: string } | undefined;
 
 const BUCKET = "expense-bills";
 const PAGE = "/dashboard/finance/utilities";
@@ -167,17 +169,19 @@ export async function saveUtilityExpense(
       description,
       ...(attachmentPath ? { attachment_path: attachmentPath } : {}),
     };
-    const { error } = id
-      ? await supabase.from("cost_entries").update(values).eq("id", id)
+    const { data: saved, error } = id
+      ? await supabase.from("cost_entries").update(values).eq("id", id).select("id").single()
       : await supabase.from("cost_entries").insert({
           business_id: ctx.businessId,
           type: "fixed",
           entry_class: "expense",
           ...values,
-        });
+        }).select("id").single();
     if (error) return { error: "Could not save the expense" };
+    // a new bill: whose cash paid it (a corrected bill keeps its holder)
+    const tagErr = !id && saved ? await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, [saved.id], holderFromForm(formData.get("cash_holder_id"))) : null;
     done();
-    return { success: true };
+    return { success: true, ...(tagErr ? { warning: TAG_WARNING.bn } : {}) };
   } catch (err) {
     return { error: message(err, "Could not save the expense") };
   }

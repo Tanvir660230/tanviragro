@@ -205,6 +205,7 @@ export function EnterpriseAnimalWizard({
       toast.success(
         editAnimalId ? L(`গরু ${state.identification.tagId} আপডেট হলো!`, `Animal ${state.identification.tagId} updated!`) : L(`গরু ${state.identification.tagId} যোগ হলো!`, `Animal ${state.identification.tagId} added!`)
       );
+      if (res.warning) toast.warning(res.warning);
       if (typeof window !== "undefined") {
         localStorage.removeItem(DRAFT_STORAGE_KEY);
       }

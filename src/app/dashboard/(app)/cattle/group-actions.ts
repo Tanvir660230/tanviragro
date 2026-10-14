@@ -15,6 +15,7 @@ import {
 } from "@/lib/cattle/cost-split";
 import { loadPurchaseGroupMembers } from "@/lib/cattle/groups";
 import { keepCostAtSale } from "@/lib/cattle/sale-snapshot";
+import { tagCashRows } from "@/lib/accounting/cash-holder-data";
 
 /**
  * One purchase or sale of several animals at one price. The database functions
@@ -90,6 +91,8 @@ export type GroupPurchaseInput = {
   /** transport + haat fee for the whole group, split like the price */
   extraCosts?: { transport?: number; haat?: number };
   animals: GroupPurchaseAnimal[];
+  /** whose cash paid (lib/accounting/cash-holders.ts); empty = say later */
+  cashHolderId?: string | null;
 };
 
 export async function createPurchaseGroup(input: GroupPurchaseInput): Promise<Result<{ groupId: string; cattleIds: string[]; shares: Record<string, number>; warning?: string }>> {
@@ -150,6 +153,7 @@ export async function createPurchaseGroup(input: GroupPurchaseInput): Promise<Re
 
     // transport / haat of the whole group, split the same way as the price (by each share)
     const problems: string[] = [];
+    const extraIds: string[] = [];
     const extra = [
       { amount: money(input.extraCosts?.transport ?? 0), category: "transport", description: "Transport cost during acquisition (group)" },
       { amount: money(input.extraCosts?.haat ?? 0), category: "haat_hasil", description: "Market tax / Hasil fee during acquisition (group)" },
@@ -170,10 +174,15 @@ export async function createPurchaseGroup(input: GroupPurchaseInput): Promise<Re
         }
       }
       if (rows.length) {
-        const { error: costErr } = await supabase.from("cost_entries").insert(rows);
+        const { data: costRows, error: costErr } = await supabase.from("cost_entries").insert(rows).select("id");
         if (costErr) problems.push(L("পরিবহন / হাসিল খরচ সেভ হয়নি", "Transport / haat costs were not saved"));
+        else extraIds.push(...((costRows ?? []) as { id: string }[]).map((r) => r.id));
       }
     }
+
+    // each animal's price (its cash row is the cattle row) and the transport / haat left the same hand
+    const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, [...created.map((c) => c.id), ...extraIds], input.cashHolderId);
+    if (tagErr) problems.push(L("টাকা কার কাছ থেকে গেল — লেখা যায়নি (টাকা-পয়সা পাতায় পরে বলুন)", "Whose cash paid was not saved (set it on the Money page)"));
 
     // the usual vaccine / deworming plan for each new animal
     const events = created.flatMap((c) => buildProtocolEvents(c.id, ctx.businessId, input.date));
@@ -291,9 +300,11 @@ export type GroupSaleInput = {
   note?: string;
   method: SplitMethod;
   lines: { cattleId: string; weightKg?: number | null; price?: number | null }[];
+  /** who got the money (lib/accounting/cash-holders.ts); empty = say later */
+  cashHolderId?: string | null;
 };
 
-export async function sellCattleGroup(input: GroupSaleInput): Promise<Result<{ groupId: string; shares: Record<string, number> }>> {
+export async function sellCattleGroup(input: GroupSaleInput): Promise<Result<{ groupId: string; shares: Record<string, number>; warning?: string }>> {
   try {
     const L = await getL();
     const supabase = await createClient();
@@ -318,8 +329,15 @@ export async function sellCattleGroup(input: GroupSaleInput): Promise<Result<{ g
     if (error || !data) return { ok: false, error: await friendly(error?.message) };
     // keep each animal's full cost as of the sale (reference for later changes; never blocks the sale)
     await keepCostAtSale(supabase as SupabaseClient<any>, ctx.businessId, String(data), lines.map((l) => l.cattleId));
+    // who got the money: each sale row is one cash row
+    let warning: string | undefined;
+    if (input.cashHolderId) {
+      const { data: saleRows } = await (supabase as SupabaseClient<any>).from("sales").select("id").eq("sale_group_id", String(data)).is("deleted_at", null);
+      const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, ((saleRows ?? []) as { id: string }[]).map((r) => r.id), input.cashHolderId);
+      if (tagErr) warning = L("বিক্রি হয়েছে, কিন্তু টাকা কার কাছে — লেখা যায়নি (টাকা-পয়সা পাতায় পরে বলুন)", "Sold, but whose cash was not saved (set it on the Money page)");
+    }
     touch(lines.map((l) => l.cattleId));
-    return { ok: true, groupId: String(data), shares: split.amounts };
+    return { ok: true, groupId: String(data), shares: split.amounts, warning };
   } catch (e) {
     return { ok: false, error: await friendly(e instanceof Error ? e.message : undefined) };
   }

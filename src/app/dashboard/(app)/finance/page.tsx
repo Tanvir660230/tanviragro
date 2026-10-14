@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { siteTitle } from "@/components/navigation/site-map";
 import { Suspense } from "react";
-import { Beef, Building2, History, Landmark, LayoutDashboard, Receipt } from "lucide-react";
+import { Beef, Building2, History, Landmark, LayoutDashboard, Receipt, Wallet } from "lucide-react";
+import { CashHoldersPanel, CashHoldersStrip } from "@/components/finance/money/CashHoldersPanel";
+import { loadHolderView } from "@/lib/money/holder-view";
+import { getAuthUser } from "@/lib/context/business-context";
 import { AddCostDialog } from "@/components/finance/AddCostDialog";
 import { CostList, type CostEntry, type InventoryPurchaseEntry, type TreatmentFeeEntry } from "@/components/finance/CostList";
 import { AssetTabPanel, type SimpleFixedAsset } from "@/components/finance/AssetTabPanel";
@@ -39,14 +42,14 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
   const L = await getL();
   const { fp, fs, fe } = await props.searchParams;
   const supabase = await getServerClient();
-  const biz = await getCurrentBusiness(supabase);
+  const [biz, me] = await Promise.all([getCurrentBusiness(supabase), getAuthUser()]);
   const businessId = biz?.id ?? "";
   const { start, end } = financePeriod(fp, fs, fe, biz?.fiscal_year_start_month ?? 7);
 
   // the lists read only the chosen period's rows (date columns, so no time-zone edge); the asset
   // payments are read in full because an asset is owned until it is sold
   const COST_COLS = "id, type, entry_class, category, amount, recorded_at, description, cattle_id";
-  const [m, partner, costsRes, assetCostsRes, purchasesRes, treatmentsRes, payersRes, cyclesProbe] = await Promise.all([
+  const [m, partner, costsRes, assetCostsRes, purchasesRes, treatmentsRes, payersRes, cyclesProbe, holders] = await Promise.all([
     loadMoneyData(supabase, businessId, { from: start, to: end }),
     loadPartnerData(supabase, businessId),
     selectAll(() => {
@@ -72,6 +75,7 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
     }).then((data) => ({ data })),
     supabase.from("partners").select("id, name").eq("business_id", businessId).is("deleted_at", null).order("name"),
     supabase.from("partner_cycles").select("id", { head: true, count: "exact" }).eq("business_id", businessId),
+    loadHolderView(supabase, businessId, me?.id ?? null),
   ]);
 
   // ── the lists for the chosen period ──
@@ -101,7 +105,8 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
     <div className="space-y-5">
       <PageHeader title={siteTitle(L, "/dashboard/finance", "Money")} icon={Landmark} actions={<AddCostDialog payers={payers} />} className="mb-0" />
       <MoneyToday m={m} />
-      <MoneyChecks checks={m.checks} />
+      {holders.enabled && <Suspense fallback={null}><CashHoldersStrip v={holders} /></Suspense>}
+      <MoneyChecks checks={holders.enabled ? [...m.checks, ...holders.checks] : m.checks} />
       <Suspense fallback={null}>
         <PeriodBar from={m.period.from} to={m.period.to} />
       </Suspense>
@@ -117,6 +122,8 @@ export default async function FinancePage(props: { searchParams: Promise<{ fp?: 
           { value: "costs", bn: "খরচের তালিকা", en: "Expenses", icon: <Receipt />, count: expenseEntries.length,
             content: <CostList entries={expenseEntries} inventoryPurchases={purchases} treatmentFees={treatmentFees}
               cattleTags={Object.fromEntries(partner.farm.animals.map((a) => [a.id, a.tag]))} /> },
+          ...(holders.enabled ? [{ value: "holders", bn: "কার কাছে টাকা", en: "Who has the cash", icon: <Wallet />, count: holders.unassigned.length,
+            content: <CashHoldersPanel v={holders} /> }] : []),
           { value: "cash", bn: "নগদ বিবরণী", en: "Cash statement", icon: <History />, content: (
             <div className="space-y-4">
               <CashCountPanel count={m.cashCount} cashToday={m.cash} />

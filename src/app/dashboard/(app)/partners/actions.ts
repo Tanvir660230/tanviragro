@@ -13,6 +13,8 @@ import { loadPartnerData, PREVIEW_CYCLE_ID } from "@/lib/partners/load-positions
 import type { Partner, PartnerTransactionType, PartnerType } from "@/types/database";
 import { checkRule, termsOn, type PositionPartner } from "@/lib/partners/position";
 import { todayDhaka } from "@/lib/dates";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { TAG_WARNING, holderFromForm, tagCashRows } from "@/lib/accounting/cash-holder-data";
 
 export type PartnerFormState = { error?: string; success?: boolean } | undefined;
 
@@ -350,7 +352,7 @@ export async function deletePartner(id: string): Promise<{ error?: string }> {
   }
 }
 
-export type PartnerTxnState = { error?: string; success?: boolean; needsConfirm?: boolean } | undefined;
+export type PartnerTxnState = { error?: string; success?: boolean; needsConfirm?: boolean; warning?: string } | undefined;
 
 const MONEY_TYPES = ["investment", "withdrawal", "advance", "loan_in", "loan_repay"] as const;
 type MoneyType = (typeof MONEY_TYPES)[number];
@@ -429,13 +431,16 @@ export async function addPartnerTransaction(
       return { error: /invalid input value for enum/i.test(error?.message ?? "") ? "এই ধরন database-এ এখনো নেই (migration 20260927100000 চালাতে হবে)।" : "সংরক্ষণ ব্যর্থ হয়েছে" };
     }
 
+    // who received the money or handed it out (never blocks the entry)
+    const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, [insertedTxn.id], holderFromForm(formData.get("cash_holder_id")));
+
     const event = type === "investment" ? "PartnerInvestment" : type === "withdrawal" ? "PartnerWithdrawal" : null;
     if (event) await FinancialEventBus.publish(event, ctx.businessId, { partnerId, transactionId: insertedTxn.id, amount, recordedAt }, ctx.user.id);
 
     revalidatePath("/dashboard/partners");
     revalidatePath(`/dashboard/partners/${partnerId}`);
     revalidateTag("accounting", { expire: 0 });
-    return { success: true };
+    return { success: true, ...(tagErr ? { warning: TAG_WARNING.bn } : {}) };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to record transaction" };
   }
@@ -450,11 +455,13 @@ export type DeclareDistributionPayload = {
   entries: { partnerId: string; amount: number }[];
   /** lock the books up to the payout day so a back-dated entry cannot change what was paid */
   lockBooks?: boolean;
+  /** whose cash paid the partners out (lib/accounting/cash-holders.ts) */
+  cashHolderId?: string | null;
 };
 
 export async function declareDistribution(
   payload: DeclareDistributionPayload
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; warning?: string }> {
   try {
     const supabase = await createClient();
     const ctx = await getBusinessContext(supabase);
@@ -514,8 +521,10 @@ export async function declareDistribution(
 
     if (!rows.length) return { error: "বিতরণযোগ্য কোনো পরিমাণ নেই" };
 
-    const { error } = await supabase.from("partner_transactions").insert(rows);
+    const { data: paidRows, error } = await supabase.from("partner_transactions").insert(rows).select("id");
     if (error) return { error: "বিতরণ ব্যর্থ হয়েছে" };
+    // whose cash paid them out (before any lock: naming new rows is not a change)
+    const tagErr = await tagCashRows(supabase as SupabaseClient<any>, ctx.businessId, (paidRows ?? []).map((r) => r.id), payload.cashHolderId ?? null);
 
     if (payload.lockBooks) {
       const { data: lastLock } = await supabase.from("financial_locks").select("locked_until")
@@ -541,7 +550,7 @@ export async function declareDistribution(
 
     revalidatePath("/dashboard/partners");
     revalidateTag("accounting", { expire: 0 });
-    return {};
+    return tagErr ? { warning: TAG_WARNING.bn } : {};
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Failed to declare distribution" };
   }

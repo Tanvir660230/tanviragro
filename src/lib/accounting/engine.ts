@@ -185,7 +185,7 @@ export const getCachedDbData = requestMemo((_db: Client, businessId: string) => 
       selectAll(() => db.from("cost_entries").select("id, category, amount, type, recorded_at, description, entry_class, cattle_id, expense_categories(kind)").eq("business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
       // every ledger row (the API returns at most 1000 per request)
       selectAll(() => db.from("inventory_transactions").select("id, type, movement_type, qty, unit_cost, recorded_at, cattle_id, inventory_items!inner(business_id, category, name)").eq("inventory_items.business_id", businessId).order("id")).then((data) => ({ data })),
-      selectAll(() => db.from("partner_transactions").select("id, amount, type, recorded_at, partners!inner(business_id, name)").eq("partners.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
+      selectAll(() => db.from("partner_transactions").select("id, amount, type, recorded_at, cost_entry_id, partners!inner(business_id, name)").eq("partners.business_id", businessId).is("deleted_at", null).order("id")).then((data) => ({ data })),
       db.from("fixed_assets").select("*").eq("business_id", businessId),
       db.from("liabilities").select("id, name, lender, outstanding, recorded_at, settled_at, notes").eq("business_id", businessId).is("deleted_at", null),
       db.from("loans").select("id, lender_name, principal_amount, interest_rate_pct, loan_date, status, loan_payments(id, amount, paid_at)").eq("business_id", businessId).is("deleted_at", null),
@@ -202,7 +202,7 @@ export const getCachedDbData = requestMemo((_db: Client, businessId: string) => 
     type SaleRow = { id: string; cattle_id: string; sale_price_total: number; sold_at: string; buyer_name: string | null; cattle?: { tag_id?: string | null } | null };
     type CostRow = { id: string; category: string; amount: number; type: string; recorded_at: string; description: string | null; entry_class: string | null; cattle_id: string | null; expense_categories?: { kind: ExpenseKind } | null };
     type InvTxRow = { id: string; type: string; movement_type: string | null; qty: number; unit_cost: number | null; recorded_at: string; cattle_id: string | null; inventory_items?: { category?: string; name?: string } | null };
-    type PartnerTxRow = { id: string; amount: number; type: string; recorded_at: string; partners?: { name?: string | null } | null };
+    type PartnerTxRow = { id: string; amount: number; type: string; recorded_at: string; cost_entry_id?: string | null; partners?: { name?: string | null } | null };
     type TreatmentRow = { id: string; cattle_id: string; vet_fee: number | null; additional_medical_cost: number | null; treated_at: string; diagnosis: string | null; cattle?: { tag_id?: string | null } | null };
     type LiabilityRow = { id: string; name: string | null; lender: string | null; outstanding: number; recorded_at: string | null; settled_at: string | null; notes: string | null };
     type LoanEngineRow = { id: string; lender_name: string | null; principal_amount: number; interest_rate_pct: number; loan_date: string; status: string; loan_payments: { id: string; amount: number; paid_at: string }[] | null };

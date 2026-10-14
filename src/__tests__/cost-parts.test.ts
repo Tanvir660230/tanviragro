@@ -38,3 +38,15 @@ test("a sold animal: the list's total cost is the profile's total", () => {
   expect(board.animals[0].realised!.cost).toBe(profile.total);
   expect(board.animals[0].realised!.result).toBe(106000 - profile.total);
 });
+
+test("the pieces split the farm share by what it was spent on and still add up to the total", () => {
+  const p = animalCostParts({ fullCost: 105185, purchase: 87500, feed: 17000, medical: 300, other: 1640,
+    running: { feed: 9000, labor: 4000, utility: 600, depreciation: 250, other: 100 } });
+  const sum = p.pieces.reduce((s, x) => s + x.amount, 0);
+  expect(sum).toBeCloseTo(p.total, 6);
+  const by = Object.fromEntries(p.pieces.map((x) => [x.key, x.amount]));
+  expect(by.labor).toBe(4000);
+  expect(by.utility).toBe(600);
+  expect(by.other).toBe(1740);   // own other costs + the farm's other running costs
+  expect(by.feed).toBeCloseTo(105185 - 87500 - 300 - 1640 - 4000 - 600 - 250 - 100, 6);
+});

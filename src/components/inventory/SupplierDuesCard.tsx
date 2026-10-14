@@ -7,6 +7,7 @@ import { Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { paySupplierDue } from "@/app/dashboard/(app)/inventory/purchase/actions";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 
 export type SupplierDue = { id: string; lender: string; outstanding: number; since: string };
 
@@ -23,17 +24,19 @@ export function SupplierDuesCard({ dues, today, lang }: { dues: SupplierDue[]; t
   const [open, setOpen] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today);
+  const [holder, setHolder] = useState("");
   const [pending, start] = useTransition();
   if (dues.length === 0) return null;
   const total = dues.reduce((s, d) => s + d.outstanding, 0);
 
   function save(d: SupplierDue) {
     const fd = new FormData();
-    fd.set("id", d.id); fd.set("amount", amount); fd.set("date", date);
+    fd.set("id", d.id); fd.set("amount", amount); fd.set("date", date); fd.set("cash_holder_id", holder);
     start(async () => {
       const res = await paySupplierDue(fd);
       if (res.error) { toast.error(res.error); return; }
       toast.success(t.saved);
+      if (res.warning) toast.warning(res.warning);
       setOpen(null); setAmount("");
       router.refresh();
     });
@@ -65,6 +68,7 @@ export function SupplierDuesCard({ dues, today, lang }: { dues: SupplierDue[]; t
             </div>
             {open === d.id && (
               <div className="mt-3 flex flex-wrap items-end gap-2">
+                <CashHolderPicker direction="out" value={holder} onChange={setHolder} className="basis-full" />
                 <label className="grid gap-1 text-xs text-muted-foreground">{t.amount}
                   <Input type="number" inputMode="decimal" min={0} max={d.outstanding} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-9 w-32" />
                 </label>

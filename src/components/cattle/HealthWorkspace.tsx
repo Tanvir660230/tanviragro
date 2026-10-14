@@ -1,5 +1,6 @@
 "use client";
 
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 import React, { useState, useTransition } from "react";
 import {
   HeartPulse,
@@ -144,6 +145,7 @@ export function HealthWorkspace({
   const [route, setRoute] = useState<AdministrationRoute>("IM");
   const [withdrawalDays, setWithdrawalDays] = useState("0");
   const [vetFee, setVetFee] = useState("0");
+  const [feeHolder, setFeeHolder] = useState("");
   const [labFee, setLabFee] = useState("0");
   const [quarantineFlag, setQuarantineFlag] = useState(cattle.is_quarantined);
   const [followUpDate, setFollowUpDate] = useState("");
@@ -217,6 +219,7 @@ export function HealthWorkspace({
         severity: "moderate",
         prescriptions,
         vetFeeBdt: parseFloat(vetFee) || 0,
+        cashHolderId: feeHolder || null,
         labTestFeeBdt: parseFloat(labFee) || 0,
         additionalCostBdt: 0,
         totalMedicalCostBdt: (parseFloat(vetFee) || 0) + (parseFloat(labFee) || 0),
@@ -487,6 +490,7 @@ export function HealthWorkspace({
                     <Input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} className="mt-1" />
                   </div>
                 </div>
+                {(parseFloat(vetFee) || 0) + (parseFloat(labFee) || 0) > 0 && <CashHolderPicker direction="out" value={feeHolder} onChange={setFeeHolder} />}
 
                 <div>
                   <Label className="text-xs font-semibold">{L("পরামর্শ", "Recommendations")}</Label>

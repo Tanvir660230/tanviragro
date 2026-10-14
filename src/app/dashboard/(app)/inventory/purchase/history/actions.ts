@@ -6,6 +6,15 @@ import { getCurrentBusinessId } from "@/lib/supabase/get-business";
 import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { actionPermissionError } from "@/lib/auth/action-guard";
 import { PERMISSIONS } from "@/constants/roles";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { addTagPart, mainHolder, tagCashRows, tagsOf } from "@/lib/accounting/cash-holder-data";
+
+/** A corrected or deleted memo: its new rows and the rows that undo the old ones stay in the old rows' hand. */
+async function holderOfRows(supabase: unknown, businessId: string, ids: string[]): Promise<string | null> {
+  const tags = await tagsOf(supabase as SupabaseClient<any>, businessId, ids.map(String));
+  for (const id of ids) { const h = mainHolder(tags[String(id)]); if (h) return h; }
+  return null;
+}
 
 export type EditPurchaseItem = {
   id?: string; // existing txn id, undefined if new
@@ -109,6 +118,8 @@ export async function updatePurchaseMemo(
   const toUndo = [...idsToDelete, ...changed.map((it) => it.id!)];
   const toAdd = [...itemsToInsert, ...changed];
 
+  const holder = await holderOfRows(supabase, businessId, existingTxnIds);
+  const madeIds: string[] = [];
   // 1. add the corrected rows first (so undoing an old row never leaves a temporary shortfall)
   if (toAdd.length > 0) {
     const txnsToInsert = toAdd.map(it => ({
@@ -120,13 +131,15 @@ export async function updatePurchaseMemo(
       recorded_at: date,
       notes: `Invoice Memo. Supplier: ${supplierName}. | Transport: ${transportCost} | Mode: ${it.mode || "loose"} | Bags: ${it.bags || ""} | KgPerBag: ${it.kgPerBag || ""}` + (extraNotes ? ` | ${extraNotes}` : ""),
     }));
-    const { error: insErr } = await supabase.from("inventory_transactions").insert(txnsToInsert);
+    const { data: added, error: insErr } = await supabase.from("inventory_transactions").insert(txnsToInsert).select("id");
     if (insErr) return { error: "Failed to add the corrected items." };
+    madeIds.push(...(added ?? []).map((r) => String(r.id)));
   }
 
   // 2. undo the replaced / removed rows
-  const undoErr = await undoPurchaseRows(supabase, toUndo.map((id) => existingMap.get(id)), "Memo corrected");
+  const undoErr = await undoPurchaseRows(supabase, toUndo.map((id) => existingMap.get(id)), "Memo corrected", madeIds);
   if (undoErr) return { error: undoErr };
+  await tagCashRows(supabase as SupabaseClient<any>, businessId, madeIds, holder);
 
   // --- Liability Adjustment ---
   const difference = newTotalBill - originalTotalBill;
@@ -153,6 +166,8 @@ export async function updatePurchaseMemo(
           notes: (existingLiab.notes || "") + `\n${sign}${difference.toFixed(2)} on ${date} (Auto-adjusted from memo edit).`,
         })
         .eq("id", existingLiab.id);
+      // the supplier's running due moved by the difference: so does this hand's part of it
+      await addTagPart(supabase as SupabaseClient<any>, businessId, `due-${existingLiab.id}`, holder, difference);
     }
   }
 
@@ -179,8 +194,11 @@ export async function deletePurchaseMemo(date: string, supplierName: string, exi
   // The rows stay in history; each one is undone by an audited purchase_reversal.
   const existing = await loadActivePurchaseRows(supabase, businessId, existingTxnIds);
   if ("error" in existing) return { error: existing.error };
-  const undoErr = await undoPurchaseRows(supabase, existing.rows, "Memo deleted");
+  const holder = await holderOfRows(supabase, businessId, existing.rows.map((r) => r.id));
+  const madeIds: string[] = [];
+  const undoErr = await undoPurchaseRows(supabase, existing.rows, "Memo deleted", madeIds);
   if (undoErr) return { error: undoErr };
+  await tagCashRows(supabase as SupabaseClient<any>, businessId, madeIds, holder);
 
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/inventory/purchase/history");
@@ -221,11 +239,13 @@ async function loadActivePurchaseRows(
 async function undoPurchaseRows(
   supabase: Awaited<ReturnType<typeof createClient>>,
   rows: (PurchaseRow | undefined)[],
-  reason: string
+  reason: string,
+  /** the new reversal rows' ids are added here */
+  made?: string[]
 ): Promise<string | null> {
   const valid = rows.filter((r): r is PurchaseRow => !!r);
   if (!valid.length) return null;
-  const { error } = await supabase.from("inventory_transactions").insert(
+  const { data, error } = await supabase.from("inventory_transactions").insert(
     valid.map((r) => ({
       item_id: r.item_id,
       type: "consumption" as const,
@@ -236,8 +256,8 @@ async function undoPurchaseRows(
       idempotency_key: `purchase-undo:${r.id}`,
       notes: `${reason}: purchase row ${r.id} undone`,
     }))
-  );
-  if (!error) return null;
+  ).select("id");
+  if (!error) { made?.push(...(data ?? []).map((r) => String(r.id))); return null; }
   if (error.code === "23514") return "Some of this stock has already been used, so the purchase cannot be undone. Record a stock count adjustment instead.";
   if (error.code === "23505") return "This purchase was already corrected. Refresh the page.";
   return "Failed to correct the memo.";

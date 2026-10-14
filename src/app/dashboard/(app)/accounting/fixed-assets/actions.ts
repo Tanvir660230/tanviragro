@@ -10,6 +10,8 @@ import { checkFinancialLock } from "@/lib/utils/financialLock";
 import { todayDhaka } from "@/lib/dates";
 
 import { getL } from "@/i18n/server-text";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { holderFromForm, tagCashRows } from "@/lib/accounting/cash-holder-data";
 export type FixedAssetFormState =
   | { success: true }
   | { error: string }
@@ -49,7 +51,7 @@ export async function addFixedAsset(
     const lockError = await checkFinancialLock(supabase, ctx.businessId, purchaseDate);
     if (lockError) return { error: lockError };
 
-    const { error } = await supabase.from("fixed_assets").insert({
+    const { data: asset, error } = await supabase.from("fixed_assets").insert({
       business_id: ctx.businessId,
       name,
       category,
@@ -61,9 +63,11 @@ export async function addFixedAsset(
       depreciation_method: depreciationMethod,
       declining_rate: decliningRate,
       notes,
-    });
+    }).select("id").single();
 
     if (error) return { error: error.message };
+    // whose cash paid it (its cash row is "fa-<id>")
+    if (asset) await tagCashRows(supabase as unknown as SupabaseClient<any>, ctx.businessId, [`fa-${asset.id}`], holderFromForm(formData.get("cash_holder_id")));
     revalidatePath("/dashboard/accounting");
     revalidatePath("/dashboard/accounting/fixed-assets");
     revalidateTag("accounting", { expire: 0 });
@@ -75,7 +79,9 @@ export async function addFixedAsset(
 
 export async function disposeFixedAsset(
   id: string,
-  disposalValue: number
+  disposalValue: number,
+  /** who got the money for it (its cash row is "fa-sale-<id>") */
+  cashHolderId?: string | null
 ): Promise<FixedAssetFormState> {
   const L = await getL();
   try {
@@ -103,6 +109,7 @@ export async function disposeFixedAsset(
       .eq("id", id);
 
     if (error) return { error: error.message };
+    if (disposalValue > 0) await tagCashRows(supabase as unknown as SupabaseClient<any>, ctx.businessId, [`fa-sale-${id}`], holderFromForm(cashHolderId ?? null));
     revalidatePath("/dashboard/accounting");
     revalidatePath("/dashboard/accounting/fixed-assets");
     revalidateTag("accounting", { expire: 0 });

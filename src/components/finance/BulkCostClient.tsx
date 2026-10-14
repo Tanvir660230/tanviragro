@@ -13,6 +13,7 @@ import { useL } from "@/i18n/text";
 import { costCategoryLabel } from "@/lib/expenses/labels";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { todayDhaka } from "@/lib/dates";
+import { CashHolderPicker } from "@/components/finance/money/CashHolderPicker";
 
 const FIXED_CATEGORIES = ["Rent", "Salary", "Utilities", "Insurance", "Other"];
 const VARIABLE_CATEGORIES = ["Feed", "Medicine", "Labour", "Transport", "Veterinary", "Other"];
@@ -26,6 +27,7 @@ export function BulkCostClient() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const today = todayDhaka();
+  const [holder, setHolder] = useState("");   // whose cash paid all of them
 
   const [rows, setRows] = useState<CostRow[]>([
     { id: crypto.randomUUID(), mode: "expense-fixed", category: "", amount: 0, recordedAt: today, description: "" }
@@ -78,11 +80,12 @@ export function BulkCostClient() {
     }
 
     startTransition(async () => {
-      const result = await submitBulkCosts(payload);
+      const result = await submitBulkCosts(payload, holder || null);
       if (result.error) {
         toast.error(result.error);
       } else {
         toast.success(L("সব খরচ সেভ হলো!", "Bulk costs saved successfully!"));
+        if ("warning" in result && result.warning) toast.warning(result.warning);
         router.push("/dashboard/finance");
       }
     });
@@ -240,6 +243,7 @@ export function BulkCostClient() {
                 </div>
               </div>
 
+              <CashHolderPicker direction="out" value={holder} onChange={setHolder} className="mb-3" />
               <Button
                 form="bulk-cost-form"
                 type="submit"
